@@ -1,0 +1,1016 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1.1 建立仓库骨架与工具链": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558764833
+      },
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558781669
+      },
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789561230189
+      }
+    ],
+    "1.2 建立完整数据库 schema 与 Alembic 迁移": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558765533
+      },
+      {
+        "executionId": "6293462d-4b6a-46fd-af9d-2014c681aeff",
+        "chatSessionId": "sess_47679ec6-66b3-430e-b542-7b48a3b2be1c",
+        "timestamp": 1789563071981
+      },
+      {
+        "executionId": "6293462d-4b6a-46fd-af9d-2014c681aeff",
+        "chatSessionId": "sess_47679ec6-66b3-430e-b542-7b48a3b2be1c",
+        "timestamp": 1789563476244
+      }
+    ],
+    "1.3 实现 `input_snapshot_version` 版本推进钩子": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558765736
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566582675
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789567309811
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789568550294
+      }
+    ],
+    "1.4 实现 append-only 的 `Audit_Log`": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558765824
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566583108
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789567310736
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789568550528
+      }
+    ],
+    "1.5 实现 `Session_Auth` 会话认证中间件": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558765944
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566583216
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789567312123
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789568551435
+      }
+    ],
+    "1.6 实现演示数据 seed、样例文件与一键重置": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558766048
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566583300
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789568558253
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789573200511
+      }
+    ],
+    "1.7 实现 `/health` 端点与结构化 JSON 日志": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558766188
+      },
+      {
+        "executionId": "6293462d-4b6a-46fd-af9d-2014c681aeff",
+        "chatSessionId": "sess_47679ec6-66b3-430e-b542-7b48a3b2be1c",
+        "timestamp": 1789563076742
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566583442
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566613618
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789567304576
+      }
+    ],
+    "1.8 实现分层与结构静态扫描测试": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558766296
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566583510
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789567312909
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789568552478
+      }
+    ],
+    "2.1 实现 `DomainSnapshot` 与快照加载": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558766370
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566583579
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789573207606
+      }
+    ],
+    "2.2 实现 Hypothesis 生成器基础设施": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558766449
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566583653
+      }
+    ],
+    "2.3 实现 `Timeline`、`earliest_feasible_slot` 与换型查表": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558766529
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566583758
+      }
+    ],
+    "2.4 实现 `Scheduling_Core` 主循环与工序展开": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558766624
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566583836
+      }
+    ],
+    "2.5 为排产确定性可重现编写属性测试": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558766704
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566583902
+      }
+    ],
+    "2.6 实现 `diagnose_blocking`、`quantify` 与 PARTIAL 路径": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558766784
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566583963
+      }
+    ],
+    "2.7 为作业划分完备性与不可排产量化编写属性测试": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558766886
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566584025
+      }
+    ],
+    "2.8 实现 `Constraint_Validator` 的 9 类硬约束校验": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558766981
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566584093
+      }
+    ],
+    "2.9 为排产输出满足全部硬约束编写属性测试": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558767093
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566584172
+      }
+    ],
+    "2.10 实现 `Objective_Scorer`": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558767182
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566584232
+      }
+    ],
+    "2.11 实现 `Baseline_Scheduler`（FCFS）": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558767277
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566584286
+      }
+    ],
+    "2.12 实现计划生成流水线的确定性部分与排产视图": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558767355
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566584350
+      }
+    ],
+    "2.13 为三个内核模块编写分支覆盖单元测试": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558767470
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566584413
+      }
+    ],
+    "3.1 实现 `Approval_Service.approve()`：陈旧检测 + 重校验 + 乐观并发": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558767557
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566584483
+      }
+    ],
+    "3.2 实现 `REJECT` / `MODIFY` 与决策记录": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558767636
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566584545
+      }
+    ],
+    "3.3 实现审批绕过防护与计划状态机": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558767706
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566584606
+      }
+    ],
+    "3.4 为 `ACTIVE` 状态的唯一到达路径编写属性测试": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558767781
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566584669
+      }
+    ],
+    "3.5 为 `Approval_Service` 编写陈旧、重校验与并发单元测试": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558767839
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566584742
+      }
+    ],
+    "3.6 实现 `Plan_Exporter` 与导出往返测试": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558767908
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566584812
+      }
+    ],
+    "3.7 实现状态看板与审批界面": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558767966
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566584880
+      }
+    ],
+    "4. 检查点 — 无 LLM 主线可演示": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558768028
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566584944
+      }
+    ],
+    "5.1 实现 `Tool_Registry.invoke()` 的 7 步闸门": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558768091
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566585010
+      }
+    ],
+    "5.2 实现全部工具的 Pydantic 契约与 handler": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558768150
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566585107
+      }
+    ],
+    "5.3 实现 `Bedrock_Adapter` 与 cassette 录制回放": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558768214
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566585169
+      }
+    ],
+    "5.4 实现 `Token_Budget_Manager` 与成本纪律": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558768284
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566585236
+      }
+    ],
+    "5.5 实现 `Context_Manager.assemble_messages` 纯函数及其契约测试": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558768369
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566585297
+      }
+    ],
+    "5.6 实现 Agent 静态提示词、输出契约与 `handoff` 闸门": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558768434
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566585367
+      }
+    ],
+    "5.7 实现 `Orchestrator.run()` 与 ReAct 循环": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558768494
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566585430
+      }
+    ],
+    "5.8 实现 `Guardrail_Layer` 的不受信任内容包裹与注入检测": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558768576
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566585496
+      }
+    ],
+    "5.9 实现 Agent 输出 schema 校验与保留键剥离": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558768649
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566585551
+      }
+    ],
+    "5.10 实现解释数值的闭世界一致性检查": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558768713
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566585609
+      }
+    ],
+    "5.11 实现计划生成路径的单次解释调用与 `Explanation_Builder`": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558768775
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566585672
+      }
+    ],
+    "5.12 实现 `Trace_Recorder` 与 Trace 查看器": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558768838
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566585727
+      }
+    ],
+    "6. 检查点 — 形态 A 完整闭环": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558768900
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566585789
+      }
+    ],
+    "7.1 实现 `Replanner` 的受影响集、冻结集与锁定作业交互": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558768968
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566585860
+      }
+    ],
+    "7.2 实现 `compute_plan_delta` 与 `churn_ratio`": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558769026
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566585924
+      }
+    ],
+    "7.3 实现 `Autonomy_Policy_Engine` 及其结构隔离证明": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558769084
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566585987
+      }
+    ],
+    "7.4 实现扰动登记、`ImpactAnalysis` 与 `Planning_Agent` 的 ReAct 重排路径": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558769149
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566586046
+      }
+    ],
+    "7.5 实现方案对比视图与决策证据": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558769248
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566586110
+      }
+    ],
+    "7.6 接线自主等级的执行路径与上报界面": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558769311
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566586185
+      }
+    ],
+    "8.1 实现 `Scenario_Sandbox` 的两层隔离及其阻断证明测试": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558769373
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566586257
+      }
+    ],
+    "8.2 为沙箱隔离编写属性测试": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558769435
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566586354
+      }
+    ],
+    "8.3 实现 `run_sandbox` 统一入口与结构化表单 What-if": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558769521
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566586414
+      }
+    ],
+    "8.4 实现反事实解释与 `pick_pivotal_job`": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558769584
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566586501
+      }
+    ],
+    "8.5 实现 `Risk_Scanner` 与三类触发器": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558769655
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566586563
+      }
+    ],
+    "8.6 实现确定性模板叙述与风险面板": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558769719
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566586623
+      }
+    ],
+    "9. 检查点 — 演示情节 3、4、5、6 可完整走通": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558769786
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566586685
+      }
+    ],
+    "10.1 实现 `Spreadsheet_Parser` 的确定性安全闸门与解析": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558769845
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566586745
+      }
+    ],
+    "10.2 实现有界预览构造与固化输入集": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558769907
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566586808
+      }
+    ],
+    "10.3 实现日期与单位归一化": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558769967
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566586874
+      }
+    ],
+    "10.4 实现 `Ingestion_Agent` 与映射提案": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558770032
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566586938
+      }
+    ],
+    "10.5 实现人工确认界面与冲突/重复处置": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558770095
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566587001
+      }
+    ],
+    "10.6 实现 `commit_batch` 落库闸门与来源追溯": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558770161
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566587068
+      }
+    ],
+    "10.7 实现导入批次整批回滚": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558770218
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566587136
+      }
+    ],
+    "11.1 实现 `Preference_Store` 与手写规则创建入口": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558770285
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566587199
+      }
+    ],
+    "11.2 把偏好规则接入排产打分与目标评分两处": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558770362
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566587259
+      }
+    ],
+    "11.3 为偏好规则的安全不变量编写属性测试": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558770433
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566587327
+      }
+    ],
+    "11.4 实现 `Value_Ledger` 与台账界面": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558770520
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566587401
+      }
+    ],
+    "11.5 为基线同输入同口径编写属性测试": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558770601
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566587471
+      }
+    ],
+    "11.6 实现 `DETERMINISTIC_ONLY` 降级模式的全覆盖": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558770704
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566587554
+      }
+    ],
+    "12.1 搭建评估套件骨架与一条命令入口": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558770772
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566587653
+      }
+    ],
+    "12.2 实现黄金路径用例 EVAL-001 至 EVAL-014": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558770867
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566587723
+      }
+    ],
+    "12.3 实现 EVAL-015 正常周期 token 回归断言": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558770987
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566587796
+      }
+    ],
+    "12.4 实现对抗用例 EVAL-201 至 EVAL-214": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558771079
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566587859
+      }
+    ],
+    "12.5 收口分支覆盖门禁与性能时限冒烟": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558771149
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566587928
+      }
+    ],
+    "12.6 实现前端组件与可访问性测试": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558771214
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566587996
+      }
+    ],
+    "12.7 实现 Lightsail 部署配置": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558771280
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566588064
+      }
+    ],
+    "12.8 完成 `DETERMINISTIC_ONLY` 演练与审计事件完备性收口": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558771353
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566588135
+      }
+    ],
+    "14. 最终检查点 — 提交前状态确认": [
+      {
+        "executionId": "f8dcaea2-1230-49a9-8399-a50c41a90743",
+        "chatSessionId": "sess_61d3cc16-a76a-4fae-affe-202f41a46506",
+        "timestamp": 1789558771417
+      },
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789566588224
+      }
+    ],
+    "1. P0-A 骨架（不依赖 LLM）": [
+      {
+        "executionId": "213de515-79ce-4946-9d09-19abb15cfb1f",
+        "chatSessionId": "sess_103cf456-fb42-4bd0-a4b0-38ecbcc866f6",
+        "timestamp": 1789573200628
+      }
+    ]
+  }
+}

@@ -1,0 +1,2 @@
+7 条属性测试，一文件一属性，编号 1 / 2 / 4 / 10 / 15 / 21 / 37。
+生成器在 tests/generators.py（任务 2.2）。LLM_MODE 在属性测试中恒为 STUB 或 DISABLED。

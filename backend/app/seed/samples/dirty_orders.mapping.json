@@ -1,0 +1,180 @@
+{
+  "sample_file": "dirty_orders.csv",
+  "entity_type": "orders",
+  "encoding": "utf-8",
+  "header_row_index": 0,
+  "data_row_count": 7,
+  "requirement": "R28.5",
+  "used_by": ["EVAL-013"],
+  "why_annotated": "随机生成的脏表格没有标注可比对；EVAL-013 断言的是「提议的映射等于这份标注」，因此标注与样例文件必须一起进版本控制并一起改动。",
+  "columns": [
+    {
+      "source_index": 0,
+      "source_header": "订单号",
+      "target_field": "order_id",
+      "decision": "AUTO",
+      "reason": "表头语义唯一，取值形如 ORD-101。"
+    },
+    {
+      "source_index": 1,
+      "source_header": " 产品编码 ",
+      "normalised_header": "产品编码",
+      "target_field": "product_id",
+      "decision": "AUTO",
+      "reason": "表头本身带前后空格，去空格后语义唯一。表头的空格与单元格的空格是两处不同的清洗点，这一列同时覆盖前者。"
+    },
+    {
+      "source_index": 2,
+      "source_header": "数量",
+      "target_field": "quantity",
+      "decision": "AUTO",
+      "reason": "语义唯一。第 6 行的取值是中文数字，属于不可解析单元格而非映射歧义——见 expected_unparsed_cells。"
+    },
+    {
+      "source_index": 3,
+      "source_header": "交期",
+      "target_field": "due_date",
+      "decision": "NEEDS_CONFIRMATION",
+      "reason": "两重歧义。①「交期」在中文车间语境下既可能指客户期望日（due_date）也可能指对外承诺日（promised_date），而这两个字段在本系统里语义分立（Open Question 2）；②取值里 03/04/2026 与 06/03/2026 无法区分 DD/MM 与 MM/DD。两者都必须由规划员裁决，不能由置信度阈值代劳。",
+      "ambiguity_kind": ["FIELD_SEMANTICS", "DATE_ORDER"],
+      "candidate_target_fields": ["due_date", "promised_date"],
+      "candidate_date_formats": ["%d/%m/%Y", "%m/%d/%Y"]
+    },
+    {
+      "source_index": 4,
+      "source_header": null,
+      "target_field": null,
+      "decision": "NEEDS_CONFIRMATION",
+      "reason": "表头缺失。取值域（箱 / 个 / 件）看似计量单位，但 orders 没有单位字段——BOM 的单位在 materials.unit 上。既不能丢弃（可能是数量的量纲，会让 quantity 的口径错掉）也不能猜，必须问人。",
+      "ambiguity_kind": ["MISSING_HEADER"],
+      "observed_values": ["箱", "个", "件"]
+    },
+    {
+      "source_index": 5,
+      "source_header": "优先级",
+      "target_field": "priority",
+      "decision": "AUTO",
+      "reason": "语义唯一。取值中英混杂，属归一化而非映射歧义——见 expected_normalisations。"
+    },
+    {
+      "source_index": 6,
+      "source_header": "备注",
+      "target_field": "notes",
+      "decision": "AUTO",
+      "reason": "语义唯一。落库后按不受信任输入处理（R23.1）。"
+    },
+    {
+      "source_index": 7,
+      "source_header": "内部工单号",
+      "target_field": null,
+      "decision": "IGNORE",
+      "reason": "多余列：本系统不建模车间工单号。显式忽略而不是静默丢弃——导入报告要列出被忽略的列，否则规划员会以为数据进来了。"
+    },
+    {
+      "source_index": 8,
+      "source_header": "回款状态",
+      "target_field": null,
+      "decision": "IGNORE",
+      "reason": "多余列：财务信息，与排产无关。"
+    }
+  ],
+  "expected_needs_confirmation_indexes": [3, 4],
+  "expected_ignored_indexes": [7, 8],
+  "expected_normalisations": [
+    {
+      "row": 1,
+      "source_index": 0,
+      "raw": "ORD-101 ",
+      "normalised": "ORD-101",
+      "kind": "TRIM"
+    },
+    {
+      "row": 2,
+      "source_index": 0,
+      "raw": " ORD-102",
+      "normalised": "ORD-102",
+      "kind": "TRIM"
+    },
+    {
+      "row": 2,
+      "source_index": 3,
+      "raw": " 2026-03-05 ",
+      "normalised": "2026-03-05T00:00:00",
+      "kind": "TRIM_AND_PARSE_DATE"
+    },
+    {
+      "row": 2,
+      "source_index": 5,
+      "raw": "普通",
+      "normalised": "NORMAL",
+      "kind": "ENUM_ALIAS"
+    },
+    {
+      "row": 3,
+      "source_index": 2,
+      "raw": " 6 ",
+      "normalised": "6",
+      "kind": "TRIM"
+    },
+    {
+      "row": 3,
+      "source_index": 3,
+      "raw": "2026年3月6日",
+      "normalised": "2026-03-06T00:00:00",
+      "kind": "PARSE_DATE_ZH"
+    },
+    {
+      "row": 3,
+      "source_index": 5,
+      "raw": "紧急",
+      "normalised": "URGENT",
+      "kind": "ENUM_ALIAS"
+    },
+    {
+      "row": 4,
+      "source_index": 6,
+      "raw": " 备注两侧有空格 ",
+      "normalised": "备注两侧有空格",
+      "kind": "TRIM"
+    },
+    {
+      "row": 5,
+      "source_index": 3,
+      "raw": "Mar 7, 2026",
+      "normalised": "2026-03-07T00:00:00",
+      "kind": "PARSE_DATE_EN"
+    },
+    {
+      "row": 5,
+      "source_index": 5,
+      "raw": "低",
+      "normalised": "LOW",
+      "kind": "ENUM_ALIAS"
+    },
+    {
+      "row": 6,
+      "source_index": 3,
+      "raw": "2026/03/08",
+      "normalised": "2026-03-08T00:00:00",
+      "kind": "PARSE_DATE_SLASH_ISO"
+    }
+  ],
+  "expected_unparsed_cells": [
+    {
+      "row": 6,
+      "source_index": 2,
+      "source_header": "数量",
+      "raw": "一百二十",
+      "reason": "中文数字。R2.8 要求列出不可解析单元格并保留原值，不得推断为 120。"
+    },
+    {
+      "row": 7,
+      "source_index": 3,
+      "source_header": "交期",
+      "raw": "",
+      "reason": "空值。orders.due_date 非空，因此这一行在人工补齐之前不可提交。"
+    }
+  ],
+  "expected_formula_columns": [],
+  "notes": "row 从 1 起算，指数据行序号（不含表头）。source_index 从 0 起算，指原始列位置——列位置而不是列名是稳定标识：表头可能缺失，位置不会。"
+}

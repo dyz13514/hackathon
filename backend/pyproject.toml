@@ -1,0 +1,77 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "production-planning-agent-backend"
+version = "0.1.0"
+description = "AI Production Planning Agent —— 确定性排产内核 + 人在环审批 + 有界 LLM 编排"
+requires-python = ">=3.11"
+
+# 运行期依赖固定到确切版本：演示环境不允许「今天装出来的和昨天不一样」。
+dependencies = [
+    "fastapi==0.115.5",
+    "uvicorn[standard]==0.32.1",
+    "pydantic==2.10.3",
+    "pydantic-settings==2.6.1",
+    "sqlalchemy==2.0.36",
+    "alembic==1.14.0",
+    "openpyxl==3.1.5",          # Plan_Exporter（任务 3.6）
+    "python-multipart==0.0.19", # 表格上传（任务 10.x）
+    "httpx==0.28.0",            # Bedrock_Adapter 的唯一出口（任务 5.3）
+    "apscheduler==3.10.4",      # 每日风险扫描，同进程内（design.md Architecture §4）
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest~=8.3",
+    "pytest-cov~=6.0",
+    "hypothesis~=6.122",  # 7 条属性测试（任务 2.2 起）
+    "mypy~=1.13",
+    "ruff~=0.8",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+# 表格样例（R28.5 / R28.6）是**数据**而不是代码，因此不会被 packages.find 收进来。
+# `app/seed/samples/` 里没有 `__init__.py`（它不是包），所以必须显式声明为 package-data，
+# 否则非 editable 安装下 EVAL-013 / EVAL-202 的固定输入集会在目标机上缺失。
+[tool.setuptools.package-data]
+"app.seed" = ["samples/*.csv", "samples/*.json", "samples/*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = [
+    "live: 需要真实 Bedrock 调用，只在 `make eval-live` 中执行（消耗真实额度）",
+]
+
+[tool.coverage.report]
+# R27.10：Scheduling_Core / Constraint_Validator / Objective_Scorer /
+# Autonomy_Policy_Engine 四模块 100% 分支覆盖门禁。门禁在任务 12.5 接入 CI，
+# 此处先固定统计口径。
+show_missing = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+# Alembic 的 `--autogenerate` 产物按它自己的格式排版：一行一个约束，行长常超 100。
+# 重排会让「这份迁移是自动生成的、未经手工改动」这一事实不再可核对，而那正是
+# tests/structure/test_schema_matches_models.py 赖以成立的前提。因此只豁免行长。
+"migrations/versions/*.py" = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unreachable = true
+plugins = []
+
+[[tool.mypy.overrides]]
+module = ["apscheduler.*", "openpyxl.*"]
+ignore_missing_imports = true

@@ -1,0 +1,41 @@
+# --- 凭证（R23.11：凭证只经环境变量注入，.env 绝不入库） ---
+.env
+.env.*
+!.env.example
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# --- 数据与运行期产物 ---
+*.db
+*.db-wal
+*.db-shm
+*.sqlite3
+backend/var/
+backups/
+
+# --- Node / 前端 ---
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.local
+
+# --- 编辑器与系统 ---
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
