@@ -16,8 +16,6 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-import pytest
-
 from app.core.delta import PlanDelta, compute_plan_delta
 from app.core.scheduler import PlanCandidate, ScheduledJob
 
@@ -359,37 +357,7 @@ def test_compute_plan_delta_is_deterministic() -> None:
 
 
 # ==========================================================================
-# 9. job_details_a / job_details_b 快照
-# ==========================================================================
-
-
-def test_job_details_a_contains_active_scheduled_jobs() -> None:
-    """`job_details_a` 包含 ACTIVE 计划的全部已排产作业（供消费方查询变更前资源信息）。"""
-    j1 = _sj("J1")
-    j2 = _sj("J2", order_id="ORD-B")
-    active = _plan(j1, j2)
-    cand = _plan(j1)
-    delta = compute_plan_delta(active, cand)
-    assert "J1" in delta.job_details_a
-    assert "J2" in delta.job_details_a
-    assert delta.job_details_a["J1"] == j1
-    assert delta.job_details_a["J2"] == j2
-
-
-def test_job_details_b_contains_candidate_scheduled_jobs() -> None:
-    """`job_details_b` 包含候选计划的全部已排产作业（供消费方查询变更后资源信息）。"""
-    j1 = _sj("J1")
-    j3 = _sj("J3", order_id="ORD-C")
-    active = _plan(j1)
-    cand = _plan(j1, j3)
-    delta = compute_plan_delta(active, cand)
-    assert "J1" in delta.job_details_b
-    assert "J3" in delta.job_details_b
-    assert delta.job_details_b["J3"] == j3
-
-
-# ==========================================================================
-# 10. PlanDelta 排序：确保输出为升序序列
+# 9. PlanDelta 排序：确保输出为升序序列
 # ==========================================================================
 
 

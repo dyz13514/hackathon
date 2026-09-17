@@ -75,7 +75,7 @@ ADAPTER_MODULE = APP_ROOT / "llm" / "adapter.py"
 #: 尚未落地的扫描目标，及其归属任务。缺席**必须**在此登记：这样「包被改名了所以扫描
 #: 什么也没扫到」与「包还没写」两种情况不会长得一样。
 PENDING_SCAN_TARGETS: dict[str, str] = {
-    "app/core/autonomy.py": "任务 7.3 Autonomy_Policy_Engine",
+    # app/core/autonomy.py is now implemented in task 7.3
 }
 
 # --------------------------------------------------------------------------------------
