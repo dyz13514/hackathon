@@ -24,7 +24,10 @@ from app.api import api_router, ops_router
 from app.api.deps import install_session_auth
 from app.db.audit import set_audit_engine
 from app.db.session import create_db_engine, create_session_factory
+from app.llm.adapter import BedrockAdapter
+from app.llm.cassette import Cassette
 from app.logging_config import configure_logging
+from app.services.events import EventBus
 from app.settings import Settings, get_settings
 
 
@@ -52,6 +55,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # 的探针就是这个第一次。
     application.state.engine = create_db_engine(resolved)
     application.state.session_factory = create_session_factory(application.state.engine)
+
+    # 进程级事件总线（`Approval_Service` 成功激活后 emit `PlanActivated`，任务 8.5 订阅）。
+    # 一个共享实例挂在 app.state 上：审批端点每请求新建 `ApprovalService`，但它们共用同一个
+    # 总线，因此将来登记的订阅者（风险扫描）对所有审批可见。P0 无订阅者，emit 是空循环。
+    application.state.event_bus = EventBus()
+
+    # LLM 出口：全仓库唯一的 `Bedrock_Adapter`（R21.10）。挂在 app.state 上，供解释路径
+    # （任务 5.11 的 `GET /plans/{id}/explanation`）与将来的 ReAct 编排（任务 5.7）共用同一个
+    # 实例——共享的内容哈希缓存（R25.7）与预算记账接缝因此对所有调用可见。`LLM_MODE` 由配置
+    # 决定：本地/CI 默认 `REPLAY`（零成本零网络），演示预热可手工切 `DISABLED`（降级模式）。
+    application.state.llm_adapter = BedrockAdapter.from_settings(
+        resolved, cassette=Cassette()
+    )
 
     # 审计走**第二个**引擎（`db/audit.py`：审计写入不参与业务事务，因此不能共用连接池）。
     # 在这里显式注册，而不是让 `get_audit_engine()` 自己懒建：懒建走的是

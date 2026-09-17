@@ -1,0 +1,16 @@
+﻿..................FF.                                                    [100%]
+================================== FAILURES ===================================
+______________ test_job_details_a_contains_active_scheduled_jobs ______________
+tests\unit\test_plan_delta.py:373: in test_job_details_a_contains_active_scheduled_jobs
+    assert "J1" in delta.job_details_a
+                   ^^^^^^^^^^^^^^^^^^^
+E   AttributeError: 'PlanDelta' object has no attribute 'job_details_a'
+____________ test_job_details_b_contains_candidate_scheduled_jobs _____________
+tests\unit\test_plan_delta.py:386: in test_job_details_b_contains_candidate_scheduled_jobs
+    assert "J1" in delta.job_details_b
+                   ^^^^^^^^^^^^^^^^^^^
+E   AttributeError: 'PlanDelta' object has no attribute 'job_details_b'
+=========================== short test summary info ===========================
+FAILED tests/unit/test_plan_delta.py::test_job_details_a_contains_active_scheduled_jobs
+FAILED tests/unit/test_plan_delta.py::test_job_details_b_contains_candidate_scheduled_jobs
+2 failed, 19 passed in 0.45s

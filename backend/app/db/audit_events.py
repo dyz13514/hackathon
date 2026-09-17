@@ -4,8 +4,8 @@
 
 - **`event_category`**——闭集合，取值只能是本模块定义的常量。R24.4 逐条点名了 14 类，
   design.md 又补了 3 类（`AGENT_RESERVED_KEY_DROPPED`、`EXPLANATION_NUMERIC_MISMATCH`、
-  `STALE_PROPOSAL_REJECTED`），运维侧再加 1 类（`DEMO_RESET`，见其常量注释），
-  合计 18 类。`audit.append()` 在运行期校验取值。
+  `STALE_PROPOSAL_REJECTED`），成本纪律再加 1 类（`PROJECT_BUDGET_CEILING`，任务 5.4），
+  运维侧再加 1 类（`DEMO_RESET`，见其常量注释），合计 19 类。`audit.append()` 在运行期校验取值。
 - **`event_type`**——开放字符串，同一类别下的具体事件（例如 `APPROVAL_ACTION` 类别下的
   `APPROVE` / `REJECT` / `MODIFY`）。它是可以自由取值的那一维。
 
@@ -70,6 +70,14 @@ STALE_PROPOSAL_REJECTED: Final = "STALE_PROPOSAL_REJECTED"
 # 运维（tasks.md 1.6）
 # --------------------------------------------------------------------------
 
+#: 达到项目级真实运行硬上限（`PROJECT_REAL_RUN_CAP = 150`），拒绝以 `LLM_MODE=LIVE`
+#: 启动（design.md 成本章节 ②、ADR-011）。**为什么单立一类而不并进 `DEGRADED_MODE_SWITCH`。**
+#: 降级切换记的是「运行期从 LLM 切到确定性」这件事；真实运行配额耗尽记的是「启动被拒绝」
+#: ——两件事发生在不同时刻、指向不同的运维动作（前者等 Bedrock 恢复，后者要人决定是否
+#: 抬高配额），混进同一类别会让「为什么这次没起来」的排查落到错误的记录上。项目美元
+#: 上限达 90% 的自动降级仍走 `DEGRADED_MODE_SWITCH`（它确实是一次运行期切换）。
+PROJECT_BUDGET_CEILING: Final = "PROJECT_BUDGET_CEILING"
+
 #: 一键重置演示数据（R28.8）。`POST /api/demo/reset` 清空业务表并重放 seed，
 #: **但不清空 `audit_log`**——append-only 的语义不允许删条目，因此「数据被整体换掉了」
 #: 这件事只能靠补写一条记录来表达，而这条记录是重置前后审计流的唯一接缝。
@@ -102,6 +110,7 @@ AuditCategory = Literal[
     "AGENT_RESERVED_KEY_DROPPED",
     "EXPLANATION_NUMERIC_MISMATCH",
     "STALE_PROPOSAL_REJECTED",
+    "PROJECT_BUDGET_CEILING",
     "DEMO_RESET",
 ]
 

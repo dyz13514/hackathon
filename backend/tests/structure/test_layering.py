@@ -76,7 +76,6 @@ ADAPTER_MODULE = APP_ROOT / "llm" / "adapter.py"
 #: 什么也没扫到」与「包还没写」两种情况不会长得一样。
 PENDING_SCAN_TARGETS: dict[str, str] = {
     "app/core/autonomy.py": "任务 7.3 Autonomy_Policy_Engine",
-    "app/llm/adapter.py": "任务 5.3 Bedrock_Adapter",
 }
 
 # --------------------------------------------------------------------------------------
@@ -162,12 +161,27 @@ FRONTEND_SOURCE_SUFFIXES = (".ts", ".tsx", ".js", ".jsx", ".vue", ".svelte")
 #: 状态迁移的调用点集合受控。前两道挡外部请求，这一道挡内部代码。
 STATUS_WRITER = "update_plan_status_if_version"
 
-#: 当前允许触及该方法的位置（相对 `backend/`，目录以 `/` 结尾）。
+#: 当前允许触及该方法的位置（相对 `backend/`，精确到文件）。
 #:
-#: 任务 3.3 会把这里收紧为恰好两处：`app/services/approval.py`（Approval_Service）与
-#: P1 的 `AutoAppliedChange.revert`。在那之前按目录放宽，因为文件名尚未确定；放宽的范围
-#: 仍然排除了 api / agents / tools / orchestrator / core 全部五层。
-STATUS_WRITER_ALLOWED = ("app/db/repositories.py", "app/services/")
+#: 任务 3.3 把这里从「按 `app/services/` 目录放宽」**收紧为恰好一处**——
+#: `app/services/approval.py`（`Approval_Service`），它既定义又调用
+#: `update_plan_status_if_version`。design.md §8 指定的另一处调用点是 P1 的
+#: `AutoAppliedChange.revert`（一键回滚经 `Approval_Service.activate_internal()` 重新激活
+#: 一个计划）。那段代码尚未落地，其文件登记在 `PENDING_STATUS_WRITER_SITES` 里；一旦落地，
+#: 把它的真实路径加进本元组即可，收紧的范围仍然排除 api / agents / tools / orchestrator /
+#: core 全部五层，以及 `app/services/` 下除 `approval.py` 之外的任何模块。
+#:
+#: 为什么现在能精确到 `approval.py` 而不再需要整个 `app/services/` 目录：`Approval_Service`
+#: 的落地（任务 3.1）已经确定了 `update_plan_status_if_version` 就住在 `approval.py`，文件名
+#: 不再是「尚未确定」。目录级放宽的唯一理由（文件名未知）已消失，因此按 §8 的两点清单收紧。
+STATUS_WRITER_ALLOWED = ("app/services/approval.py",)
+
+#: design.md §8 指定但尚未落地的状态写入调用点。P1 的 `AutoAppliedChange.revert` 落地后，
+#: 把其真实路径从这里移入 `STATUS_WRITER_ALLOWED`。登记在此使「P1 回滚还没写」与「它被
+#: 挪到了别处」不会长得一样（与 `PENDING_SCAN_TARGETS` 同一用意）。
+PENDING_STATUS_WRITER_SITES: dict[str, str] = {
+    "AutoAppliedChange.revert": "任务 13.x（P1）L4 自动应用回滚",
+}
 
 # --------------------------------------------------------------------------------------
 # ⑤ 自治策略引擎的隔离
@@ -463,8 +477,9 @@ def test_plan_status_writer_call_sites_are_confined() -> None:
     `status` 字段、`PATCH` 检测到 `status` 键即 403）挡的是外部请求；这一道挡的是内部
     代码——一个 handler 或 Agent 工具悄悄改状态，外部防护一个都不会触发。
 
-    任务 3.3 会把允许集合收紧为恰好两处（`Approval_Service` 与 P1 的
-    `AutoAppliedChange.revert`）；现在先排除全部五个上层。
+    任务 3.3 已把允许集合收紧为恰好一处已落地的调用点 `app/services/approval.py`
+    （`Approval_Service`）；design.md §8 指定的另一处 `AutoAppliedChange.revert` 属 P1，
+    尚未落地，登记在 `PENDING_STATUS_WRITER_SITES`。此外全部排除。
     """
     offences: list[str] = []
     for path in _python_files(APP_ROOT):

@@ -98,9 +98,9 @@
     - _Requirements: R5.7, R21.10, R22.10_
     - _Design: Architecture §1「分层规则」_
 
-- [ ] 2. P0-B 确定性内核（不依赖 LLM）
+- [x] 2. P0-B 确定性内核（不依赖 LLM）
 
-  - [-] 2.1 实现 `DomainSnapshot` 与快照加载
+  - [x] 2.1 实现 `DomainSnapshot` 与快照加载
     - `core/snapshot.py`：`DomainSnapshot` 及全部嵌套模型 `frozen=True`，集合字段用 `tuple`；`now` 由入参显式传入，内核内禁止 `datetime.now()`
     - `load_snapshot()`：单个只读事务读取全部规划实体，排除 `record_status = REVERTED`，`session.expunge_all()` 与 ORM identity map 解绑
     - 引用完整性预检失败返回 `DATA_INTEGRITY_ERROR` 并列出全部错误引用
@@ -109,7 +109,7 @@
     - _Requirements: R5.6, R5.7, R6.3_
     - _Design: Components §3 引言、§3.1.5、§3.7_
 
-  - [~] 2.2 实现 Hypothesis 生成器基础设施
+  - [x] 2.2 实现 Hypothesis 生成器基础设施
     - `tests/generators.py` **两个** PBT 生成器
     - `domain_snapshots(n_orders, n_machines, n_workers, scarcity ∈ {ABUNDANT, TIGHT, INFEASIBLE})`：内部一致的快照（引用完整、路线合法、班次合理、物料按 scarcity 调节）。**7 条属性中 6 条（1、2、4、10、21、37）共用它**，因此为它写自检测试，断言产出的快照通过任务 2.1 的预检
     - `approval_request_sequences()`：属性 15 专用，生成任意 API 请求与 Agent 工具调用序列，含直接 `PATCH status`、越权工具调用、并发 `approve`
@@ -118,7 +118,7 @@
     - _Requirements: R26.2, R26.3_
     - _Design: Testing Strategy §2_
 
-  - [~] 2.3 实现 `Timeline`、`earliest_feasible_slot` 与换型查表
+  - [x] 2.3 实现 `Timeline`、`earliest_feasible_slot` 与换型查表
     - `core/scheduling.py`：`Timeline` 为有序不重叠区间列表，提供 `occupy` / `free(s,e)` / `end_points()` / `product_immediately_before(t)` / `first_occupied_after(e)`
     - `earliest_feasible_slot`：候选起点扫描（`{ready_at} ∪ 机器占用结束点 ∪ 工人占用结束点`），`e > hard_end` 提前剪枝；插入空隙时必须为后一个作业也留出换型时间
     - `changeover(machine, from_product, to_product)`：按 `specificity` 降序查 `changeover_rules`（精确 → 机器默认 → 全局默认）；结果写入 `setup_minutes = op.setup_time + changeover`
@@ -127,7 +127,7 @@
     - _Requirements: R4.4, R4.5, R4.6_
     - _Design: Components §3.1.3、§3.1.4_
 
-  - [~] 2.4 实现 `Scheduling_Core` 主循环与工序展开
+  - [x] 2.4 实现 `Scheduling_Core` 主循环与工序展开
     - 工序展开：每 Order 按 `sequence` 升序生成 1–3 个 `ProductionJob`，`job_id = "{order_id}-OP{sequence}"`，`predecessor_job_id` 成线性链；>3 道或 `sequence` 重复 → `INVALID_ROUTING`
     - 订单排序为确定性全序 `(PRIORITY_RANK[priority], due_date, order_id)`
     - 候选枚举：机器（`machine_type` 匹配、`required_capability ⊆ capabilities`、`status ∉ {DOWN, MAINTENANCE}`、不落在 `downtime_windows`）× 工人（技能匹配、当日无 absence）；打分 `cost = minutes_since(horizon_start, slot.end) + W_CHANGEOVER × changeover_minutes + W_PREF × preference_delta(...)`，tie-break `(cost, machine_id, worker_id)`
@@ -137,7 +137,7 @@
     - _Requirements: R4.1, R4.2, R4.3, R4.7, R5.2, R8.1, R8.5, R6.4_
     - _Design: Components §3.1.1、§3.1.2、§3.1.5_
 
-  - [~] 2.5 为排产确定性可重现编写属性测试
+  - [x] 2.5 为排产确定性可重现编写属性测试
     - **Property 1: 排产确定性可重现**
     - **Validates: Requirements 5.7**
     - `tests/properties/test_property_1_scheduling_determinism.py`，**`max_examples=300`**（它是其余属性的前提：排产不确定则其他属性的失败无法复现，且单次执行成本最低）
@@ -147,7 +147,7 @@
     - _Properties: 1_
     - _Design: Correctness Properties「Property 1」_
 
-  - [~] 2.6 实现 `diagnose_blocking`、`quantify` 与 PARTIAL 路径
+  - [x] 2.6 实现 `diagnose_blocking`、`quantify` 与 PARTIAL 路径
     - `diagnose_blocking` 判定顺序固定（物料 → 机器能力 → 机器可用 → 工人技能 → 工人可用 → 班次边界 → 前序），保证同一失败总报同一原因
     - `quantify(failure, job, snapshot)` 按 design.md §3.1.6 的表逐类输出量化字段（`shortfall_quantity` / `minutes_needed` / `required_capability` / `worker_minutes_needed` / `deficit_minutes` / `predecessor_blocking_reason` / `overlap_minutes`）
     - `feasibility`：无 unschedulable → `FEASIBLE`；无 scheduled → `NO_FEASIBLE_PLAN`；否则 `PARTIAL`
@@ -156,7 +156,7 @@
     - _Requirements: R8.2, R8.3, R8.4, R8.5, R8.7_
     - _Design: Components §3.1.6_
 
-  - [~] 2.7 为作业划分完备性与不可排产量化编写属性测试
+  - [x] 2.7 为作业划分完备性与不可排产量化编写属性测试
     - **Property 4: 作业划分完备且不可排产项均被量化**
     - **Validates: Requirements 8.1, 8.2, 8.3, 8.4**
     - `max_examples=100`。断言全部 `ProductionJob` 恰好被划分为两个不相交且并集为全集的子集；`feasibility` 与该划分一致；每个 `unschedulable_job` 的 `blocking_reason` ∈ 9 类且 `unblock_suggestion` 至少含一个数值型量化字段
@@ -165,7 +165,7 @@
     - _Properties: 4_
     - _Design: Correctness Properties「Property 4」_
 
-  - [~] 2.8 实现 `Constraint_Validator` 的 9 类硬约束校验
+  - [x] 2.8 实现 `Constraint_Validator` 的 9 类硬约束校验
     - `core/validation.py` 9 个独立检查函数：`check_material_sufficient`、`check_machine_available`、`check_machine_capability`、`check_worker_available`、`check_worker_skill`、`check_machine_no_overlap`（含换型占用区间）、`check_worker_no_overlap`、`check_operation_precedence`、`check_shift_boundary`
     - `Violation` 含 `violation_type`、`job_ids`、`resource_ids`、`human_description`、`quantified`
     - **与 `Scheduling_Core` 独立实现**：除 `available_at` 与 `processing_minutes` 外不复用排产器内部函数，这样「排产器写错了」能被抓到而不是两者一起错
@@ -174,7 +174,7 @@
     - _Requirements: R6.1, R6.2, R6.3, R6.4, R6.5, R6.6_
     - _Design: Components §3.2_
 
-  - [~] 2.9 为排产输出满足全部硬约束编写属性测试
+  - [x] 2.9 为排产输出满足全部硬约束编写属性测试
     - **Property 2: 排产输出满足全部 9 类硬约束**
     - **Validates: Requirements 6.1, 6.6, 4.3, 4.6, 9.5**
     - `max_examples=100`。对已排产部分运行 `Constraint_Validator.validate`，断言 `violations` 为空集
@@ -183,7 +183,7 @@
     - _Properties: 2_
     - _Design: Correctness Properties「Property 2」_
 
-  - [~] 2.10 实现 `Objective_Scorer`
+  - [x] 2.10 实现 `Objective_Scorer`
     - `core/scoring.py`：`ObjectiveWeights` 默认值按 design.md §3.3（`machine_utilisation` 为负权重 −50.0）
     - 输出恰好 7 个 `ComponentScore`，各含 `raw_value` / `weight` / `weighted_contribution`；`total_score = Σ weighted_contribution`（越小越好）
     - `churn_ratio` 仅在传入 `reference_plan` 时有值；`machine_utilisation` = 已排产机时 ÷ 可用机时
@@ -192,7 +192,7 @@
     - _Requirements: R7.1, R7.2, R7.4, R7.5_
     - _Design: Components §3.3_
 
-  - [~] 2.11 实现 `Baseline_Scheduler`（FCFS）
+  - [x] 2.11 实现 `Baseline_Scheduler`（FCFS）
     - `core/baseline.py`：共享 `earliest_feasible_slot` 与 `Timeline`，刻意退化三处——①按 `(due_date, order_id)` 排序，忽略 `priority`；②不比较候选，取 ID 最小的可行机器与工人；③不做换型优化打分（换型时间照常物理插入）
     - 基线不应用任何 `PreferenceRule`
     - 基线计划存为 `production_plans` 行，`status = DRAFT`、`origin = 'BASELINE'`，永不进审批流
@@ -200,7 +200,7 @@
     - _Requirements: R19.2, R19.3, R5.4_
     - _Design: Components §3.4_
 
-  - [~] 2.12 实现计划生成流水线的确定性部分与排产视图
+  - [x] 2.12 实现计划生成流水线的确定性部分与排产视图
     - `orchestrator/pipelines/plan_generation.py`：固定顺序语句 `load_snapshot → generate_schedule → check_constraints → evaluate_schedule → compute_baseline → save_proposed_plan`，无「LLM 选择下一个工具」环节；此阶段 token 消耗为 0（解释调用在任务 5.11 接入）
     - `POST /api/plans/generate`：60 秒内返回 `PENDING_APPROVAL` 计划，含 `feasibility`、`scheduled_jobs`、`unschedulable_jobs`、`objective_breakdown`、`baseline_comparison`、`generated_by_trace_id`
     - 计划保存的五张表在同一事务内完成，避免「有计划头没有作业行」的半成品
@@ -210,7 +210,7 @@
     - _Requirements: R5.1, R5.4, R5.5, R8.6, R27.3, R21.11_
     - _Design: Architecture §2.1、Components §5、§6_
 
-  - [~] 2.13 为三个内核模块编写分支覆盖单元测试
+  - [x] 2.13 为三个内核模块编写分支覆盖单元测试
     - 承接原属性 3、5、6、7、8 的覆盖，**因此非可选**；`Autonomy_Policy_Engine` 的覆盖在任务 7.3，CI 门禁在任务 12.5
     - `Scheduling_Core`：换型插入、空隙插入的双侧换型、`rate_multiplier` 边界（0.5 / 1.0 / 2.0）、班次边界刚好卡住的作业、`diagnose_blocking` 的 7 个分支各一例；工序展开线性链与时长算术（原 3）；订单排序与丢弃顺序的越界对（原 5）
     - `Constraint_Validator`：9 类违反各一个最小复现 + 每类「刚好不违反」边界；输出 ID 封闭性与缺料只报缺口（原 6）；`available_at` 的到货边界与关于 t 单调不减（原 7）
@@ -218,9 +218,9 @@
     - _Requirements: R27.10, R4.2, R4.4, R4.5, R6.3, R6.4, R7.1, R7.2, R8.5, R8.7_
     - _Design: Testing Strategy §3、「已裁剪的 32 条属性与其替代覆盖」表_
 
-- [ ] 3. P0-C 审批闭环（不依赖 LLM）
+- [x] 3. P0-C 审批闭环（不依赖 LLM）
 
-  - [~] 3.1 实现 `Approval_Service.approve()`：陈旧检测 + 重校验 + 乐观并发
+  - [x] 3.1 实现 `Approval_Service.approve()`：陈旧检测 + 重校验 + 乐观并发
     - `services/approval.py`：状态非 `PENDING_APPROVAL` → `INVALID_STATE_TRANSITION`
     - ① 陈旧检测：比较 `current_input_snapshot_version()` 与 `plan.input_snapshot_version`，不等则写 `STALE_PROPOSAL_REJECTED` 审计并返回 `STALE_PROPOSAL`。**载荷只有两个版本号**，不列出变化的实体与字段
     - ② 重校验：`Constraint_Validator.validate()` 完整执行，有违反则写 `APPROVAL_REVALIDATION_FAILED` 并返回 `REVALIDATION_FAILED` + 违反清单，状态保持 `PENDING_APPROVAL`
@@ -229,7 +229,7 @@
     - _Requirements: R11.1, R11.2, R11.3, R11.9, R12.2, R12.3, R12.5, R12.7, R6.5_
     - _Design: Components §4.1_
 
-  - [~] 3.2 实现 `REJECT` / `MODIFY` 与决策记录
+  - [x] 3.2 实现 `REJECT` / `MODIFY` 与决策记录
     - `REJECT`：置 `REJECTED`，保留原 `ACTIVE`，`rejection_reason` ≥5 字符
     - `MODIFY`：接受 `REASSIGN_MACHINE` / `REASSIGN_WORKER` / `MOVE_TIME` / `REMOVE_FROM_PLAN` / `LOCK_JOB` 五类；修改后跑 `Constraint_Validator`，有违反则返回清单且**不改变状态**；无违反则生成新的 `PENDING_APPROVAL` 版本（`plan_version + 1`，原计划 `SUPERSEDED`），绝不直接激活
     - `LOCK_JOB` 写 `scheduled_jobs.locked = true`，任务 7.1 的冻结逻辑消费
@@ -239,7 +239,7 @@
     - _Requirements: R11.4, R11.5, R11.6, R11.7, R12.6, R18.1, R18.2_
     - _Design: Components §4.1、§4.3_
 
-  - [~] 3.3 实现审批绕过防护与计划状态机
+  - [x] 3.3 实现审批绕过防护与计划状态机
     - `PlanUpdateIn` 无 `status` 字段（`extra="forbid"`）；`PATCH /api/plans/{id}` 检测到 `status` 键即 `403 FORBIDDEN` + 审计
     - 实现「计划状态机」的迁移许可表，表外迁移一律 `INVALID_STATE_TRANSITION`
     - `save_proposed_plan` 校验 `origin != 'BASELINE'` 且 `produced_in_sandbox == false`，内部硬编码 `status = PENDING_APPROVAL`（输入模型无 `status` 参数）
@@ -247,7 +247,7 @@
     - _Requirements: R11.8, R22.9, R23.4_
     - _Design: Components §4.1、Data Models §8_
 
-  - [~] 3.4 为 `ACTIVE` 状态的唯一到达路径编写属性测试
+  - [x] 3.4 为 `ACTIVE` 状态的唯一到达路径编写属性测试
     - **Property 15: `ACTIVE` 状态的唯一到达路径**
     - **Validates: Requirements 11.1, 11.7, 11.8, 16.9, 22.9, 23.4**
     - `max_examples=100`，用任务 2.2 的 `approval_request_sequences`
@@ -257,7 +257,7 @@
     - _Properties: 15_
     - _Design: Correctness Properties「Property 15」_
 
-  - [~] 3.5 为 `Approval_Service` 编写陈旧、重校验与并发单元测试
+  - [x] 3.5 为 `Approval_Service` 编写陈旧、重校验与并发单元测试
     - 承接原属性 16、17 的覆盖，**因此非可选**
     - 陈旧检测：提案后改数据，断言 `STALE_PROPOSAL` + 载荷恰为两个版本号 + `STALE_PROPOSAL_REJECTED` 审计
     - 重校验失败：断言 `REVALIDATION_FAILED` 且状态仍为 `PENDING_APPROVAL`
@@ -265,7 +265,7 @@
     - _Requirements: R12.2, R12.3, R12.5, R12.7, R11.3, R6.5_
     - _Design: Testing Strategy §3（原属性 16、17）_
 
-  - [~] 3.6 实现 `Plan_Exporter` 与导出往返测试
+  - [x] 3.6 实现 `Plan_Exporter` 与导出往返测试
     - `services/exporter.py`：`.xlsx`（openpyxl）与 `.csv`
     - Sheet 1 `schedule`：按 `machine_id` 分组、组内按 `start_time` 升序，R20.2 的 10 个字段
     - Sheet 2 `unschedulable`：`job_id`、`order_id`、`blocking_reason`、`unblock_suggestion`（人类可读展开）
@@ -276,7 +276,7 @@
     - _Requirements: R20.1–R20.6_
     - _Design: Components §4.5_
 
-  - [~] 3.7 实现状态看板与审批界面
+  - [x] 3.7 实现状态看板与审批界面
     - `GET /api/state/dashboard`：五类实体当前状态，每条含 `source` 与 `last_updated_at`；首屏 3 秒内渲染
     - 前端 `/`：五个卡片区；`Order.notes` 渲染为纯文本 + `untrusted` 徽章，不解释任何指令语义；后端不可用时显示 `DATA_UNAVAILABLE` 与上次成功时间
     - 前端 `/approval`：计划摘要 + `objective_breakdown` 全分量与权重表 + 不可排产作业数与受影响订单的醒目标注；`APPROVE` / `REJECT`（必填理由）/ `MODIFY`（5 类结构化表单）；`STALE_PROPOSAL` 时显示「该提案所依赖的输入数据已在提案生成之后发生变化」加两个版本号，并给「基于最新数据重新生成」入口
@@ -284,14 +284,14 @@
     - _Requirements: R1.1–R1.5, R7.3, R8.6, R12.4, R27.9_
     - _Design: Components §6_
 
-- [~] 4. 检查点 — 无 LLM 主线可演示
+- [x] 4. 检查点 — 无 LLM 主线可演示
   - 确认「一键生成计划 → 甘特图 → 基线对比 → 审批 → 导出 xlsx」在**不配置任何 Bedrock 凭证**时端到端可用
   - 确认属性 1、2、4、15 与三个内核模块的分支覆盖单元测试全部通过
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 5. P0-D 编排与首次 LLM 调用（P0 LLM 路线之一：计划解释）
+- [x] 5. P0-D 编排与首次 LLM 调用（P0 LLM 路线之一：计划解释）
 
-  - [~] 5.1 实现 `Tool_Registry.invoke()` 的 7 步闸门
+  - [x] 5.1 实现 `Tool_Registry.invoke()` 的 7 步闸门
     - `tools/registry.py`：`ToolSpec`（`name`、`kind`、`input_model`、`output_model`、`handler`、`max_response_tokens=2000`、`supports_projection`）
     - `TOOL_WHITELIST` 为 `MappingProxyType` 包裹的 `frozenset`，运行期不可变，无 `add_tool_for_agent()` 之类 API。**白名单只有这一层，按调用方划分**——按路径二次收窄（`PATH_TOOL_SUBSET`）随 prompt caching 一并移出范围
     - `invoke` 固定 7 步：①白名单（不通过 → `TOOL_NOT_PERMITTED` 审计 + 错误返回，handler 不被调用）②输入 schema（→ `TOOL_INPUT_INVALID`，作为观察结果回给 Agent）③执行（超时保护）④输出 schema（防实现漂移泄漏明细行）⑤字段投影 ⑥`clamp_tokens` 硬截断并标 `truncated` ⑦记账写 `tool_calls`
@@ -301,7 +301,7 @@
     - _Requirements: R22.1, R22.2, R22.7, R22.8, R22.10, R22.11, R22.12, R22.16, R25.6_
     - _Design: Components §2.3、Architecture §2.2_
 
-  - [~] 5.2 实现全部工具的 Pydantic 契约与 handler
+  - [x] 5.2 实现全部工具的 Pydantic 契约与 handler
     - `tools/models.py`：全部模型 `extra="forbid"`，JSON Schema 由 `model_json_schema()` 生成后喂给 LLM
     - 共享类型 `Feasibility`、`ObjectiveSummary`、`PlanHandle`（**刻意不含任何逐 `ScheduledJob` 字段**，使明细泄漏在类型层面不可能；契约测试单独断言，这是 ADR-004 的两道防线之一，另一道是 `EVAL-015`）
     - 只读 10 个：`get_orders`、`get_products`、`get_inventory`、`get_machines`、`get_workers`、`get_current_plan`、`get_preference_rules`、`get_risk_findings`、`get_value_metrics`、`get_job_details`（`job_ids` 由 Pydantic 强制 `min_length=1, max_length=10`，是 Agent 获取作业明细的唯一路径）
@@ -312,7 +312,7 @@
     - _Requirements: R22.3, R22.4, R22.5, R22.6, R22.13, R22.14, R22.15_
     - _Design: Components §2.4、ADR-004_
 
-  - [~] 5.3 实现 `Bedrock_Adapter` 与 cassette 录制回放
+  - [x] 5.3 实现 `Bedrock_Adapter` 与 cassette 录制回放
     - `llm/adapter.py`：全仓库唯一调用 Bedrock 处；`LlmMode ∈ {LIVE, REPLAY, STUB, DISABLED}`，`DISABLED` 抛 `LlmDisabledError`
     - **静态前缀优先的装配**：`system` 数组两个块（提示词段 1–3 + 段 5、工具 schema 段 4），变化内容全在 `messages`；`temperature = 0`。这条不变量与 prompt caching 无关——保留它是因为**前缀是常量使 `assemble_messages` 成为纯函数、输出可逐字节断言**
     - **不实现启动探针、`prompt_caching_available`、`MINIMAL_PREFIX`、缓存读写分项记账**（全部移出范围）
@@ -324,7 +324,7 @@
     - _Requirements: R21.10, R25.7, R25.8, R26.5, R27.12_
     - _Design: Components §2.1、ADR-005、ADR-011_
 
-  - [~] 5.4 实现 `Token_Budget_Manager` 与成本纪律
+  - [x] 5.4 实现 `Token_Budget_Manager` 与成本纪律
     - `BUDGETS` **恰好 2 个作用域**：`PLAN_GENERATION` 4,000 token / USD 0.02（K-10）、`REPLANNING` **14,000 token / USD 0.06**（K-16）
     - `open_scope(scope_name: BudgetScope | None, trace_id)` **接受 `None` 并返回 no-op 句柄**（路由表 12 条入口中 10 条为 `None`，让调用方分支会在每个新入口上重复一次判断）；`close_scope()` / `record()` / `gate()` 三处各一个 `None` 判断
     - `record(usage, scope)`：`scope is None` 时**照常**写逐次台账、每日累计与项目累计，只跳过作用域累计
@@ -334,7 +334,7 @@
     - _Requirements: R25.1, R25.2, R25.3, R25.4_
     - _Design: Components §2.5、成本章节 §2、ADR-011_
 
-  - [~] 5.5 实现 `Context_Manager.assemble_messages` 纯函数及其契约测试
+  - [x] 5.5 实现 `Context_Manager.assemble_messages` 纯函数及其契约测试
     - `ObservationRecord`（`frozen=True`）与 `AgentContext`（`VERBATIM_WINDOW = 2`、`SUMMARY_LINE_MAX_CHARS = 120`）
     - `assemble_messages(ctx, *, prefix)` 为**纯函数**：无 I/O、无随机、无时间依赖；`system` 部分逐字节等于同 Agent 上一轮；`messages` 恰 1 条 `role="user"`，由 `<running_state>` / `<history>` / `<recent_observations>` / `<task>` 四块按固定顺序拼接
     - 保留策略：最后 2 条观察原样出现；其余每条恰好折叠为一行 `#<step> <tool_name> <OK|ERROR> <key_identifier|->`；每轮注入运行状态块；不出现任何历史 `assistant` / `tool` 消息
@@ -343,7 +343,7 @@
     - _Requirements: R21.7, R21.8_
     - _Design: Components §2.2、ADR-005_
 
-  - [~] 5.6 实现 Agent 静态提示词、输出契约与 `handoff` 闸门
+  - [x] 5.6 实现 Agent 静态提示词、输出契约与 `handoff` 闸门
     - `agents/prompts/`：每 Agent 一个 `.py`，提示词为**静态字符串常量**（无运行时插值），固定 6 段 `[ROLE] [AUTHORITY] [PROTOCOL] [TOOLS] [DATA_RULES] [OUTPUT]`；段 2/3/5 共享常量，使静态前缀在同一 Agent 各轮逐字节相同
     - `[AUTHORITY]` 段禁止输出 `start_time` / `end_time` / `machine_id` / `worker_id` 数值（除来自工具返回）与声明 `autonomy_level` / `impact_class`
     - `agents/contracts.py`：P0 契约 `ColumnMappingProposal` / `RevisedPlanProposal` / `ExplanationDraft`；P1 契约 `ScenarioTranslation` / `PreferenceRuleCandidate` / `RiskNarrative` 一并定义（模型定义零成本，P1 落地无需改 `handoff`）
@@ -353,7 +353,7 @@
     - _Requirements: R21.1, R21.3, R21.9, R22.7, R22.8, R23.2_
     - _Design: Architecture §3.1–§3.3、ADR-001_
 
-  - [~] 5.7 实现 `Orchestrator.run()` 与 ReAct 循环
+  - [x] 5.7 实现 `Orchestrator.run()` 与 ReAct 循环
     - `orchestrator/routing.py`：`ROUTING_TABLE` **纯查表**；只有 `GENERATE_PLAN`（4,000）与 `REPLAN`（14,000）有强制上限，其余 `budget_scope` 为 `None`。P1 三条路线（`WHATIF_NL` / `RISK_NARRATION` / `DISTIL_PREFERENCE`）留位但不接线
     - `run(intent, payload, session_id)`：开 `Trace` 与 `budget = self.budget.open_scope(route.budget_scope, trace.trace_id)`（**无条件调用，无需分支**），按 `route.mode` 分派，`finally` 中 `tracer.end` 与 `budget.close_scope`
     - `SessionState` 7 字段；`TokenUsage` 记 `input_tokens` / `output_tokens` / `estimated_usd` / `llm_call_count`
@@ -364,7 +364,7 @@
     - _Requirements: R21.2, R21.4, R21.5, R21.6, R21.7, R21.13, R23.5_
     - _Design: Components §1、Architecture §2.2、§2.3、Error Handling §3_
 
-  - [~] 5.8 实现 `Guardrail_Layer` 的不受信任内容包裹与注入检测
+  - [x] 5.8 实现 `Guardrail_Layer` 的不受信任内容包裹与注入检测
     - (a) `UNTRUSTED_SOURCES = {upload.cell, order.notes, product.description, whatif.query, decision.rejection_reason}`（`whatif.query` 在 P0 无输入路径，常量一并定义）；`wrap_untrusted` 去控制字符、截断 2,000 字符、用零宽字符打断伪造的 `</untrusted>`
     - 不受信任字段读取时经 `UntrustedStr` 包装，`assemble_messages` 只接受其 `wrapped()` 形式；直接传 `str` 在 mypy strict 与运行时断言两处失败
     - (b) `INJECTION_PATTERNS` 6 类（`IGNORE_PRIOR`、`FORCE_APPROVE`、`SET_ACTIVE`、`PRIV_ESCALATE`、`LEAK_PROMPT`、`ROLE_MARKUP`）；命中写 `PROMPT_INJECTION_SUSPECTED`（保留原文与片段）、置 `injection_suspected` 供 UI 徽章
@@ -373,7 +373,7 @@
     - _Requirements: R23.1, R23.2, R23.3_
     - _Design: Components §2.7(a)(b)_
 
-  - [~] 5.9 实现 Agent 输出 schema 校验与保留键剥离
+  - [x] 5.9 实现 Agent 输出 schema 校验与保留键剥离
     - (c) `parse_json_strict` 失败 → `AGENT_OUTPUT_NOT_JSON`
     - `RESERVED_KEYS = {impact_class, autonomy_level, plan_status, approved, feasibility, start_time, end_time}`：递归遍历发现即剥离并写 `AGENT_RESERVED_KEY_DROPPED`
     - 剥离后用契约模型（`extra="forbid"`）校验，失败按 R21.6 处理（`AGENT_OUTPUT_CONTRACT_VIOLATION`）
@@ -381,7 +381,7 @@
     - _Requirements: R23.5, R13.11_
     - _Design: Components §2.7(c)、ADR-010_
 
-  - [~] 5.10 实现解释数值的闭世界一致性检查
+  - [x] 5.10 实现解释数值的闭世界一致性检查
     - (d) `NumericFactSet` 从载荷**递归收集全部数值叶子**，按单位分桶（`counts` 0、`minutes` 0.5、`ratios` 0.005、`money` 0.005、`days` 0.02、`hours` 0.02 容差）；`literals` 桶收集标识符与 ISO 时间戳并整体豁免
     - `check_numeric_consistency`：先 `mask_literals` 挖掉 `JOB-004` / `CNC-01` / ISO 时间戳 / `PR-003`，再用 `NUMBER_RE` 提取，去千分位、`%` → /100、单位归一后在对应桶比对；无单位数字尝试全部数值桶（偏宽松是有意的，要抓的是载荷里根本不存在的数字）
     - 不匹配则写 `EXPLANATION_NUMERIC_MISMATCH` 并发布 `TemplateExplanation`，`numeric_check = FALLBACK`
@@ -390,7 +390,7 @@
     - _Requirements: R10.7, R23.6_
     - _Design: Components §2.7(d)、ADR-012_
 
-  - [~] 5.11 实现计划生成路径的单次解释调用与 `Explanation_Builder`
+  - [x] 5.11 实现计划生成路径的单次解释调用与 `Explanation_Builder`
     - `core/explain.py`：结构化证据构建（`decision_evidence`、`assumptions`、`confidence` 及其依据）与 `TemplateExplanationRenderer`
     - `build_explanation_payload`：紧凑载荷 ≈3,000 token（计划摘要按机器聚合、7 分量、`baseline_comparison`、`unschedulable_jobs` 摘要 ≤5 条、`assumptions`、关键作业明细 ≤6 条），**绝不发送原始 Order / Machine / Worker / Material 清单**
     - 该次调用**不发送任何工具 schema**（它只写解释文本），省下 ≈2,200 token，是 K-10 能成立的关键；恰好 1 次调用
@@ -401,7 +401,7 @@
     - _Requirements: R5.1, R5.3, R10.2, R10.4, R10.5, R10.6, R21.11, R21.12_
     - _Design: Architecture §2.1、Components §3.7、成本章节 §1、ADR-002_
 
-  - [~] 5.12 实现 `Trace_Recorder` 与 Trace 查看器
+  - [x] 5.12 实现 `Trace_Recorder` 与 Trace 查看器
     - 写 `traces`（`kind`、`mode = PIPELINE | REACT`、`agent`、`trigger_source`、`outcome`、token 与美元汇总、`result_ref`）、`trace_steps`（`step_kind`、`decision_reason` 为结构化摘要而非推理链）、`tool_calls`（关联 `step_id`）
     - `mode != REPLAY` 的行数即 `PROJECT_REAL_RUN_CAP = 150` 的计数依据（任务 5.4 消费）
     - 每个 `ProductionPlan` 通过 `generated_by_trace_id` 关联到 `Trace`
@@ -411,14 +411,14 @@
     - _Requirements: R24.1, R24.2, R24.5, R24.6, R24.7, R22.11_
     - _Design: Data Models §7、Components §6_
 
-- [~] 6. 检查点 — 形态 A 完整闭环
+- [x] 6. 检查点 — 形态 A 完整闭环
   - 确认计划生成带 LLM 解释、Trace 可回看、token 与美元计数可见，单周期消耗 ≤4,000
   - 确认 `open_scope(None)` 路径上逐次记账、每日累计与项目累计三者照常发生
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 7. P0-E 扰动与重排（P0 LLM 路线之二：重排 ReAct）
 
-  - [~] 7.1 实现 `Replanner` 的受影响集、冻结集与锁定作业交互
+  - [x] 7.1 实现 `Replanner` 的受影响集、冻结集与锁定作业交互
     - `affected_by(disruption, active_plan, snapshot)`：`MACHINE_BREAKDOWN` 取落在故障窗内的作业；`WORKER_UNAVAILABLE` 取该工人全部作业；`MATERIAL_SHORTAGE` / `MATERIAL_DELAY` 取消耗该物料的订单全部工序；`URGENT_ORDER` 为空集；沿前后序链把后序工序纳入
     - 冻结集 = 未受影响且 `job_level_still_valid` 的作业。**冻结先于优化**：它是 K-05（`churn_ratio ≤ 0.20`）的实现手段，代价是解质量可能次优，这是需求明确接受的取舍
     - `locked_job_ids`：被锁作业若受影响或已不可行，则既不冻结也不重排，进 `unschedulable` 并发 `LOCKED_JOB_INFEASIBLE`，等待解锁——**绝不悄悄移动被锁作业**
@@ -428,14 +428,14 @@
     - _Requirements: R9.5, R9.6, R9.7, R11.5, R6.5_
     - _Design: Components §3.5_
 
-  - [~] 7.2 实现 `compute_plan_delta` 与 `churn_ratio`
+  - [-] 7.2 实现 `compute_plan_delta` 与 `churn_ratio`
     - 五个集合 `added` / `removed` / `moved` / `reassigned` / `unchanged`；每个作业只归入 `moved` 或 `reassigned` 之一（`reassigned` 优先）
     - `churn_ratio` 分母取两计划 `job_id` 的**并集**而非 `|ACTIVE|`，保证插单时仍落在 `[0, 1]`
     - 单元测试（**非可选**，承接原属性 11）：五集合划分性 + 并集分母的越界用例
     - _Requirements: R10.1, R9.3, R9.6_
     - _Design: Components §3.5_
 
-  - [~] 7.3 实现 `Autonomy_Policy_Engine` 及其结构隔离证明
+  - [-] 7.3 实现 `Autonomy_Policy_Engine` 及其结构隔离证明
     - `core/autonomy.py`：`ImpactInput` 为 `frozen` dataclass，**7 个字段全部 `int` / `bool` / `float`，无任何字符串字段**，LLM 文本输出没有可注入的入口
     - `ImpactInput` 只由 `from_delta(delta, active, cand)` 产生，`PlanDelta` 只由 `compute_plan_delta` 从已持久化的两个计划行计算；LLM 只能提供经 schema 校验的 `plan_id`
     - `classify_impact` 逐条对齐 R13.1；`decide_autonomy` 中 **`IMPACT_MAJOR` 分支在读取 `FeatureFlags` 之前返回**（`flags` 在该路径上不被求值），这是「不可覆盖」的结构化写法

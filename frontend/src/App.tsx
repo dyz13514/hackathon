@@ -1,8 +1,11 @@
 import { NavLink, Route, Routes } from 'react-router-dom';
 
+import { Approval } from './routes/Approval';
 import { Dashboard } from './routes/Dashboard';
 import { NotFound } from './routes/NotFound';
 import { ROUTES } from './routes/routes';
+import { Schedule } from './routes/Schedule';
+import { Traces } from './routes/Traces';
 
 /**
  * 应用外壳：顶栏 + 主导航 + 路由出口。
@@ -39,6 +42,9 @@ export function App() {
       <main className="app-main">
         <Routes>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/schedule" element={<Schedule />} />
+          <Route path="/approval" element={<Approval />} />
+          <Route path="/traces" element={<Traces />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>

@@ -1,0 +1,392 @@
+﻿........................................................................ [ 13%]
+........................................................................ [ 27%]
+....F..................................F................................ [ 41%]
+........................................................................ [ 55%]
+........................................................................ [ 69%]
+........................................................................ [ 83%]
+........................................................................ [ 97%]
+.............                                                            [100%]
+================================== FAILURES ===================================
+________ test_pipeline_persists_all_five_tables_and_status_is_pending _________
+
+self = <sqlalchemy.engine.base.Connection object at 0x000001E1A97FAE10>
+dialect = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001E1AB89A5D0>
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001E1AAB90950>
+statement = <sqlalchemy.dialects.sqlite.base.SQLiteCompiler object at 0x000001E1ABA36030>
+parameters = [('PLAN-e4a7d146c4b4', '2026-03-02', 'DRAFT', 'PARTIAL', 1, 1, ...), ('PLAN-47fee11e731b', '2026-03-02', 'PENDING_APPROVAL', 'PARTIAL', 1, 1, ...)]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\engine\base.py:1936: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001E1AB89A5D0>
+cursor = <sqlite3.Cursor object at 0x000001E1ACC8AFC0>
+statement = 'INSERT INTO production_plans (plan_id, production_date, status, feasibility, plan_version, version, input_snapshot_ve... generated_by_trace_id, disruption_id, created_at, rejection_reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+parameters = [('PLAN-e4a7d146c4b4', '2026-03-02', 'DRAFT', 'PARTIAL', 1, 1, ...), ('PLAN-47fee11e731b', '2026-03-02', 'PENDING_APPROVAL', 'PARTIAL', 1, 1, ...)]
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001E1AAB90950>
+
+    def do_executemany(self, cursor, statement, parameters, context=None):
+>       cursor.executemany(statement, parameters)
+E       sqlite3.IntegrityError: FOREIGN KEY constraint failed
+
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\engine\default.py:948: IntegrityError
+
+The above exception was the direct cause of the following exception:
+
+seeded = sessionmaker(class_='Session', future=True, bind=Engine(sqlite:///C:/Users/86139/AppData/Local/Temp/pytest-of-86139/pytest-91/test_pipeline_persists_all_fiv0/pipeline.db), autoflush=False, expire_on_commit=False)
+engine = Engine(sqlite:///C:/Users/86139/AppData/Local/Temp/pytest-of-86139/pytest-91/test_pipeline_persists_all_fiv0/pipeline.db)
+
+    def test_pipeline_persists_all_five_tables_and_status_is_pending(
+        seeded: sessionmaker[Session], engine: Engine
+    ) -> None:
+        """五张表全部写入，正式计划状态硬编码 PENDING_APPROVAL（design.md §4.4、R11.8）。"""
+        with seeded() as session:
+>           result = plan_generation.run_plan_generation(
+                session, now=NOW, production_date=PRODUCTION_DATE, session_id="s-1"
+            )
+
+tests\unit\test_plan_generation_pipeline.py:188: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+app\orchestrator\pipelines\plan_generation.py:286: in run_plan_generation
+    _persist(session, result=result, baseline=baseline_result, weights=resolved_weights)
+app\orchestrator\pipelines\plan_generation.py:399: in _persist
+    session.flush()
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\orm\session.py:4345: in flush
+    self._flush(objects)
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\orm\session.py:4480: in _flush
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\util\langhelpers.py:224: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\orm\session.py:4441: in _flush
+    flush_context.execute()
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\orm\unitofwork.py:466: in execute
+    rec.execute(self)
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\orm\unitofwork.py:642: in execute
+    util.preloaded.orm_persistence.save_obj(
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\orm\persistence.py:93: in save_obj
+    _emit_insert_statements(
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\orm\persistence.py:1048: in _emit_insert_statements
+    result = connection.execute(
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\engine\base.py:1419: in execute
+    return meth(
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\sql\elements.py:526: in _execute_on_connection
+    return connection._execute_clauseelement(
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\engine\base.py:1641: in _execute_clauseelement
+    ret = self._execute_context(
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\engine\base.py:1846: in _execute_context
+    return self._exec_single_context(
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\engine\base.py:1986: in _exec_single_context
+    self._handle_dbapi_exception(
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\engine\base.py:2355: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\engine\base.py:1936: in _exec_single_context
+    self.dialect.do_executemany(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001E1AB89A5D0>
+cursor = <sqlite3.Cursor object at 0x000001E1ACC8AFC0>
+statement = 'INSERT INTO production_plans (plan_id, production_date, status, feasibility, plan_version, version, input_snapshot_ve... generated_by_trace_id, disruption_id, created_at, rejection_reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+parameters = [('PLAN-e4a7d146c4b4', '2026-03-02', 'DRAFT', 'PARTIAL', 1, 1, ...), ('PLAN-47fee11e731b', '2026-03-02', 'PENDING_APPROVAL', 'PARTIAL', 1, 1, ...)]
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001E1AAB90950>
+
+    def do_executemany(self, cursor, statement, parameters, context=None):
+>       cursor.executemany(statement, parameters)
+E       sqlalchemy.exc.IntegrityError: (sqlite3.IntegrityError) FOREIGN KEY constraint failed
+E       [SQL: INSERT INTO production_plans (plan_id, production_date, status, feasibility, plan_version, version, input_snapshot_version, origin, supersedes_plan_id, superseded_by_plan_id, generated_by_trace_id, disruption_id, created_at, rejection_reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)]
+E       [parameters: [('PLAN-e4a7d146c4b4', '2026-03-02', 'DRAFT', 'PARTIAL', 1, 1, 0, 'BASELINE', None, None, 'TRACE-20260302T080000-c84a1df6', None, '2026-09-17 17:34:13.516675', None), ('PLAN-47fee11e731b', '2026-03-02', 'PENDING_APPROVAL', 'PARTIAL', 1, 1, 0, 'PLAN_GENERATION', None, None, 'TRACE-20260302T080000-c84a1df6', None, '2026-09-17 17:34:13.516701', None)]]
+E       (Background on this error at: https://sqlalche.me/e/20/gkpj)
+
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\engine\default.py:948: IntegrityError
+---------------------------- Captured stderr call -----------------------------
+
+[DIAG] pipeline persist failed: plan.input_snapshot_version=0 MAX(input_snapshots.snapshot_version)=<query failed: This Session's transaction has been rolled back due to a previous exception during flush. To begin a new transaction with this Session, first issue Session.rollback(). Original exception was: (sqlite3.IntegrityError) FOREIGN KEY constraint failed
+[SQL: INSERT INTO production_plans (plan_id, production_date, status, feasibility, plan_version, version, input_snapshot_version, origin, supersedes_plan_id, superseded_by_plan_id, generated_by_trace_id, disruption_id, created_at, rejection_reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: [('PLAN-e4a7d146c4b4', '2026-03-02', 'DRAFT', 'PARTIAL', 1, 1, 0, 'BASELINE', None, None, 'TRACE-20260302T080000-c84a1df6', None, '2026-09-17 17:34:13.516675', None), ('PLAN-47fee11e731b', '2026-03-02', 'PENDING_APPROVAL', 'PARTIAL', 1, 1, 0, 'PLAN_GENERATION', None, None, 'TRACE-20260302T080000-c84a1df6', None, '2026-09-17 17:34:13.516701', None)]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj) (Background on this error at: https://sqlalche.me/e/20/7s2a)> trace_row_exists=False trace_id=TRACE-20260302T080000-c84a1df6
+____________ test_generation_pipeline_produces_no_baseline_pending ____________
+
+self = <sqlalchemy.engine.base.Connection object at 0x000001E1ACCE3890>
+dialect = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001E1ACB27C50>
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001E1ACCE3350>
+statement = <sqlalchemy.dialects.sqlite.base.SQLiteCompiler object at 0x000001E1ADF67F00>
+parameters = [('PLAN-fb8f91db12fb', '2026-03-02', 'DRAFT', 'PARTIAL', 1, 1, ...), ('PLAN-64a32b49ac5f', '2026-03-02', 'PENDING_APPROVAL', 'PARTIAL', 1, 1, ...)]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\engine\base.py:1936: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001E1ACB27C50>
+cursor = <sqlite3.Cursor object at 0x000001E1AE08F4C0>
+statement = 'INSERT INTO production_plans (plan_id, production_date, status, feasibility, plan_version, version, input_snapshot_ve... generated_by_trace_id, disruption_id, created_at, rejection_reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+parameters = [('PLAN-fb8f91db12fb', '2026-03-02', 'DRAFT', 'PARTIAL', 1, 1, ...), ('PLAN-64a32b49ac5f', '2026-03-02', 'PENDING_APPROVAL', 'PARTIAL', 1, 1, ...)]
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001E1ACCE3350>
+
+    def do_executemany(self, cursor, statement, parameters, context=None):
+>       cursor.executemany(statement, parameters)
+E       sqlite3.IntegrityError: FOREIGN KEY constraint failed
+
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\engine\default.py:948: IntegrityError
+
+The above exception was the direct cause of the following exception:
+
+factory = sessionmaker(class_='Session', future=True, bind=Engine(sqlite:///C:/Users/86139/AppData/Local/Temp/pytest-of-86139/pytest-91/test_generation_pipeline_produ0/guard.db), autoflush=False, expire_on_commit=False)
+
+    def test_generation_pipeline_produces_no_baseline_pending(
+        factory: sessionmaker[Session],
+    ) -> None:
+        """整条流水线跑完后，唯一的 PENDING_APPROVAL 计划来源是 PLAN_GENERATION，不是 BASELINE。"""
+>       _run(factory)
+
+tests\unit\test_save_proposed_plan_guard.py:131: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\unit\test_save_proposed_plan_guard.py:73: in _run
+    return plan_generation.run_plan_generation(
+app\orchestrator\pipelines\plan_generation.py:286: in run_plan_generation
+    _persist(session, result=result, baseline=baseline_result, weights=resolved_weights)
+app\orchestrator\pipelines\plan_generation.py:399: in _persist
+    session.flush()
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\orm\session.py:4345: in flush
+    self._flush(objects)
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\orm\session.py:4480: in _flush
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\util\langhelpers.py:224: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\orm\session.py:4441: in _flush
+    flush_context.execute()
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\orm\unitofwork.py:466: in execute
+    rec.execute(self)
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\orm\unitofwork.py:642: in execute
+    util.preloaded.orm_persistence.save_obj(
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\orm\persistence.py:93: in save_obj
+    _emit_insert_statements(
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\orm\persistence.py:1048: in _emit_insert_statements
+    result = connection.execute(
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\engine\base.py:1419: in execute
+    return meth(
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\sql\elements.py:526: in _execute_on_connection
+    return connection._execute_clauseelement(
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\engine\base.py:1641: in _execute_clauseelement
+    ret = self._execute_context(
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\engine\base.py:1846: in _execute_context
+    return self._exec_single_context(
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\engine\base.py:1986: in _exec_single_context
+    self._handle_dbapi_exception(
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\engine\base.py:2355: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\engine\base.py:1936: in _exec_single_context
+    self.dialect.do_executemany(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001E1ACB27C50>
+cursor = <sqlite3.Cursor object at 0x000001E1AE08F4C0>
+statement = 'INSERT INTO production_plans (plan_id, production_date, status, feasibility, plan_version, version, input_snapshot_ve... generated_by_trace_id, disruption_id, created_at, rejection_reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+parameters = [('PLAN-fb8f91db12fb', '2026-03-02', 'DRAFT', 'PARTIAL', 1, 1, ...), ('PLAN-64a32b49ac5f', '2026-03-02', 'PENDING_APPROVAL', 'PARTIAL', 1, 1, ...)]
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001E1ACCE3350>
+
+    def do_executemany(self, cursor, statement, parameters, context=None):
+>       cursor.executemany(statement, parameters)
+E       sqlalchemy.exc.IntegrityError: (sqlite3.IntegrityError) FOREIGN KEY constraint failed
+E       [SQL: INSERT INTO production_plans (plan_id, production_date, status, feasibility, plan_version, version, input_snapshot_version, origin, supersedes_plan_id, superseded_by_plan_id, generated_by_trace_id, disruption_id, created_at, rejection_reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)]
+E       [parameters: [('PLAN-fb8f91db12fb', '2026-03-02', 'DRAFT', 'PARTIAL', 1, 1, 0, 'BASELINE', None, None, 'TRACE-20260302T080000-33b41bfe', None, '2026-09-17 17:34:16.066836', None), ('PLAN-64a32b49ac5f', '2026-03-02', 'PENDING_APPROVAL', 'PARTIAL', 1, 1, 0, 'PLAN_GENERATION', None, None, 'TRACE-20260302T080000-33b41bfe', None, '2026-09-17 17:34:16.066865', None)]]
+E       (Background on this error at: https://sqlalche.me/e/20/gkpj)
+
+C:\Users\86139\anaconda3\Lib\site-packages\sqlalchemy\engine\default.py:948: IntegrityError
+---------------------------- Captured stderr call -----------------------------
+
+[DIAG] pipeline persist failed: plan.input_snapshot_version=0 MAX(input_snapshots.snapshot_version)=<query failed: This Session's transaction has been rolled back due to a previous exception during flush. To begin a new transaction with this Session, first issue Session.rollback(). Original exception was: (sqlite3.IntegrityError) FOREIGN KEY constraint failed
+[SQL: INSERT INTO production_plans (plan_id, production_date, status, feasibility, plan_version, version, input_snapshot_version, origin, supersedes_plan_id, superseded_by_plan_id, generated_by_trace_id, disruption_id, created_at, rejection_reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: [('PLAN-fb8f91db12fb', '2026-03-02', 'DRAFT', 'PARTIAL', 1, 1, 0, 'BASELINE', None, None, 'TRACE-20260302T080000-33b41bfe', None, '2026-09-17 17:34:16.066836', None), ('PLAN-64a32b49ac5f', '2026-03-02', 'PENDING_APPROVAL', 'PARTIAL', 1, 1, 0, 'PLAN_GENERATION', None, None, 'TRACE-20260302T080000-33b41bfe', None, '2026-09-17 17:34:16.066865', None)]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj) (Background on this error at: https://sqlalche.me/e/20/7s2a)> trace_row_exists=False trace_id=TRACE-20260302T080000-33b41bfe
+============================== warnings summary ===============================
+C:\Users\86139\anaconda3\Lib\site-packages\fastapi\testclient.py:1
+  C:\Users\86139\anaconda3\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/unit/test_plan_generation_pipeline.py::test_pipeline_persists_all_five_tables_and_status_is_pending
+FAILED tests/unit/test_save_proposed_plan_guard.py::test_generation_pipeline_produces_no_baseline_pending

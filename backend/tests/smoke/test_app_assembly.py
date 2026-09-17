@@ -29,7 +29,13 @@ def test_api_prefix_is_reserved(settings: Settings) -> None:
     骨架阶段路由集合为空，此处断言的是 docs / openapi 也在该前缀下，
     这样反向代理只需转发一个前缀。
     """
-    paths = {route.path for route in create_app(settings).routes}  # type: ignore[attr-defined]
+    # 新版 Starlette 下 `include_router(prefix=...)` 会把子路由包成一个没有 `.path` 的
+    # 包装对象（`_IncludedRouter`），因此不能假设每个 route 都有 `.path`。用 `getattr`
+    # 取，缺失的跳过——本断言关心的是 docs / openapi 这两条**有** path 的顶层路由在
+    # `/api` 前缀下，而不是遍历整棵路由树。
+    paths = {
+        getattr(route, "path", None) for route in create_app(settings).routes
+    }
     assert "/api/openapi.json" in paths
     assert "/api/docs" in paths
 

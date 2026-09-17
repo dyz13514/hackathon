@@ -57,3 +57,437 @@ body {
 .app-main p {
   color: var(--muted);
 }
+
+/* --- 排产甘特图（任务 2.12） --- */
+
+.schedule-header {
+  align-items: baseline;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.schedule-header button {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0.4rem 0.9rem;
+}
+
+.schedule-header button:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.schedule-header button:focus-visible {
+  outline: 2px solid var(--fg);
+  outline-offset: 2px;
+}
+
+.schedule-error {
+  border: 1px solid #b42318;
+  border-radius: 4px;
+  color: #b42318;
+  padding: 0.5rem 0.75rem;
+}
+
+.schedule-body {
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: minmax(0, 1fr) 20rem;
+}
+
+.gantt-svg {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+/* 视觉隐藏但对屏幕阅读器可读（R27.9） */
+.gantt-sr-summary {
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+.baseline-compare table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.baseline-compare th,
+.baseline-compare td {
+  border: 1px solid var(--border);
+  padding: 0.35rem 0.6rem;
+  text-align: left;
+}
+
+.unschedulable-drawer {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.75rem;
+}
+
+.unschedulable-item {
+  border-top: 1px solid var(--border);
+  padding: 0.5rem 0;
+}
+
+.unschedulable-reason,
+.unschedulable-unblock {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 0.15rem 0;
+}
+
+/* --- 状态看板（任务 3.7） --- */
+
+.dashboard-header,
+.approval-header {
+  align-items: baseline;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.dashboard-header button,
+.approval-header button,
+.approval-actions button {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0.4rem 0.9rem;
+}
+
+.dashboard-header button:disabled,
+.approval-header button:disabled,
+.approval-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.dashboard-header button:focus-visible,
+.approval-header button:focus-visible,
+.approval-actions button:focus-visible,
+.approval-actions textarea:focus-visible,
+.approval-actions input:focus-visible,
+.approval-actions select:focus-visible {
+  outline: 2px solid var(--fg);
+  outline-offset: 2px;
+}
+
+.dashboard-cards {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+}
+
+.dashboard-card {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.75rem;
+}
+
+.dashboard-card ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.entity-row {
+  border-top: 1px solid var(--border);
+  padding: 0.4rem 0;
+}
+
+.entity-line {
+  color: var(--fg);
+  margin: 0.1rem 0;
+}
+
+.entity-meta {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin: 0.1rem 0;
+}
+
+.entity-notes {
+  margin: 0.2rem 0;
+}
+
+.entity-notes-text {
+  /* 纯文本渲染，保留换行但不解释任何标记（R1.4） */
+  white-space: pre-wrap;
+}
+
+.badge {
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-size: 0.72rem;
+  padding: 0.05rem 0.35rem;
+}
+
+.badge-source {
+  background: #eef2f6;
+  color: var(--muted);
+}
+
+.badge-untrusted {
+  background: #fff4e5;
+  border-color: #b26a00;
+  color: #7a4600;
+}
+
+.badge-injection {
+  background: #fde8e8;
+  border-color: #b42318;
+  color: #b42318;
+  margin-left: 0.25rem;
+}
+
+.dashboard-unavailable {
+  border: 1px solid #b42318;
+  border-radius: 4px;
+  color: #b42318;
+  padding: 0.5rem 0.75rem;
+}
+
+.dashboard-last-success {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+/* --- 审批（任务 3.7） --- */
+
+.approval-notice {
+  border: 1px solid #1a7f37;
+  border-radius: 4px;
+  color: #1a7f37;
+  padding: 0.5rem 0.75rem;
+}
+
+.approval-error,
+.approval-stale {
+  border: 1px solid #b42318;
+  border-radius: 4px;
+  color: #b42318;
+  padding: 0.5rem 0.75rem;
+}
+
+.approval-stale-versions {
+  color: var(--fg);
+  font-size: 0.9rem;
+}
+
+.approval-regenerate {
+  color: var(--accent);
+}
+
+.approval-body {
+  display: grid;
+  gap: 1rem;
+}
+
+.approval-summary,
+.approval-unschedulable,
+.approval-breakdown,
+.approval-actions {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.75rem;
+}
+
+.approval-unschedulable-warn {
+  border-color: #b26a00;
+}
+
+.approval-affected {
+  font-weight: 600;
+}
+
+.approval-breakdown table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.approval-breakdown th,
+.approval-breakdown td {
+  border: 1px solid var(--border);
+  padding: 0.35rem 0.6rem;
+  text-align: left;
+}
+
+.approval-action {
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.6rem 0;
+}
+
+.approval-action label {
+  font-size: 0.85rem;
+}
+
+.approval-action button {
+  align-self: flex-start;
+}
+
+/* --- Trace 查看器（任务 5.12） --- */
+
+.traces-header {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.traces-filters {
+  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.traces-filters label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.85rem;
+  gap: 0.25rem;
+}
+
+.traces-filters button:focus-visible,
+.traces-list-item:focus-visible {
+  outline: 2px solid var(--fg);
+  outline-offset: 2px;
+}
+
+.traces-error {
+  background: #fde8e8;
+  border: 1px solid #b42318;
+  border-radius: 4px;
+  color: #b42318;
+  padding: 0.5rem 0.75rem;
+}
+
+.traces-body {
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: minmax(18rem, 1fr) minmax(20rem, 2fr);
+}
+
+.traces-list ul,
+.trace-steps,
+.trace-tool-calls {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.trace-list-item {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+  padding: 0.5rem 0.6rem;
+  text-align: left;
+  width: 100%;
+}
+
+.trace-list-item.is-active {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.trace-list-id {
+  font-family: monospace;
+  font-weight: 600;
+}
+
+.trace-list-meta {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.trace-detail {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.75rem 1rem;
+}
+
+.trace-detail-meta {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 0.25rem 0;
+}
+
+.trace-step {
+  border-left: 3px solid var(--border);
+  margin-bottom: 0.6rem;
+  padding: 0.25rem 0 0.25rem 0.75rem;
+}
+
+.trace-step-reason {
+  margin: 0.25rem 0;
+}
+
+.trace-tool-call {
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding: 0.15rem 0;
+}
+
+.trace-tool-name {
+  color: var(--fg);
+  font-family: monospace;
+  font-weight: 600;
+}
+
+/* mode / outcome 除颜色外都带文字（R27.9）；颜色仅作辅助。 */
+.badge-mode {
+  background: #eef2f6;
+  color: var(--muted);
+}
+
+.badge-mode-PIPELINE {
+  background: #e6f0ff;
+  border-color: #1d4ed8;
+}
+
+.badge-mode-REACT {
+  background: #f0e6ff;
+  border-color: #6d28d9;
+}
+
+.badge-truncated {
+  background: #fff4e5;
+  border-color: #b26a00;
+}
+
+.trace-outcome-OK,
+.trace-outcome-SUCCESS {
+  color: #147d3c;
+}
+
+.trace-outcome-MAX_STEPS_EXCEEDED,
+.trace-outcome-TOKEN_BUDGET_EXCEEDED,
+.trace-outcome-VALIDATION_FAILED,
+.trace-outcome-ERROR,
+.trace-outcome-LLM_UNAVAILABLE,
+.trace-outcome-TOOL_NOT_PERMITTED {
+  color: #b42318;
+}

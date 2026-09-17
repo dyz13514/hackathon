@@ -18,13 +18,24 @@ export class ApiError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
+    /** 后端错误包的 `details`（如 `STALE_PROPOSAL` 的两个版本号），供视图决定下一步。 */
+    readonly details: Record<string, unknown> = {},
   ) {
     super(message);
     this.name = 'ApiError';
   }
 }
 
-interface ErrorBody {
+/**
+ * 后端统一错误包（`app/api/errors.py`）：`{"error": {code, message, details, ...}}`。
+ * 兼容极少数非包裹形态（如反向代理的 502 只有 `detail`）。
+ */
+interface ErrorEnvelope {
+  readonly error?: {
+    readonly code?: string;
+    readonly message?: string;
+    readonly details?: Record<string, unknown>;
+  };
   readonly code?: string;
   readonly message?: string;
   readonly detail?: string;
@@ -41,16 +52,19 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   });
 
   if (!response.ok) {
-    let body: ErrorBody = {};
+    let body: ErrorEnvelope = {};
     try {
-      body = (await response.json()) as ErrorBody;
+      body = (await response.json()) as ErrorEnvelope;
     } catch {
       // 非 JSON 错误体（如反向代理返回的 502）保持默认值
     }
+    // 优先读统一错误包的 `error.*`，回退到顶层字段（非包裹形态）。
+    const inner = body.error;
     throw new ApiError(
       response.status,
-      body.code ?? 'UNKNOWN_ERROR',
-      body.message ?? body.detail ?? response.statusText,
+      inner?.code ?? body.code ?? 'UNKNOWN_ERROR',
+      inner?.message ?? body.message ?? body.detail ?? response.statusText,
+      inner?.details ?? {},
     );
   }
 

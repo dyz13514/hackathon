@@ -40,6 +40,54 @@ class ErrorCode(StrEnum):
     # 系统与安全（R23）
     UNAUTHENTICATED = "UNAUTHENTICATED"
 
+    # 计划生成（R5，任务 2.12）。字符串值与内核异常的 `code` 常量对齐，使
+    # `DataIntegrityError.code` / `InvalidRoutingError.code` 能直接映射过来。
+    DATA_INTEGRITY_ERROR = "DATA_INTEGRITY_ERROR"
+    INVALID_ROUTING = "INVALID_ROUTING"
+    #: 请求的计划不存在（`GET /plans/{id}` 等）。
+    PLAN_NOT_FOUND = "PLAN_NOT_FOUND"
+
+    # 审批闭环（R11、R12，任务 3.1）。四个都由 `Approval_Service.approve()` 产生，
+    # API 层（任务 3.2）把 `ApprovalService` 返回的结构化结果翻译到这里；服务层本身不
+    # import fastapi（分层规则），因此这些成员是「服务结果 → HTTP 错误」的翻译目标。
+    #: 计划当前状态不是 `PENDING_APPROVAL`，无法审批（R11.2、状态机表外迁移）。
+    INVALID_STATE_TRANSITION = "INVALID_STATE_TRANSITION"
+    #: 提案生成之后输入数据已变化（`current_input_snapshot_version` 与
+    #: `plan.input_snapshot_version` 不等，R12.2–3）。载荷只有两个版本号。
+    STALE_PROPOSAL = "STALE_PROPOSAL"
+    #: 激活前重校验发现硬约束违反（R11.3、R12.5、R6.5）。附违反清单，状态保持
+    #: `PENDING_APPROVAL`。
+    REVALIDATION_FAILED = "REVALIDATION_FAILED"
+    #: 乐观并发失败：另一线程已推进该计划的行版本（R12.7）。
+    CONCURRENT_MODIFICATION = "CONCURRENT_MODIFICATION"
+
+    # REJECT / MODIFY（R11.4–7、R12.6，任务 3.2）。由 `Approval_Service.reject()` /
+    # `modify()` 的结构化结果翻译而来。
+    #: `rejection_reason` 不足 5 字符（R11.4）。
+    REASON_TOO_SHORT = "REASON_TOO_SHORT"
+    #: `MODIFY` 的某条修改指向计划里不存在的作业。
+    JOB_NOT_IN_PLAN = "JOB_NOT_IN_PLAN"
+    #: `MODIFY` 后重校验发现硬约束违反（R11.6）。附违反清单，原计划状态不变。
+    MODIFICATION_REVALIDATION_FAILED = "MODIFICATION_REVALIDATION_FAILED"
+    #: 目标生产日已存在另一个 `PENDING_APPROVAL`（`ux_pending_per_day` 冲突，R12.6）。
+    PENDING_PLAN_EXISTS = "PENDING_PLAN_EXISTS"
+
+    # 审批绕过防护（R11.8、R22.9、R23.4、EVAL-207，任务 3.3）。
+    #: `PATCH /plans/{id}` 的请求体里出现了 `status` 键——试图绕过审批直接改计划状态。
+    #: 返回 `403 FORBIDDEN` 并写审计。计划状态**只能**经 `Approval_Service` 迁移
+    #: （design.md §8 状态机：任何 → `ACTIVE` 的其他路径「无组件被允许」）。
+    PLAN_STATUS_WRITE_FORBIDDEN = "PLAN_STATUS_WRITE_FORBIDDEN"
+    #: `PATCH /plans/{id}` 请求体含不被接受的字段（`PlanUpdateIn` 的 `extra="forbid"`）。
+    PLAN_UPDATE_INVALID = "PLAN_UPDATE_INVALID"
+
+    # 计划导出（R20，任务 3.6）。
+    #: `POST /plans/{id}/export?format=...` 的 `format` 不是 `xlsx` / `csv`。
+    EXPORT_FORMAT_UNSUPPORTED = "EXPORT_FORMAT_UNSUPPORTED"
+
+    # 可观测性（R24，任务 5.12）。
+    #: `GET /traces/{trace_id}` 请求的 Trace 不存在。
+    TRACE_NOT_FOUND = "TRACE_NOT_FOUND"
+
 
 class NextAction(BaseModel):
     """一个可执行的下一步。`href` 为空表示动作在当前界面内完成。"""

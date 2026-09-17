@@ -14,9 +14,9 @@ export interface RouteDescriptor {
 
 export const ROUTES: readonly RouteDescriptor[] = [
   { path: '/', label: '状态看板', task: '3.7', implemented: true },
-  { path: '/schedule', label: '排产甘特图', task: '2.12', implemented: false },
-  { path: '/approval', label: '审批', task: '3.7', implemented: false },
-  { path: '/traces', label: 'Trace 查看器', task: '5.12', implemented: false },
+  { path: '/schedule', label: '排产甘特图', task: '2.12', implemented: true },
+  { path: '/approval', label: '审批', task: '3.7', implemented: true },
+  { path: '/traces', label: 'Trace 查看器', task: '5.12', implemented: true },
   { path: '/import', label: '摄取与映射确认', task: '10.5', implemented: false },
   { path: '/risks', label: '风险面板', task: '8.x', implemented: false },
   { path: '/whatif', label: 'What-if', task: '9.x', implemented: false },

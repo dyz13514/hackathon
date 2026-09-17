@@ -52,7 +52,7 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from contextvars import ContextVar
 from datetime import datetime
 from typing import Any
@@ -233,14 +233,34 @@ def _reset_transaction_state(session: Session, *_args: Any) -> None:
     session.info.pop(_PENDING_VERSION_KEY, None)
 
 
+#: 标记一个 target 上「本模块的钩子已挂」的哨兵属性。见 `register_input_snapshot_hooks`
+#: 的 docstring：`event.contains` 以 `id(target)` 为键，无法区分「同一个对象重复注册」与
+#: 「一个已被 GC 的旧对象，其地址被新对象复用」——后者会让新工厂被误判为已注册而跳过挂钩。
+_HOOKS_REGISTERED_FLAG = "_input_snapshot_hooks_registered"
+
+
 def register_input_snapshot_hooks(target: sessionmaker[Session] | type[Session] = Session) -> None:
     """把四个监听器挂到会话工厂（或 `Session` 类）上。幂等。
 
     默认挂在 `Session` 类上，覆盖全部会话；传入 `sessionmaker` 则只覆盖该工厂产出的会话，
     测试用后者以免相互干扰。
 
-    幂等很关键：重复注册会让同一次 flush 插入两行快照，版本号一次跳两格。用
-    `event.contains` 判断而不是靠调用方自律。
+    ## 幂等为什么不能只靠 `event.contains`
+
+    重复注册会让同一次 flush 插入两行快照，版本号一次跳两格，因此必须幂等。但
+    `event.contains` 判断的是「事件注册表里有没有一条 `(id(target), 事件名, handler)`」，
+    而注册表**以 `id(target)` 为键**。`sessionmaker` 在测试里成批创建又被 GC，CPython 会把
+    刚回收的地址立刻分配给下一个 `sessionmaker`；若旧工厂在 GC 前没摘钩子，注册表里那条以
+    旧 `id` 为键的陈旧记录会被新工厂（同地址）撞上——`event.contains` 返回 `True`，于是
+    `event.listen` 被跳过，新工厂产出的会话**一个钩子都没挂**。表现是 seed 不推进
+    `input_snapshot_version`（恒为 0），随后 `production_plans.input_snapshot_version` 的
+    外键指向一个不存在的快照行，整条链偶发地崩在 `FOREIGN KEY constraint failed`——且只在
+    全量跑、工厂多、地址被复用时才现形。
+
+    因此幂等判据落在**对象自身**的一个哨兵属性上，而不是全局注册表：新对象（哪怕地址被复用）
+    必然没有这个属性，于是总会真正挂上钩子；同一个活对象重复调用则因属性已在而跳过。
+    挂钩前先防御性 `event.remove` 一次，清掉可能残留在这个 `id` 上的陈旧记录，保证最终
+    恰好挂一份。
     """
     hooks: tuple[tuple[str, Any], ...] = (
         ("before_flush", _record_changed_tables),
@@ -249,9 +269,19 @@ def register_input_snapshot_hooks(target: sessionmaker[Session] | type[Session] 
         ("after_rollback", _reset_transaction_state),
         ("after_soft_rollback", _reset_transaction_state),
     )
+    # 已在这个**活对象**上挂过：直接返回，避免同一工厂重复挂钩导致版本号一次跳两格。
+    if getattr(target, _HOOKS_REGISTERED_FLAG, False):
+        return
     for name, handler in hooks:
-        if not event.contains(target, name, handler):
-            event.listen(target, name, handler)
+        # 先清掉可能残留在这个 id 上的陈旧注册（旧工厂被 GC、地址被复用的情形），再挂新的，
+        # 保证这个 target 上每个事件恰好一条本模块的 handler。
+        if event.contains(target, name, handler):
+            event.remove(target, name, handler)
+        event.listen(target, name, handler)
+    # 极少数 target 不允许设属性（例如打了 __slots__ 的自定义 Session 子类）；退回到
+    # 「已尽力挂钩」——此路径不影响正确性，只是失去了「同一活对象再调用即跳过」的加速。
+    with suppress(AttributeError, TypeError):
+        object.__setattr__(target, _HOOKS_REGISTERED_FLAG, True)
 
 
 def unregister_input_snapshot_hooks(
@@ -268,3 +298,7 @@ def unregister_input_snapshot_hooks(
     for name, handler in hooks:
         if event.contains(target, name, handler):
             event.remove(target, name, handler)
+    # 清掉哨兵：允许同一个工厂在摘钩后再挂钩（`test_input_snapshot_events` 依赖这一点）。
+    with suppress(AttributeError, TypeError):
+        if getattr(target, _HOOKS_REGISTERED_FLAG, False):
+            object.__delattr__(target, _HOOKS_REGISTERED_FLAG)

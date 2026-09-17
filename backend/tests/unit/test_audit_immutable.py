@@ -43,7 +43,8 @@ from app.settings import Settings
 
 NOW = datetime(2026, 3, 2, 8, 15, 0)
 
-#: R24.4 点名的 14 类 + design.md 补充的 3 类 + 运维侧 1 类（`DEMO_RESET`，任务 1.6）。
+#: R24.4 点名的 14 类 + design.md 补充的 3 类 + 成本纪律 1 类（`PROJECT_BUDGET_CEILING`，
+#: 任务 5.4）+ 运维侧 1 类（`DEMO_RESET`，任务 1.6）。
 #: 数字写死是刻意的：新增一个类别应当是一次有意识的决定，因此要连带改这个测试。
 EXPECTED_CATEGORIES = {
     "DATA_IMPORT",
@@ -63,6 +64,7 @@ EXPECTED_CATEGORIES = {
     "AGENT_RESERVED_KEY_DROPPED",
     "EXPLANATION_NUMERIC_MISMATCH",
     "STALE_PROPOSAL_REJECTED",
+    "PROJECT_BUDGET_CEILING",
     "DEMO_RESET",
 }
 
@@ -137,7 +139,8 @@ def _append_one(
 
 
 def test_all_audit_event_categories_are_defined() -> None:
-    """18 个类别一个不少，含 tasks.md 1.4 点名的三个补充类别与 1.6 的 `DEMO_RESET`。"""
+    """19 个类别一个不少，含 tasks.md 1.4 的三个补充类别、5.4 的 `PROJECT_BUDGET_CEILING`
+    与 1.6 的 `DEMO_RESET`。"""
     assert AUDIT_EVENT_CATEGORIES == EXPECTED_CATEGORIES
     assert AGENT_RESERVED_KEY_DROPPED in AUDIT_EVENT_CATEGORIES
     assert EXPLANATION_NUMERIC_MISMATCH in AUDIT_EVENT_CATEGORIES
