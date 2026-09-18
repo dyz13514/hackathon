@@ -428,14 +428,14 @@
     - _Requirements: R9.5, R9.6, R9.7, R11.5, R6.5_
     - _Design: Components §3.5_
 
-  - [-] 7.2 实现 `compute_plan_delta` 与 `churn_ratio`
+  - [x] 7.2 实现 `compute_plan_delta` 与 `churn_ratio`
     - 五个集合 `added` / `removed` / `moved` / `reassigned` / `unchanged`；每个作业只归入 `moved` 或 `reassigned` 之一（`reassigned` 优先）
     - `churn_ratio` 分母取两计划 `job_id` 的**并集**而非 `|ACTIVE|`，保证插单时仍落在 `[0, 1]`
     - 单元测试（**非可选**，承接原属性 11）：五集合划分性 + 并集分母的越界用例
     - _Requirements: R10.1, R9.3, R9.6_
     - _Design: Components §3.5_
 
-  - [-] 7.3 实现 `Autonomy_Policy_Engine` 及其结构隔离证明
+  - [x] 7.3 实现 `Autonomy_Policy_Engine` 及其结构隔离证明
     - `core/autonomy.py`：`ImpactInput` 为 `frozen` dataclass，**7 个字段全部 `int` / `bool` / `float`，无任何字符串字段**，LLM 文本输出没有可注入的入口
     - `ImpactInput` 只由 `from_delta(delta, active, cand)` 产生，`PlanDelta` 只由 `compute_plan_delta` 从已持久化的两个计划行计算；LLM 只能提供经 schema 校验的 `plan_id`
     - `classify_impact` 逐条对齐 R13.1；`decide_autonomy` 中 **`IMPACT_MAJOR` 分支在读取 `FeatureFlags` 之前返回**（`flags` 在该路径上不被求值），这是「不可覆盖」的结构化写法

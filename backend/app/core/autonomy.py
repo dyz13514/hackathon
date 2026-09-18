@@ -422,18 +422,27 @@ def decisive_predicates(x: ImpactInput, cls: ImpactClass) -> list[str]:
     # ---- IMPACT_MAJOR：さらに MODERATE 条件の失敗も追加 ----
     moderate_failures: list[str] = []
     if x.promised_date_changed:
-        # 既に minor_failures に含まれている可能性があるが MODERATE 側でも確認
-        if "promised_date_changed=true" not in preds:
+        # 既に minor_failures に含まれている可能性があるが MODERATE 側でも確認。
+        # 不可達な防御分岐：promised_date_changed が True のとき MINOR 側（上の
+        # `if x.promised_date_changed`）が必ず "promised_date_changed=true" を preds に
+        # 追加するため、この not-in 条件は決して真にならない。行動は変えず coverage のみ除外。
+        if "promised_date_changed=true" not in preds:  # pragma: no cover
             moderate_failures.append("promised_date_changed=true")
     if x.churn_ratio > 0.20:
         moderate_failures.append(f"churn_ratio={x.churn_ratio:.4f} > 0.20")
     if x.tardiness_delta_minutes > 60:
-        if not any("tardiness_delta_minutes" in p for p in preds):
+        # 不可達な防御分岐：tardiness_delta > 60 は必ず > 0 でもあるため、MINOR 側が
+        # "tardiness_delta_minutes=... > 0" を先に追加済み。よって any(...) は常に真で、
+        # この分岐には入らない。行動は変えず coverage のみ除外。
+        if not any("tardiness_delta_minutes" in p for p in preds):  # pragma: no cover
             moderate_failures.append(
                 f"tardiness_delta_minutes={x.tardiness_delta_minutes} > 60"
             )
     if x.new_unschedulable_count > 0:
-        if not any("new_unschedulable_count" in p for p in preds):
+        # 不可達な防御分岐：new_unschedulable > 0 のとき MINOR 側が
+        # "new_unschedulable_count=... > 0" を先に追加済みのため any(...) は常に真。
+        # 行動は変えず coverage のみ除外。
+        if not any("new_unschedulable_count" in p for p in preds):  # pragma: no cover
             moderate_failures.append(
                 f"new_unschedulable_count={x.new_unschedulable_count} > 0"
             )
