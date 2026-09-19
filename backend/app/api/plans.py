@@ -269,6 +269,52 @@ class PlanSummaryOut(BaseModel):
     generated_by_trace_id: str | None
 
 
+class JobChangeOut(BaseModel):
+    """一条逐作业变更（R10.1）。`change` ∈ ADDED/REMOVED/MOVED/REASSIGNED/UNCHANGED。
+
+    `a_*` 是计划 A（对照，通常是当前 ACTIVE）里该作业的资源与时间；`b_*` 是计划 B（建议）里的。
+    `ADDED` 只有 `b_*`（A 中不存在），`REMOVED` 只有 `a_*`（B 中不存在），其余两者都有。
+    供 UI 的并排甘特逐作业标注（design.md §6 `/plans/:a/compare/:b`）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    job_id: str
+    order_id: str
+    change: str
+    a_machine_id: str | None = None
+    a_worker_id: str | None = None
+    a_start_time: datetime | None = None
+    a_end_time: datetime | None = None
+    b_machine_id: str | None = None
+    b_worker_id: str | None = None
+    b_start_time: datetime | None = None
+    b_end_time: datetime | None = None
+
+
+class PlanCompareOut(BaseModel):
+    """`GET /plans/{a}/compare/{b}` 的响应（R10.1、R10.2）。
+
+    面向 UI 的**明细端点**——与句柄式 `compare_plans` 工具（只给聚合计数）区分：这里逐作业
+    列出变更（`changes`）与每个 `MOVED` / `REASSIGNED` 作业的 `decision_evidence`（R10.2）。
+    `churn_ratio` 与五个计数是同口径的聚合，便于 UI 顶栏展示。反事实（R10.3）属任务 8.4，
+    本端点不含。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    plan_id_a: str
+    plan_id_b: str
+    churn_ratio: float
+    added_count: int
+    removed_count: int
+    moved_count: int
+    reassigned_count: int
+    unchanged_count: int
+    changes: list[JobChangeOut]
+    decision_evidence: list[DecisionEvidenceOut]
+
+
 # --------------------------------------------------------------------------
 # 端点
 # --------------------------------------------------------------------------
@@ -394,6 +440,70 @@ def get_plan_explanation(
         trace_id=plan.generated_by_trace_id,
     )
     return _explanation_out(result)
+
+
+@router.get(
+    "/{plan_id_a}/compare/{plan_id_b}",
+    response_model=PlanCompareOut,
+    summary="两计划的逐作业对比 + 决策证据（R10.1、R10.2）",
+)
+def compare_plans_detail(
+    request: Request, plan_id_a: str, plan_id_b: str
+) -> PlanCompareOut | JSONResponse:
+    """并排对比两份计划，逐作业标注 `ADDED`/`REMOVED`/`MOVED`/`REASSIGNED`/`UNCHANGED`（R10.1），
+    并为每个 `MOVED` / `REASSIGNED` 作业给出 `decision_evidence`（R10.2）。
+
+    这是**面向 UI 的明细端点**（design.md §6 `/plans/:a/compare/:b`），与句柄式 `compare_plans`
+    工具区分：工具只返回聚合计数（喂给 Agent 上下文，ADR-004），这里返回逐作业明细供并排甘特
+    渲染。全部由确定性组件计算：`compute_plan_delta`（任务 7.2）分类，`build_decision_evidence`
+    （任务 7.5，`core/explain.py`）产出证据。反事实（R10.3）属任务 8.4，本端点不含。
+
+    任一计划不存在 → `PLAN_NOT_FOUND`。读端点，不触发任何 LLM。
+    """
+    from app.core.delta import compute_plan_delta
+    from app.core.explain import build_decision_evidence
+    from app.services.replanning import load_plan_candidate
+
+    factory: sessionmaker[Session] = request.app.state.session_factory
+    with factory() as db:
+        plan_a = db.get(orm.ProductionPlan, plan_id_a)
+        plan_b = db.get(orm.ProductionPlan, plan_id_b)
+        missing = plan_id_a if plan_a is None else (plan_id_b if plan_b is None else None)
+        if missing is not None:
+            return error_response(
+                status_code=404,
+                code=ErrorCode.PLAN_NOT_FOUND,
+                message=f"计划 {missing} 不存在。",
+                next_actions=[NextAction(action="view_pending", href="/plans/pending")],
+                details={"plan_id": missing},
+            )
+        candidate_a = load_plan_candidate(db, plan_id_a)
+        candidate_b = load_plan_candidate(db, plan_id_b)
+
+    delta = compute_plan_delta(candidate_a, candidate_b)
+    evidence = build_decision_evidence(delta, candidate_a, candidate_b)
+    changes = _job_changes(delta, candidate_a, candidate_b)
+
+    return PlanCompareOut(
+        plan_id_a=plan_id_a,
+        plan_id_b=plan_id_b,
+        churn_ratio=delta.churn_ratio,
+        added_count=len(delta.added),
+        removed_count=len(delta.removed),
+        moved_count=len(delta.moved),
+        reassigned_count=len(delta.reassigned),
+        unchanged_count=len(delta.unchanged),
+        changes=changes,
+        decision_evidence=[
+            DecisionEvidenceOut(
+                job_id=ev.job_id,
+                trigger=ev.trigger,
+                constraint=ev.constraint,
+                resources=list(ev.resources),
+            )
+            for ev in evidence
+        ],
+    )
 
 
 #: 导出格式 → (media type, 文件扩展名)。`.xlsx` 用 OOXML 的官方 MIME 类型，`.csv` 明确
@@ -752,6 +862,88 @@ def _duration_minutes(start: datetime, end: datetime) -> int:
     if end <= start:
         return 0
     return int((end - start).total_seconds() // 60)
+
+
+def _job_changes(
+    delta: object,
+    candidate_a: object,
+    candidate_b: object,
+) -> list[JobChangeOut]:
+    """把 `PlanDelta` 的五个集合摊成逐作业的 `JobChangeOut`（R10.1，供并排甘特标注）。
+
+    `ADDED` 只填 `b_*`（A 中无该作业），`REMOVED` 只填 `a_*`（B 中无），
+    `MOVED`/`REASSIGNED`/`UNCHANGED` 两侧都填。作业的资源/时间直接取自各自 `PlanCandidate`
+    的 `ScheduledJob`（值对象自带 `order_id` / `machine_id` / `worker_id` / 时间），无需回库。
+    返回按 (change 优先级, job_id) 稳定排序，供 UI 与测试确定性断言。
+    """
+    from app.core.delta import PlanDelta
+    from app.core.scheduler import PlanCandidate, ScheduledJob
+
+    assert isinstance(delta, PlanDelta)
+    assert isinstance(candidate_a, PlanCandidate)
+    assert isinstance(candidate_b, PlanCandidate)
+
+    a_by_id: dict[str, ScheduledJob] = {sj.job_id: sj for sj in candidate_a.scheduled_jobs}
+    b_by_id: dict[str, ScheduledJob] = {sj.job_id: sj for sj in candidate_b.scheduled_jobs}
+
+    def _order_id(job_id: str) -> str:
+        sj = b_by_id.get(job_id) or a_by_id.get(job_id)
+        return sj.order_id if sj is not None else ""
+
+    out: list[JobChangeOut] = []
+
+    for job_id in delta.added:
+        b = b_by_id[job_id]
+        out.append(
+            JobChangeOut(
+                job_id=job_id,
+                order_id=b.order_id,
+                change="ADDED",
+                b_machine_id=b.machine_id,
+                b_worker_id=b.worker_id,
+                b_start_time=b.start_time,
+                b_end_time=b.end_time,
+            )
+        )
+    for job_id in delta.removed:
+        a = a_by_id[job_id]
+        out.append(
+            JobChangeOut(
+                job_id=job_id,
+                order_id=a.order_id,
+                change="REMOVED",
+                a_machine_id=a.machine_id,
+                a_worker_id=a.worker_id,
+                a_start_time=a.start_time,
+                a_end_time=a.end_time,
+            )
+        )
+    for change, job_ids in (
+        ("REASSIGNED", delta.reassigned),
+        ("MOVED", delta.moved),
+        ("UNCHANGED", delta.unchanged),
+    ):
+        for job_id in job_ids:
+            a = a_by_id[job_id]
+            b = b_by_id[job_id]
+            out.append(
+                JobChangeOut(
+                    job_id=job_id,
+                    order_id=_order_id(job_id),
+                    change=change,
+                    a_machine_id=a.machine_id,
+                    a_worker_id=a.worker_id,
+                    a_start_time=a.start_time,
+                    a_end_time=a.end_time,
+                    b_machine_id=b.machine_id,
+                    b_worker_id=b.worker_id,
+                    b_start_time=b.start_time,
+                    b_end_time=b.end_time,
+                )
+            )
+
+    order = {"ADDED": 0, "REMOVED": 1, "REASSIGNED": 2, "MOVED": 3, "UNCHANGED": 4}
+    return sorted(out, key=lambda c: (order[c.change], c.job_id))
 
 
 def _explanation_inputs_from_db(

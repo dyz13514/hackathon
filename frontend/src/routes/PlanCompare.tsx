@@ -1,0 +1,248 @@
+/**
+ * 方案对比视图（design.md Components §6 `/plans/:a/compare/:b`，任务 7.5，R10.1/R10.2）。
+ *
+ * 三块内容，逐条对应 §6 的 `/plans/:a/compare/:b` 行：
+ * 1. 左右并排甘特——A（对照，通常是当前 ACTIVE）与 B（建议）各一张 `<Gantt>`；
+ * 2. 逐作业变更标签——`ADDED` / `REMOVED` / `MOVED` / `REASSIGNED` / `UNCHANGED`（R10.1），
+ *    附 A/B 两侧的资源与时间，便于逐条核对；
+ * 3. 解释面板——每个 `MOVED` / `REASSIGNED` 作业一条 `decision_evidence`（R10.2）：触发原因、
+ *    被违反或将被违反的约束、涉及资源。
+ *
+ * 顶栏是同口径的聚合：churn 比例 + 五类计数（与句柄式 `compare_plans` 工具同源）。反事实
+ * （R10.3）属任务 8.4，本端点与本视图暂不含。
+ *
+ * 数据来源是**确定性**明细端点（`GET /plans/{a}/compare/{b}`），不触发 LLM。计划 id 从路由
+ * 参数读取；`a` / `b` 也可作为 props 传入以便测试。加载态、错误态（含 `PLAN_NOT_FOUND`）、
+ * 空态都显式呈现，不留白页。
+ *
+ * 可访问性（R27.9）：变更标签除颜色外带文字；甘特图自带文字摘要（见 `Gantt`）；两张图各有
+ * 标题区分 A / B。
+ */
+
+import { useCallback, useEffect, useState } from 'react';
+import { useParams } from 'react-router-dom';
+
+import { ApiError } from '../api/client';
+import {
+  comparePlans,
+  type DecisionEvidence,
+  type JobChange,
+  type PlanChangeKind,
+  type PlanCompare as PlanCompareData,
+  type ScheduledJob,
+} from '../api/plans';
+import { Gantt } from '../components/Gantt';
+
+/** 变更标签的中文文案（除颜色外用文字传达，R27.9）。 */
+const CHANGE_LABEL: Record<PlanChangeKind, string> = {
+  ADDED: '新增',
+  REMOVED: '移除',
+  MOVED: '改期',
+  REASSIGNED: '改派',
+  UNCHANGED: '不变',
+};
+
+/** 从 job_id 尾部的 `-OPn` 推工序号；推不出则回退 0。纯展示用，不参与权威计算。 */
+export function operationSequenceFromJobId(jobId: string): number {
+  const match = /-OP(\d+)$/i.exec(jobId);
+  return match ? Number(match[1]) : 0;
+}
+
+/**
+ * 把一侧（A 或 B）的变更集折成 `ScheduledJob[]` 喂给 `<Gantt>`。
+ *
+ * 对比端点只带资源与起止（`{a,b}_machine_id` 等），不带 `setup_minutes` / `changeover_minutes`，
+ * 因此这两项取 0（对比图不画换型段）。某侧不存在该作业时（`ADDED` 之于 A、`REMOVED` 之于 B）
+ * 跳过——那一侧本就没有它。
+ */
+export function toGanttJobs(
+  changes: readonly JobChange[],
+  side: 'a' | 'b',
+): ScheduledJob[] {
+  const jobs: ScheduledJob[] = [];
+  for (const change of changes) {
+    const machineId = side === 'a' ? change.a_machine_id : change.b_machine_id;
+    const workerId = side === 'a' ? change.a_worker_id : change.b_worker_id;
+    const startTime = side === 'a' ? change.a_start_time : change.b_start_time;
+    const endTime = side === 'a' ? change.a_end_time : change.b_end_time;
+    if (machineId == null || startTime == null || endTime == null) {
+      continue;
+    }
+    jobs.push({
+      job_id: change.job_id,
+      order_id: change.order_id,
+      product_id: '',
+      operation_sequence: operationSequenceFromJobId(change.job_id),
+      machine_id: machineId,
+      worker_id: workerId ?? '',
+      start_time: startTime,
+      end_time: endTime,
+      setup_minutes: 0,
+      changeover_minutes: 0,
+    });
+  }
+  return jobs;
+}
+
+function formatClock(iso: string | null): string {
+  if (iso == null) {
+    return '—';
+  }
+  const date = new Date(iso);
+  const hh = String(date.getHours()).padStart(2, '0');
+  const mm = String(date.getMinutes()).padStart(2, '0');
+  return `${hh}:${mm}`;
+}
+
+/** 「机器 / 工人 @ 起-止」的紧凑单元格文本；某侧缺资源时显示破折号。 */
+function sideCell(machineId: string | null, workerId: string | null, start: string | null, end: string | null): string {
+  if (machineId == null && start == null) {
+    return '—';
+  }
+  const res = `${machineId ?? '—'} · ${workerId ?? '—'}`;
+  return `${res} @ ${formatClock(start)}–${formatClock(end)}`;
+}
+
+export interface PlanCompareProps {
+  /** 覆盖路由参数（测试注入）。 */
+  readonly planIdA?: string;
+  readonly planIdB?: string;
+}
+
+export function PlanCompare({ planIdA, planIdB }: PlanCompareProps = {}) {
+  const params = useParams<{ a: string; b: string }>();
+  const idA = planIdA ?? params.a ?? '';
+  const idB = planIdB ?? params.b ?? '';
+
+  const [data, setData] = useState<PlanCompareData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    if (!idA || !idB) {
+      setError('缺少要对比的两个计划 id。');
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await comparePlans(idA, idB);
+      setData(result);
+    } catch (err) {
+      const message =
+        err instanceof ApiError
+          ? err.code === 'PLAN_NOT_FOUND'
+            ? `计划不存在（${err.code}）：${err.message}`
+            : `对比失败（${err.code}）：${err.message}`
+          : '对比失败：网络或服务不可用。';
+      setError(message);
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [idA, idB]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  return (
+    <section aria-labelledby="compare-heading" className="plan-compare">
+      <div className="compare-header">
+        <h2 id="compare-heading">方案对比</h2>
+        <p className="compare-ids">
+          A：{idA || '—'} ↔ B：{idB || '—'}
+        </p>
+      </div>
+
+      {loading && <p className="compare-loading">对比中…</p>}
+
+      {error && !loading && (
+        <p role="alert" className="compare-error">
+          {error}
+        </p>
+      )}
+
+      {data && !loading && !error && (
+        <div className="compare-body">
+          <ul className="compare-summary" aria-label="变更摘要">
+            <li>
+              变动比例（churn）：<strong>{(data.churn_ratio * 100).toFixed(1)}%</strong>
+            </li>
+            <li>新增：<strong>{data.added_count}</strong></li>
+            <li>移除：<strong>{data.removed_count}</strong></li>
+            <li>改期：<strong>{data.moved_count}</strong></li>
+            <li>改派：<strong>{data.reassigned_count}</strong></li>
+            <li>不变：<strong>{data.unchanged_count}</strong></li>
+          </ul>
+
+          <div className="compare-gantts">
+            <figure aria-labelledby="compare-gantt-a">
+              <figcaption id="compare-gantt-a">计划 A（对照）</figcaption>
+              <Gantt jobs={toGanttJobs(data.changes, 'a')} />
+            </figure>
+            <figure aria-labelledby="compare-gantt-b">
+              <figcaption id="compare-gantt-b">计划 B（建议）</figcaption>
+              <Gantt jobs={toGanttJobs(data.changes, 'b')} />
+            </figure>
+          </div>
+
+          <section aria-labelledby="compare-changes-heading" className="compare-changes">
+            <h3 id="compare-changes-heading">逐作业变更（{data.changes.length}）</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">作业</th>
+                  <th scope="col">变更</th>
+                  <th scope="col">A（对照）</th>
+                  <th scope="col">B（建议）</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.changes.map((change) => (
+                  <tr key={change.job_id} data-change={change.change}>
+                    <th scope="row">
+                      {change.order_id} · {change.job_id}
+                    </th>
+                    <td>
+                      <span className={`change-tag change-${change.change}`}>
+                        {CHANGE_LABEL[change.change]}
+                      </span>
+                    </td>
+                    <td>{sideCell(change.a_machine_id, change.a_worker_id, change.a_start_time, change.a_end_time)}</td>
+                    <td>{sideCell(change.b_machine_id, change.b_worker_id, change.b_start_time, change.b_end_time)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+
+          <section aria-labelledby="compare-evidence-heading" className="compare-evidence">
+            <h3 id="compare-evidence-heading">
+              决策证据（{data.decision_evidence.length}）
+            </h3>
+            {data.decision_evidence.length === 0 ? (
+              <p className="compare-evidence-empty">
+                无 MOVED / REASSIGNED 作业，故无决策证据。
+              </p>
+            ) : (
+              <ul>
+                {data.decision_evidence.map((ev: DecisionEvidence) => (
+                  <li key={ev.job_id} className="evidence-item">
+                    <p className="evidence-job">{ev.job_id}</p>
+                    <p className="evidence-trigger">触发：{ev.trigger}</p>
+                    <p className="evidence-constraint">约束：{ev.constraint}</p>
+                    <p className="evidence-resources">
+                      涉及资源：{ev.resources.length > 0 ? ev.resources.join('，') : '（无）'}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+      )}
+    </section>
+  );
+}

@@ -459,7 +459,7 @@
     - _Requirements: R9.1, R9.2, R9.3, R9.4, R9.8, R9.9, R21.13, R25.2_
     - _Design: Architecture §2.2、§2.3、Components §3.5、成本章节 §1_
 
-  - [~] 7.5 实现方案对比视图与决策证据
+  - [x] 7.5 实现方案对比视图与决策证据
     - `GET /api/plans/{a}/compare/{b}`：逐条 `ADDED` / `REMOVED` / `MOVED` / `REASSIGNED` / `UNCHANGED`（面向 UI 的明细端点，与句柄式 `compare_plans` 工具区分）
     - `Explanation_Builder` 为每个 `MOVED` / `REASSIGNED` 作业输出一条 `decision_evidence`，含触发原因、被违反或将被违反的约束、涉及资源
     - 前端 `/plans/:a/compare/:b`：左右并排甘特 + 逐作业变更标签 + 解释面板（`decision_evidence`、`assumptions`、`confidence` 及依据、`numeric_check` 徽章）

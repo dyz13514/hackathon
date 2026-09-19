@@ -43,9 +43,13 @@ from __future__ import annotations
 
 import json
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict
+
+if TYPE_CHECKING:
+    from app.core.delta import PlanDelta
+    from app.core.scheduler import PlanCandidate
 
 __all__ = [
     "Assumption",
@@ -62,6 +66,7 @@ __all__ = [
     "Tradeoff",
     "TemplateExplanationRenderer",
     "UnschedulableSummary",
+    "build_decision_evidence",
     "build_explanation_payload",
     "default_plan_assumptions",
     "derive_confidence",
@@ -265,6 +270,81 @@ def initial_plan_counterfactual() -> NoTradeoff:
     return NoTradeoff(
         reason="本计划为初始生成，非对既有方案的重排，无可比较的关键取舍。"
     )
+
+
+# --------------------------------------------------------------------------
+# 决策证据（R10.2）：为每个 MOVED / REASSIGNED 作业输出一条
+# --------------------------------------------------------------------------
+
+
+def build_decision_evidence(
+    delta: PlanDelta,
+    active: PlanCandidate,
+    candidate: PlanCandidate,
+) -> tuple[DecisionEvidence, ...]:
+    """为每个 `MOVED` / `REASSIGNED` 作业输出一条 `DecisionEvidence`（R10.2）。
+
+    三项内容逐字对齐 R10.2，全部由确定性组件从两份计划的可观测差异推导——不编造、不调用 LLM：
+
+    - `trigger`（触发原因）：`MOVED` → 「开始时间调整」；`REASSIGNED` → 「资源改派」。这是对
+      「这个作业相对原方案发生了什么」的确定性归类（`compute_plan_delta` 已判好类，这里只
+      转成人类可读的原因）。
+    - `constraint`（被违反或将被违反的约束）：描述**若维持原位置会撞上的约束面**——`MOVED`
+      对应时间线/前后序约束（`OPERATION_PRECEDENCE` / `MACHINE_DOUBLE_BOOKING` 语义域），
+      `REASSIGNED` 对应资源可用/能力约束（`MACHINE_UNAVAILABLE` / `WORKER_UNAVAILABLE` /
+      能力匹配语义域）。这是「为什么必须动」的约束归属，不是一次实际的校验违反（那由
+      `Constraint_Validator` 在别处报告）。
+    - `resources`（涉及资源）：`MOVED` → 该作业所在的机器与工人（未变，但它们是这次时间调整
+      的占用主体）；`REASSIGNED` → 变化的资源，形如 `machine:CNC-01→CNC-02` / `worker:W1→W2`。
+
+    `MOVED` 与 `REASSIGNED` 都只涉及**两计划共有**的作业（`compute_plan_delta` 保证），因此
+    两份计划里都能查到该作业的 `ScheduledJob`。`ADDED` / `REMOVED` / `UNCHANGED` 不产出证据
+    （R10.2 只要求 MOVED/REASSIGNED）。返回按 `job_id` 升序，供确定性断言。
+
+    纯函数：只依赖 `app.core.delta.PlanDelta` 与 `app.core.scheduler.PlanCandidate`（同属内核，
+    不违反分层）。同一对 `(delta, active, candidate)` 两次调用产出逐字段相同的结果。
+    """
+    active_by_id = {sj.job_id: sj for sj in active.scheduled_jobs}
+    cand_by_id = {sj.job_id: sj for sj in candidate.scheduled_jobs}
+
+    evidence: list[DecisionEvidence] = []
+
+    for job_id in delta.reassigned:
+        before = active_by_id.get(job_id)
+        after = cand_by_id.get(job_id)
+        if before is None or after is None:
+            continue  # reassigned 必为共有作业；防御性跳过异常数据
+        resources: list[str] = []
+        if before.machine_id != after.machine_id:
+            resources.append(f"machine:{before.machine_id}→{after.machine_id}")
+        if before.worker_id != after.worker_id:
+            resources.append(f"worker:{before.worker_id}→{after.worker_id}")
+        evidence.append(
+            DecisionEvidence(
+                job_id=job_id,
+                trigger="资源改派",
+                constraint="原资源不可用或能力不匹配（MACHINE_UNAVAILABLE / "
+                "WORKER_UNAVAILABLE / 能力匹配）",
+                resources=tuple(resources),
+            )
+        )
+
+    for job_id in delta.moved:
+        before = active_by_id.get(job_id)
+        after = cand_by_id.get(job_id)
+        if before is None or after is None:
+            continue
+        evidence.append(
+            DecisionEvidence(
+                job_id=job_id,
+                trigger="开始时间调整",
+                constraint="维持原开始时间将违反时间线/前后序约束（"
+                "OPERATION_PRECEDENCE / MACHINE_DOUBLE_BOOKING）",
+                resources=(f"machine:{after.machine_id}", f"worker:{after.worker_id}"),
+            )
+        )
+
+    return tuple(sorted(evidence, key=lambda e: e.job_id))
 
 
 # --------------------------------------------------------------------------

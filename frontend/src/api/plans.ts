@@ -159,3 +159,64 @@ export function modifyPlan(
     body: JSON.stringify({ modifications }),
   });
 }
+
+// --------------------------------------------------------------------------
+// 方案对比 + 决策证据（design.md Components §6 `/plans/:a/compare/:b`，任务 7.5，R10.1/R10.2）
+// --------------------------------------------------------------------------
+
+/** 逐作业变更标签（R10.1）。 */
+export type PlanChangeKind = 'ADDED' | 'REMOVED' | 'MOVED' | 'REASSIGNED' | 'UNCHANGED';
+
+/**
+ * 一条逐作业变更（R10.1）。逐字对应后端 `app/api/plans.py` 的 `JobChangeOut`。
+ *
+ * `a_*` 是计划 A（对照，通常是当前 ACTIVE）里该作业的资源与时间；`b_*` 是计划 B（建议）里的。
+ * `ADDED` 只有 `b_*`，`REMOVED` 只有 `a_*`，其余两者都有。
+ */
+export interface JobChange {
+  readonly job_id: string;
+  readonly order_id: string;
+  readonly change: PlanChangeKind;
+  readonly a_machine_id: string | null;
+  readonly a_worker_id: string | null;
+  readonly a_start_time: string | null;
+  readonly a_end_time: string | null;
+  readonly b_machine_id: string | null;
+  readonly b_worker_id: string | null;
+  readonly b_start_time: string | null;
+  readonly b_end_time: string | null;
+}
+
+/** 一条决策证据（R10.2）：触发原因、被违反或将被违反的约束、涉及资源。 */
+export interface DecisionEvidence {
+  readonly job_id: string;
+  readonly trigger: string;
+  readonly constraint: string;
+  readonly resources: readonly string[];
+}
+
+/**
+ * 两计划的逐作业对比 + 决策证据（R10.1/R10.2）。逐字对应后端 `PlanCompareOut`。
+ *
+ * 面向 UI 的明细端点：`changes` 逐作业标注变更，`decision_evidence` 为每个 MOVED/REASSIGNED
+ * 作业给出证据。反事实（R10.3）属任务 8.4，本端点不含。
+ */
+export interface PlanCompare {
+  readonly plan_id_a: string;
+  readonly plan_id_b: string;
+  readonly churn_ratio: number;
+  readonly added_count: number;
+  readonly removed_count: number;
+  readonly moved_count: number;
+  readonly reassigned_count: number;
+  readonly unchanged_count: number;
+  readonly changes: readonly JobChange[];
+  readonly decision_evidence: readonly DecisionEvidence[];
+}
+
+/** 计划 A 与 B 的逐作业对比（R10.1/R10.2）。任一计划不存在 → `ApiError` 携 `PLAN_NOT_FOUND`。 */
+export function comparePlans(planIdA: string, planIdB: string): Promise<PlanCompare> {
+  return apiFetch<PlanCompare>(
+    `/plans/${encodeURIComponent(planIdA)}/compare/${encodeURIComponent(planIdB)}`,
+  );
+}
