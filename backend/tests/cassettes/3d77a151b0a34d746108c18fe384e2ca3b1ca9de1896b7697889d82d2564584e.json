@@ -1,0 +1,16 @@
+{
+  "content_hash": "3d77a151b0a34d746108c18fe384e2ca3b1ca9de1896b7697889d82d2564584e",
+  "note": "任务 13.2 LLM 风险归因叙述的确定性 REPLAY 录制。手工构造（非 LIVE 录制），对应 CNC-01 瓶颈风险（WARNING）的归因叙述请求。叙述只引用给定事实，不编造数字。",
+  "request": {
+    "agent": "RISK_MONITOR_AGENT",
+    "user": "请为下面这条风险发现写一段中文归因叙述（只引用给定事实，不要编造数字）：\n- 风险类型：BOTTLENECK_RESOURCE\n- 严重度：WARNING\n- 实体：MACHINE CNC-01\n- 度量值：0.92\n- 阈值：0.9\n- 受影响订单：ORD-001、ORD-002",
+    "max_tokens": 384
+  },
+  "response": {
+    "content": "{\"narrative\": \"机器 CNC-01 的利用率达 92%，已超过 90% 的瓶颈预警阈值，成为当前排产的关键约束。受影响订单包括 ORD-001、ORD-002，它们的作业集中排在这台机器上。建议评估把部分作业改派到同类替代机器，或错峰安排以降低 CNC-01 的负载。\"}",
+    "usage": {
+      "input_tokens": 210,
+      "output_tokens": 96
+    }
+  }
+}
