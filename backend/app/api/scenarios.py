@@ -19,7 +19,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -132,6 +132,29 @@ class AdoptScenarioResponse(BaseModel):
     status: str
 
 
+class TranslateScenarioRequest(BaseModel):
+    """`POST /scenarios/translate` 请求体：一句自然语言 What-if 提问（任务 13.1，R16.1）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    query: str = Field(min_length=1, max_length=2000)
+
+
+class TranslateScenarioResponse(BaseModel):
+    """翻译结果（**不执行**，供规划员确认后再交 `/scenarios/run`，R16.1）。
+
+    `mutations` 是任务 8.3 的表单载荷（`ScenarioMutationBody` 序列化）——确认后原样作为
+    `RunScenarioRequest.mutations` 提交。`injection_suspected` 供 UI 提示（不阻断，R16.10）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    mutations: list[dict[str, Any]]
+    supported_kinds: list[str]
+    injection_suspected: bool
+    source_query_echo: str
+
+
 # --------------------------------------------------------------------------
 # 端点
 # --------------------------------------------------------------------------
@@ -216,4 +239,58 @@ def adopt_scenario_endpoint(
             )
     return AdoptScenarioResponse(
         scenario_id=scenario_id, plan_id=plan_id, status="PENDING_APPROVAL"
+    )
+
+
+@router.post(
+    "/translate",
+    response_model=TranslateScenarioResponse,
+    summary="自然语言 What-if 翻译（Planning_Agent ReAct ≤3 步，不执行，R16.1，任务 13.1）",
+)
+def translate_scenario_endpoint(
+    request: Request, body: TranslateScenarioRequest, session: PlannerSession
+) -> TranslateScenarioResponse | JSONResponse:
+    """把一句自然语言 What-if 提问翻译成结构化场景变更，**不执行**——供规划员确认后再交
+    `POST /scenarios/run`（复用任务 8.3 的表单载荷，R16.1）。写端点（触发一次有界 LLM 翻译
+    是有意的操作，与运行/采纳同一信任边界）。
+
+    - 无法映射 → `UNSUPPORTED_SCENARIO`（422），`details.supported_kinds` 列出受支持的场景类型
+      （R16.3）。
+    - 降级模式（`LLM_MODE=DISABLED`）→ `LLM_UNAVAILABLE_USE_STRUCTURED_FORM`（503），前端据此
+      隐藏自然语言入口、退回结构化表单（R16 范围说明）。
+    - 查询文本按不受信任输入处理（`wrap_untrusted("whatif.query")` + `scan_injection`，R16.10），
+      在翻译服务里完成。
+    """
+    from app.services.whatif_translate import (
+        TranslationOutcome,
+        translate_whatif_query,
+    )
+
+    adapter = request.app.state.llm_adapter
+    result = translate_whatif_query(adapter, body.query, actor="PLANNER")
+
+    if result.outcome is TranslationOutcome.LLM_UNAVAILABLE:
+        return error_response(
+            status_code=503,
+            code=ErrorCode.LLM_UNAVAILABLE_USE_STRUCTURED_FORM,
+            message="LLM 处于降级模式，自然语言翻译不可用。请改用结构化场景表单。",
+            next_actions=[NextAction(action="use_structured_form", href="/whatif")],
+        )
+    if result.outcome is TranslationOutcome.UNSUPPORTED_SCENARIO:
+        return error_response(
+            status_code=422,
+            code=ErrorCode.UNSUPPORTED_SCENARIO,
+            message=result.reason
+            or "无法把该提问映射到任何受支持的场景类型。",
+            next_actions=[NextAction(action="use_structured_form", href="/whatif")],
+            details={
+                "supported_kinds": list(result.supported_kinds),
+                "injection_suspected": result.injection_suspected,
+            },
+        )
+    return TranslateScenarioResponse(
+        mutations=result.mutations,
+        supported_kinds=list(result.supported_kinds),
+        injection_suspected=result.injection_suspected,
+        source_query_echo=result.source_query_echo,
     )

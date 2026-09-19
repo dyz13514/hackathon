@@ -100,6 +100,9 @@ class ErrorCode(StrEnum):
     SCENARIO_INVALID_MUTATION = "SCENARIO_INVALID_MUTATION"
     #: `POST /scenarios/{id}/adopt` 的场景不存在或已过期（进程内暂存失效，R16.9）。
     SCENARIO_NOT_FOUND = "SCENARIO_NOT_FOUND"
+    #: `POST /scenarios/translate` 无法把自然语言提问映射到受支持的场景类型（R16.3，任务 13.1）。
+    #: 响应体 `details.supported_kinds` 列出支持的 5 类场景，供前端提示规划员改用结构化表单。
+    UNSUPPORTED_SCENARIO = "UNSUPPORTED_SCENARIO"
 
     # 电子表格摄取（R2/R3，任务 10）。安全闸门四类（R23.7）：
     MACRO_NOT_ALLOWED = "MACRO_NOT_ALLOWED"
