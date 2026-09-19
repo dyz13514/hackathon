@@ -19,6 +19,7 @@ htmlcov/
 coverage.xml
 
 # --- 数据与运行期产物 ---
+eval_report.md
 *.db
 *.db-wal
 *.db-shm

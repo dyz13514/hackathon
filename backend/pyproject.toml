@@ -29,6 +29,7 @@ dev = [
     "hypothesis~=6.122",  # 7 条属性测试（任务 2.2 起）
     "mypy~=1.13",
     "ruff~=0.8",
+    "tiktoken~=0.8",  # EVAL-015 周期 token 回归的本地估算（cl100k_base，design.md §4）
 ]
 
 [tool.setuptools.packages.find]
@@ -42,8 +43,15 @@ include = ["app*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# 把 backend/ 放上 sys.path，使 `tests` 成为可导入的顶层包。全仓测试都以
+# `from tests.xxx import ...` 的绝对导入引用同级夹具（如 tests.generators），
+# 这依赖 backend/ 在路径上。`pytest tests` 全量收集时 prepend 模式会顺带插入 backend/，
+# 但 `make eval` 只收集 `tests/eval` 子目录时不会，于是 `tests.eval.conftest` 无法解析。
+# 显式声明 pythonpath 让两种入口一致，不依赖收集范围。
+pythonpath = ["."]
 addopts = "-q --strict-markers"
 markers = [
+    "eval: 评估套件用例（EVAL-xxx），由 `make eval`（LLM_MODE=REPLAY，零成本）运行；`--strict-markers` 下必须在此登记",
     "live: 需要真实 Bedrock 调用，只在 `make eval-live` 中执行（消耗真实额度）",
 ]
 

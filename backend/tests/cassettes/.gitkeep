@@ -1,1 +1,8 @@
-录制的 LLM 响应（REPLAY 模式，任务 5.3）。按请求哈希命名，纳入版本控制。
+录制的 LLM 响应（REPLAY 模式，任务 5.3）。按请求哈希（<content_hash>.json）命名，纳入版本控制。
+
+新鲜度纪律（任务 12.1，design.md ADR-011 / Testing Strategy §4）：
+- REPLAY 按请求哈希回放；哈希是「系统提示词 + 工具 schema + 用户内容」的函数。
+- 提示词、工具 schema 或用户载荷一旦变更，旧录制的哈希不再命中，REPLAY 会 CassetteMiss 而失败。
+  这是刻意的——陈旧录制静默通过比失败更危险。
+- 补录方式：以 LLM_MODE=LIVE 跑一次对应用例（make eval-live），adapter 会把新响应按新哈希录进本目录，
+  再提交更新后的 cassette。切勿手工编辑录制内容。

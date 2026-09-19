@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import axe from 'axe-core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -73,8 +73,9 @@ describe('Preferences 视图', () => {
 
     expect(await screen.findByText('ORD-007 不要排 CNC-03')).toBeInTheDocument();
     expect(screen.getByText('技能 welding 优先 W-01')).toBeInTheDocument();
-    // 来源决策链接
-    expect(screen.getByText('DEC-1')).toBeInTheDocument();
+    // 来源决策链接（两条规则都引用了 DEC-1，因此用 getAllByText）
+    expect(screen.getAllByText('DEC-1').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('DEC-2')).toBeInTheDocument();
     // 启用状态用文字（不仅颜色）
     expect(screen.getByText('已启用')).toBeInTheDocument();
     expect(screen.getByText('未启用')).toBeInTheDocument();
@@ -114,12 +115,16 @@ describe('Preferences 视图', () => {
     });
     fireEvent.change(screen.getByLabelText('订单 ID'), { target: { value: 'ORD-007' } });
     fireEvent.change(screen.getByLabelText('机器 ID'), { target: { value: 'CNC-03' } });
-    fireEvent.click(screen.getByRole('button', { name: /创建规则/ }));
+    // jsdom 下点击 submit 按钮不总会触发带 required 字段的原生表单提交，
+    // 直接 submit 表单本身（浏览器里点击按钮等价于此），断言真实的提交行为。
+    const submitButton = screen.getByRole('button', { name: /创建规则/ });
+    fireEvent.submit(submitButton.closest('form') as HTMLFormElement);
 
     await waitFor(() => expect(createPreference).toHaveBeenCalledTimes(1));
-    const arg = vi.mocked(createPreference).mock.calls[0][0];
+    const arg = vi.mocked(createPreference).mock.calls[0]?.[0];
+    expect(arg).toBeDefined();
     expect(arg).not.toHaveProperty('enabled');
-    expect(arg.structured_form.kind).toBe('AVOID_MACHINE_FOR_ORDER');
+    expect(arg?.structured_form.kind).toBe('AVOID_MACHINE_FOR_ORDER');
   });
 
   it('点「启用」调用 enablePreference（独立动作）', async () => {

@@ -1,0 +1,47 @@
+# systemd unit —— uvicorn 单 worker 跑 FastAPI（任务 12.7，design.md Architecture §4、运维要点）。
+#
+# 安装：
+#   sudo cp deploy/planning-agent.service /etc/systemd/system/planning-agent.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now planning-agent
+#
+# 凭证只经 EnvironmentFile 注入（R23.11）——`/etc/planning-agent.env`（权限 600，不入版本控制），
+# 至少含 DATABASE_URL / SESSION_SHARED_PASSWORD / SESSION_SECRET_KEY，LLM_MODE=LIVE 时另加
+# BEDROCK_GATEWAY_URL / BEDROCK_API_KEY。缺任一必需变量 → app.settings 拒绝启动（R23.11），
+# systemd 记为失败而非以默认值凑合。
+
+[Unit]
+Description=AI Production Planning Agent (FastAPI, uvicorn single worker)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=planning-agent
+Group=planning-agent
+WorkingDirectory=/srv/planning-agent/backend
+
+# 凭证与配置只从这里进入进程环境（权限 600）。
+EnvironmentFile=/etc/planning-agent.env
+
+# 单 worker 是刻意的（README §启动）：SQLite 写并发受限，且计划审批的乐观并发控制（R12.7）
+# 在单进程下更容易正确。--factory 因为 create_app 是工厂函数。不加 --reload（生产）。
+ExecStart=/srv/planning-agent/backend/.venv/bin/uvicorn app.main:create_app \
+	--factory --workers 1 --host 127.0.0.1 --port 8000
+
+Restart=on-failure
+RestartSec=3
+
+# 加固：最小权限。应用只需读代码、读写 SQLite 数据目录，别的都不该碰。
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+# SQLite 库文件与备份、上传目录是唯一可写处（R23.9 的文件权限等价最小权限）。
+ReadWritePaths=/srv/planning-agent/var
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,2 +1,0 @@
-29 条 EVAL 用例：EVAL-001–015（黄金）与 EVAL-201–214（对抗），全部非可选。
-`make eval` 以 LLM_MODE=REPLAY 运行；`make eval-live` 才触达真实网关。
