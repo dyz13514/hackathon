@@ -40,7 +40,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Query, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
@@ -322,11 +322,24 @@ def disable_preference(
     return _to_out(view)
 
 
-@router.delete("/{rule_id}", status_code=204, summary="删除规则（R18.6）")
+@router.delete(
+    "/{rule_id}",
+    status_code=204,
+    response_class=Response,
+    responses={404: {"description": "规则不存在"}},
+    summary="删除规则（R18.6）",
+)
 def delete_preference(
     request: Request, rule_id: str, session: PlannerSession
-) -> JSONResponse | None:
-    """删除一条规则及其来源决策关联行。写端点。"""
+) -> Response:
+    """删除一条规则及其来源决策关联行。写端点。
+
+    成功时返回一个**无响应体**的 204（HTTP 语义：204 不得携带响应体，见 RFC 9110 §15.3.5）。
+    规则不存在时返回 404 JSON 错误信封（404 允许携带响应体）。此前的实现把成功路径声明为
+    `status_code=204` 却让类型允许返回带体的 `JSONResponse`，在 fastapi==0.115.5 导入期即触发
+    `AssertionError: Status code 204 must not have a response body`；改为显式返回 `Response`，
+    并把成功路径与错误路径的响应体分开处理来修复该导入期违约。
+    """
     with _factory(request)() as db:
         try:
             store.delete_rule(db, rule_id, now=DEMO_ANCHOR)
@@ -334,7 +347,7 @@ def delete_preference(
             db.rollback()
             return _not_found(rule_id)
         db.commit()
-    return None
+    return Response(status_code=204)
 
 
 @router.get(
