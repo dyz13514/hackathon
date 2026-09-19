@@ -670,7 +670,7 @@
     - _Requirements: R26.1, R26.4, R26.5_
     - _Design: Testing Strategy §4、ADR-011_
 
-  - [~] 12.2 实现黄金路径用例 EVAL-001 至 EVAL-014
+  - [x] 12.2 实现黄金路径用例 EVAL-001 至 EVAL-014
     - EVAL-001 `FEASIBLE` + 零违反；EVAL-002 前后序 + 换型正确插入；EVAL-003 故障重排（替代机器 + `churn_ratio ≤ 0.20`）；EVAL-004 加急插单（`URGENT` 前置 + 报告被推迟订单）；EVAL-005 工人缺席重排；EVAL-006 物料短缺（不虚构库存 + 输出缺口）；EVAL-007 `PARTIAL` + 每项量化解锁建议；EVAL-008 `NO_FEASIBLE_PLAN` + 每作业 `blocking_reason`
     - EVAL-009 风险雷达（两类风险触发且严重度正确）；EVAL-010 沙箱三项不变；EVAL-011 偏好规则生效 + `preference_penalty` 可追溯 `rule_id`；EVAL-012 基线对比达 K-03 / K-04
     - EVAL-013 用任务 10.2 固化的**带标注**输入集，断言映射正确率 ≥ 90%（K-06）且静默猜测为 0（K-07）
