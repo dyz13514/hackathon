@@ -53,6 +53,18 @@ def _store(request: Request) -> UploadStore:
     return store
 
 
+def _llm_disabled(request: Request) -> bool:
+    """运行期 LLM 是否处于 `DISABLED`（DETERMINISTIC_ONLY）。旁路点只有一个：adapter.mode。
+
+    读挂在 app.state 的 `Bedrock_Adapter.mode`——与 `GET /health` 及 `POST /settings/mode` 同一个
+    真值源（design.md §2.6「旁路点只有一个」）。adapter 未装配（极简测试）时视为未降级。
+    """
+    adapter = getattr(request.app.state, "llm_adapter", None)
+    if adapter is None:
+        return False
+    return str(getattr(adapter.mode, "value", adapter.mode)) == "DISABLED"
+
+
 # --------------------------------------------------------------------------
 # 响应契约
 # --------------------------------------------------------------------------
@@ -135,6 +147,24 @@ def get_proposal(request: Request, upload_id: str) -> JSONResponse:
         upload = _store(request).get(upload_id)
     except KeyError:
         return _upload_not_found(upload_id)
+
+    # DETERMINISTIC_ONLY 降级（R25.10、任务 11.6）：LLM 列映射是 P0 唯一被拒绝的能力。
+    # 运行期 adapter.mode == DISABLED 时不发起 ReAct 路径，返回 LLM_UNAVAILABLE_USE_MANUAL_MAPPING
+    # 并把规划员导向手工列映射界面（下拉选目标字段）。旁路点只有一个：读 adapter.mode 本身。
+    if _llm_disabled(request):
+        return error_response(
+            status_code=409,
+            code=ErrorCode.LLM_UNAVAILABLE_USE_MANUAL_MAPPING,
+            message=(
+                "当前处于降级模式（DETERMINISTIC_ONLY），LLM 列映射不可用。"
+                "请使用手工列映射：逐列从下拉中选择目标字段。"
+            ),
+            next_actions=[
+                NextAction(action="manual_mapping", href=f"/imports/{upload_id}/validate"),
+            ],
+            details={"upload_id": upload_id},
+        )
+
     # 列映射经真实 Ingestion_Agent ReAct 路径（STUB/REPLAY，不触网）；STUB 无 cassette 时诚实
     # 回退确定性提议（run_ingestion_mapping 内部处理，返回 from_agent 标注）。惰性 import
     # 打破 app.api ← imports ← ingestion_agent_run ← orchestrator ← budget ← app.api.admin 的环。

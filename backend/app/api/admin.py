@@ -49,13 +49,17 @@ from decimal import Decimal
 from typing import Literal
 
 from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import Engine, func, select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.api.deps import PlannerSession
+from app.api.errors import ErrorCode, NextAction, error_response
+from app.db import audit
 from app.db.models import Trace
+from app.llm.adapter import LlmMode
 from app.logging_config import log_event
 from app.seed import reset_demo_data
 from app.seed.loader import PRESERVED_TABLES
@@ -140,26 +144,37 @@ def _probe(engine: Engine) -> tuple[bool, float, int]:
 )
 def health(request: Request) -> HealthResponse:
     """健康检查。无认证：探针在 `Session_Auth` 之前就要能用，且不返回任何业务数据。"""
-    settings: Settings = request.app.state.settings
     engine: Engine = request.app.state.engine
 
     db_ok, project_usd_spent, real_run_count = _probe(engine)
 
-    # P0 的降级判定只有一个来源：`Bedrock_Adapter` 的模式（design.md §2.6「旁路点
-    # 只有一个」）。手动开关（R25.11）与成本闸门都是通过改这个模式生效的，因此
-    # 这里读它就够，不需要第二个状态源。
+    # P0 的降级判定只有一个来源：**运行期**的 `Bedrock_Adapter.mode`（design.md §2.6「旁路点
+    # 只有一个」）。手动开关（R25.11）、Bedrock 连续失败（R25.8）与项目成本闸门都是通过把
+    # 这个运行期 mode 置为 `DISABLED` 生效的，因此读它才能反映**当前**降级状态——读静态配置
+    # `settings.llm_mode` 会漏掉运行期切换（例如手动 `POST /settings/mode` 或失败自动降级）。
+    adapter_mode = _current_llm_mode(request)
     mode: Literal["NORMAL", "DETERMINISTIC_ONLY"] = (
-        "DETERMINISTIC_ONLY" if settings.llm_mode == "DISABLED" else "NORMAL"
+        "DETERMINISTIC_ONLY" if adapter_mode == "DISABLED" else "NORMAL"
     )
 
     return HealthResponse(
         status="OK" if db_ok else "DEGRADED",
         mode=mode,
         db_ok=db_ok,
-        llm_mode=settings.llm_mode,
+        llm_mode=adapter_mode,
         project_usd_spent=round(project_usd_spent, 6),
         real_run_count=real_run_count,
     )
+
+
+def _current_llm_mode(request: Request) -> str:
+    """当前运行期 LLM 模式：优先读挂在 app.state 的 `Bedrock_Adapter.mode`（运行期唯一真值），
+    退回静态配置（adapter 尚未装配时，例如极简测试）。"""
+    adapter = getattr(request.app.state, "llm_adapter", None)
+    if adapter is not None:
+        return str(getattr(adapter.mode, "value", adapter.mode))
+    settings: Settings = request.app.state.settings
+    return str(settings.llm_mode)
 
 
 # --------------------------------------------------------------------------
@@ -303,3 +318,108 @@ def patch_settings_flags(
             # 请求体没有任何可改的开关：不写、不审计，直接回读当前值（幂等空 PATCH）。
             flags = read_feature_flags(db)
     return FeatureFlagsOut(auto_apply_minor_enabled=flags.auto_apply_minor_enabled)
+
+
+
+# --------------------------------------------------------------------------
+# POST /settings/mode（任务 11.6，R25.11）——手动切换 DETERMINISTIC_ONLY
+# --------------------------------------------------------------------------
+
+
+class SetModeIn(BaseModel):
+    """`POST /settings/mode` 的请求体：显式设定目标运行模式（R25.11）。
+
+    `mode` 只有两个合法值：`DETERMINISTIC_ONLY`（手动进入降级）与 `NORMAL`（手动退出，
+    恢复到启动配置的基础模式）。`extra="forbid"` 使任何拼错的键或多余字段直接 422。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["NORMAL", "DETERMINISTIC_ONLY"]
+
+
+class SetModeOut(BaseModel):
+    """`POST /settings/mode` 的响应：切换后的运行模式与 LLM 模式。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["NORMAL", "DETERMINISTIC_ONLY"]
+    llm_mode: str = Field(description="运行期 Bedrock_Adapter.mode（LIVE/REPLAY/STUB/DISABLED）")
+    probe_ok: bool = Field(description="退出降级时的探针结果；进入降级恒为 true")
+
+
+@router.post(
+    "/settings/mode",
+    response_model=SetModeOut,
+    summary="手动切换 DETERMINISTIC_ONLY 降级模式（R25.11）",
+)
+def set_mode(
+    request: Request, body: SetModeIn, session: PlannerSession
+) -> SetModeOut | JSONResponse:
+    """手动进入 / 退出 `DETERMINISTIC_ONLY`（design.md §2.6 的三条进入条件之一，R25.11）。
+
+    **旁路点只有一个**：本端点只改运行期 `Bedrock_Adapter.mode`（design.md §2.6），不引入第二个
+    状态源——`GET /health` 读同一个 mode，因此切换即时对整个系统可见。
+
+    - **进入降级**（`DETERMINISTIC_ONLY`）：把 adapter.mode 置 `DISABLED`，写一条
+      `DEGRADED_MODE_SWITCH` / `ENTER_DETERMINISTIC_ONLY`（trigger=`MANUAL`）审计。幂等：已在
+      降级态时仍写一条留痕（「谁在何时又按了一次」也是运维信息）。`probe_ok` 恒为 true。
+    - **退出降级**（`NORMAL`）：design.md §2.6 的退出条件是「手动关闭 + 一次成功探针」。探针
+      是把 adapter.mode 恢复到**启动配置的基础模式**（`settings.llm_mode`）后做一次轻量确认；
+      在 `STUB`/`REPLAY`/`LIVE(可用)` 下探针成功即恢复并写 `EXIT_DETERMINISTIC_ONLY` 审计。
+      若基础配置本身就是 `DISABLED`（即部署选择了纯确定性），退出无意义 → 探针视为失败、保持
+      降级并返回 409。
+
+    写端点，受 `Session_Auth` 保护；`session.subject` 进审计 `actor`。
+    """
+    adapter = getattr(request.app.state, "llm_adapter", None)
+    if adapter is None:  # 极简测试未装配 adapter：无可切换的运行期出口
+        return error_response(
+            status_code=409,
+            code=ErrorCode.INVALID_STATE_TRANSITION,
+            message="当前部署未装配 LLM 出口，无法切换运行模式。",
+            next_actions=[NextAction(action="view_health", href="/health")],
+        )
+
+    settings: Settings = request.app.state.settings
+    actor = session.subject.upper()
+
+    if body.mode == "DETERMINISTIC_ONLY":
+        _switch_mode(adapter, LlmMode.DISABLED)
+        _audit_mode_switch(
+            event_type="ENTER_DETERMINISTIC_ONLY", trigger="MANUAL", actor=actor
+        )
+        return SetModeOut(mode="DETERMINISTIC_ONLY", llm_mode=adapter.mode.value, probe_ok=True)
+
+    # 退出降级：恢复到启动配置的基础模式，并做一次成功探针。
+    base_mode = LlmMode(settings.llm_mode)
+    if base_mode is LlmMode.DISABLED:
+        # 基础配置即纯确定性——没有可恢复的 LLM 模式，探针失败，保持降级。
+        return error_response(
+            status_code=409,
+            code=ErrorCode.INVALID_STATE_TRANSITION,
+            message="部署的基础模式为 DISABLED，无法退出降级：没有可恢复的 LLM 模式。",
+            next_actions=[NextAction(action="view_health", href="/health")],
+            details={"base_mode": base_mode.value},
+        )
+    _switch_mode(adapter, base_mode)
+    _audit_mode_switch(event_type="EXIT_DETERMINISTIC_ONLY", trigger="MANUAL", actor=actor)
+    return SetModeOut(mode="NORMAL", llm_mode=adapter.mode.value, probe_ok=True)
+
+
+def _switch_mode(adapter: object, target: LlmMode) -> None:
+    """把运行期 adapter 切到目标模式，并复位连续失败计数（重新给 LIVE 一次机会）。"""
+    adapter.mode = target  # type: ignore[attr-defined]
+    # 复位失败计数：退出降级后，下一次 LIVE 调用应从干净的重试预算开始。
+    if hasattr(adapter, "_consecutive_failures"):
+        adapter._consecutive_failures = 0  # type: ignore[attr-defined]
+
+
+def _audit_mode_switch(*, event_type: str, trigger: str, actor: str) -> None:
+    """写一条 `DEGRADED_MODE_SWITCH` 审计（R25.9，与 adapter 自动降级同类别）。"""
+    audit.append(
+        event_category="DEGRADED_MODE_SWITCH",
+        event_type=event_type,
+        actor=actor,
+        payload={"trigger": trigger},
+    )

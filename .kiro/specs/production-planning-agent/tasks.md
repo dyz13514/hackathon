@@ -652,7 +652,7 @@
     - _Properties: 37_
     - _Design: Correctness Properties「Property 37」_
 
-  - [~] 11.6 实现 `DETERMINISTIC_ONLY` 降级模式的全覆盖
+  - [x] 11.6 实现 `DETERMINISTIC_ONLY` 降级模式的全覆盖
     - 进入条件三者任一：Bedrock 连续 3 次失败或不可重试错误、手动 `POST /api/settings/mode`、`PROJECT_USD_CEILING` 达 90%；退出为手动关闭 + 一次成功探针
     - 旁路点只有一个（`BedrockAdapter.mode = DISABLED`）；**所有 LLM 调用点必须实现 `except LlmDisabledError` 的模板回退**，由 `tests/unit/test_degraded_mode.py` 遍历全部调用点断言（**非可选**，承接原属性 31）
     - 保留能力：计划生成（解释走 `TemplateExplanationRenderer`）、校验与审批与重校验与陈旧检测、扰动重排（走任务 7.4 的确定性流水线）、风险扫描（叙述在 P0 本来就是模板）、结构化表单 What-if（P0 本来就只有这个入口）、价值台账、导出、Trace 查看、偏好规则 CRUD 与手写创建

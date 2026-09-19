@@ -4,6 +4,7 @@ import { Approval } from './routes/Approval';
 import { Dashboard } from './routes/Dashboard';
 import { Import } from './routes/Import';
 import { NotFound } from './routes/NotFound';
+import { TopBar } from './components/TopBar';
 import { PlanCompare } from './routes/PlanCompare';
 import { Preferences } from './routes/Preferences';
 import { Risks } from './routes/Risks';
@@ -28,6 +29,9 @@ export function App() {
       <header className="app-header">
         <h1>AI 生产排产助手</h1>
       </header>
+
+      {/* 全局降级模式横幅 + 预算告警（任务 11.6，R25.8/R25.9/R25.4），跨所有视图可见。 */}
+      <TopBar />
 
       <nav className="app-nav" aria-label="主导航">
         <ul>
