@@ -27,6 +27,7 @@ from app.api import (
     admin,
     approvals,
     auth,
+    autonomy,
     disruptions,
     imports,
     plans,
@@ -51,6 +52,7 @@ api_router.include_router(risks.router)
 api_router.include_router(scenarios.router)
 api_router.include_router(imports.router)
 api_router.include_router(preferences.router)
+api_router.include_router(autonomy.router)
 
 #: `/health` 同时挂在根路径上（`app.main` 装配，`include_in_schema=False`）：systemd 与
 #: Lightsail 的探针打的是本机 uvicorn，不经反向代理，因此不该被 `/api` 前缀绑住。

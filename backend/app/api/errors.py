@@ -134,6 +134,12 @@ class ErrorCode(StrEnum):
     #: `GET/PATCH/DELETE /api/preferences/{rule_id}` 的规则不存在。
     PREFERENCE_RULE_NOT_FOUND = "PREFERENCE_RULE_NOT_FOUND"
 
+    # L4 自动应用与一键回滚（R13.9/R13.10，任务 13.4）。
+    #: `POST /api/autonomy/changes/{id}/revert` 的自动应用记录不存在。
+    AUTO_APPLIED_CHANGE_NOT_FOUND = "AUTO_APPLIED_CHANGE_NOT_FOUND"
+    #: 该自动应用记录已回滚过（幂等保护）。
+    AUTO_APPLIED_CHANGE_ALREADY_REVERTED = "AUTO_APPLIED_CHANGE_ALREADY_REVERTED"
+
 
 class NextAction(BaseModel):
     """一个可执行的下一步。`href` 为空表示动作在当前界面内完成。"""

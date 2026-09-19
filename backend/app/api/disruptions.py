@@ -53,6 +53,7 @@ from app.orchestrator.pipelines.replan_deterministic import (
     run_replan,
 )
 from app.seed.dataset import DEMO_ANCHOR
+from app.services.auto_apply import AUTO_APPLIED_EXECUTION_PATH, auto_apply_if_l4
 from app.services.feature_flags import read_feature_flags
 from app.services.replanning import (
     DisruptionInput,
@@ -164,6 +165,10 @@ class RegisterDisruptionResponse(BaseModel):
     registered_at: datetime
     revised_plan_id: str
     revised_plan_status: str
+    #: 任务 13.4：本次重排是否被 L4 自动应用（IMPACT_MINOR 且开关开启）。
+    auto_applied: bool = False
+    #: 自动应用时的 `AutoAppliedChange.change_id`（供前端一键回滚入口）；否则 None。
+    auto_applied_change_id: str | None = None
     impact: ImpactAnalysisOut
 
 
@@ -262,6 +267,18 @@ def post_disruption(
             session_id=f"session-{session.subject}",
             flags=flags,
         )
+        # ---- 任务 13.4：L4 自动应用（仅 IMPACT_MINOR 且 auto_apply_minor_enabled=true）----
+        # decide_autonomy 已保证只有 IMPACT_MINOR + 开关开启才返回 L4；auto_apply_if_l4 对非 L4
+        # 直接不动作。自动应用经 activate_internal（完整重校验），失败则修订计划仍待人工审批。
+        auto_result = auto_apply_if_l4(
+            db,
+            autonomy_level=result.impact.autonomy_level,
+            revised_plan_id=result.plan.plan_id,
+            active_plan_id=active_plan_id,
+            assessment_id=result.assessment_id,
+            now=DEMO_ANCHOR,
+            events=request.app.state.event_bus,
+        )
     except DataIntegrityError as error:
         db.rollback()
         return error_response(
@@ -279,13 +296,22 @@ def post_disruption(
     # 登记与重排（见 services.risk_triggers 的纪律）。
     trigger_scan(request.app.state.session_factory, trigger="DATA_CHANGE")
 
+    # 若自动应用了，修订计划已 ACTIVE、execution_path=AUTO_APPLIED；否则仍 PENDING_APPROVAL。
+    revised_status = "ACTIVE" if auto_result.applied else result.plan.status
+    impact_out = _impact_out(result.impact)
+    if auto_result.applied:
+        impact_out = impact_out.model_copy(
+            update={"execution_path": AUTO_APPLIED_EXECUTION_PATH}
+        )
     return RegisterDisruptionResponse(
         disruption_id=disruption_id,
         type=payload.type,
         registered_at=reported_at,
         revised_plan_id=result.plan.plan_id,
-        revised_plan_status=result.plan.status,
-        impact=_impact_out(result.impact),
+        revised_plan_status=revised_status,
+        auto_applied=auto_result.applied,
+        auto_applied_change_id=auto_result.change_id,
+        impact=impact_out,
     )
 
 

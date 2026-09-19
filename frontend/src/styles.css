@@ -670,3 +670,17 @@ body {
   color: #7a1a12;
   border-bottom-color: #b42318;
 }
+
+/* L4 自动应用通知（任务 13.4）：图标 + 文字为主，含一键回滚入口。 */
+.banner-auto-applied {
+  background: #e7f0ff;
+  color: #0b3a75;
+  border-bottom-color: #1f5fbf;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.banner-auto-applied button {
+  margin-left: auto;
+}
