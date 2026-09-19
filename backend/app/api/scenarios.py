@@ -1,0 +1,219 @@
+"""What-if 场景推演与采纳端点（design.md Components §5「场景」、§6 `/whatif`，任务 8.3，R16）。
+
+两个端点：
+
+- `POST /api/scenarios/run`（**P0 唯一的 What-if 入口，无 LLM**，R16.7）—— 接收 1–5 类结构化
+  `ScenarioMutation`，在沙箱里确定性推演，30 秒内返回与当前 `ACTIVE` 计划的对比
+  （`feasibility`、迟交订单数变化、总拖期分钟变化、新增 `unschedulable` 清单）。写端点
+  （受 `Session_Auth` 保护——沙箱虽不写生产数据，但触发一次推演是有意的操作，且与采纳同一
+  信任边界）。无 `ACTIVE` 计划 → `NO_ACTIVE_PLAN`。
+- `POST /api/scenarios/{scenario_id}/adopt`（R16.9）—— 以该场景生成正式 `PENDING_APPROVAL`
+  提案，**仍走审批流程**。场景过期/不存在 → `SCENARIO_NOT_FOUND`。
+
+## 数值全部确定性、无 LLM
+
+推演与采纳都走确定性内核（`apply_mutations` → `generate_schedule` → `validate` → `score`）。
+本端点不调用任何 LLM。自然语言输入框是 P1（任务 13.1）——P0 前端只有结构化场景表单。
+"""
+
+from __future__ import annotations
+
+from datetime import date, datetime
+from typing import Annotated, Literal
+
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.api.deps import PlannerSession
+from app.api.errors import ErrorCode, NextAction, error_response
+from app.core.sandbox import ScenarioMutationError
+from app.seed.dataset import DEMO_ANCHOR
+from app.services.replanning import NoActivePlanError
+from app.services.sandbox import (
+    ScenarioNotFoundError,
+    ScenarioStore,
+    adopt_scenario,
+    run_sandbox,
+)
+
+router = APIRouter(prefix="/scenarios", tags=["scenarios"])
+
+
+# --------------------------------------------------------------------------
+# 请求契约（5 类结构化 ScenarioMutation，判别联合）
+# --------------------------------------------------------------------------
+
+
+class _Mut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class AddOrChangeOrderMut(_Mut):
+    kind: Literal["ADD_OR_CHANGE_ORDER"] = "ADD_OR_CHANGE_ORDER"
+    order_id: str | None = None
+    product_id: str | None = None
+    quantity: float | None = Field(default=None, gt=0)
+    due_date: date | None = None
+    priority: Literal["URGENT", "HIGH", "NORMAL", "LOW"] | None = None
+
+
+class SetMachineUnavailableMut(_Mut):
+    kind: Literal["SET_MACHINE_UNAVAILABLE"] = "SET_MACHINE_UNAVAILABLE"
+    machine_id: str
+    start_time: datetime
+    end_time: datetime
+
+
+class ChangeMaterialAvailabilityMut(_Mut):
+    kind: Literal["CHANGE_MATERIAL_AVAILABILITY"] = "CHANGE_MATERIAL_AVAILABILITY"
+    material_id: str
+    quantity_available: float = Field(ge=0)
+
+
+class SetWorkerUnavailableMut(_Mut):
+    kind: Literal["SET_WORKER_UNAVAILABLE"] = "SET_WORKER_UNAVAILABLE"
+    worker_id: str
+    start_time: datetime
+    end_time: datetime
+
+
+class ChangeOrderPriorityMut(_Mut):
+    kind: Literal["CHANGE_ORDER_PRIORITY"] = "CHANGE_ORDER_PRIORITY"
+    order_id: str
+    priority: Literal["URGENT", "HIGH", "NORMAL", "LOW"]
+
+
+ScenarioMutationBody = Annotated[
+    AddOrChangeOrderMut
+    | SetMachineUnavailableMut
+    | ChangeMaterialAvailabilityMut
+    | SetWorkerUnavailableMut
+    | ChangeOrderPriorityMut,
+    Field(discriminator="kind"),
+]
+
+
+class RunScenarioRequest(BaseModel):
+    """`POST /scenarios/run` 的请求体。1–5 类结构化变更（R16.2）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mutations: list[ScenarioMutationBody] = Field(min_length=1, max_length=5)
+    now: datetime | None = None
+
+
+class ScenarioResultOut(BaseModel):
+    """一次推演结果 + 与 ACTIVE 的对比（R16.8）。全部确定性、无逐作业明细外的重字段。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    scenario_id: str
+    feasibility: str
+    late_order_count: int
+    active_late_order_count: int
+    late_order_count_delta: int
+    total_tardiness_minutes: int
+    active_total_tardiness_minutes: int
+    total_tardiness_delta_minutes: int
+    total_score: float
+    active_total_score: float
+    new_unschedulable_jobs: list[str]
+    delayed_order_ids: list[str]
+
+
+class AdoptScenarioResponse(BaseModel):
+    """`POST /scenarios/{id}/adopt` 的响应：新提案句柄（仍待审批，R16.9）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    scenario_id: str
+    plan_id: str
+    status: str
+
+
+# --------------------------------------------------------------------------
+# 端点
+# --------------------------------------------------------------------------
+
+
+def _store(request: Request) -> ScenarioStore:
+    """取（或惰性建）挂在 app.state 上的进程内场景暂存。"""
+    store = getattr(request.app.state, "scenario_store", None)
+    if store is None:
+        store = ScenarioStore()
+        request.app.state.scenario_store = store
+    return store
+
+
+@router.post(
+    "/run",
+    response_model=ScenarioResultOut,
+    summary="结构化 What-if 推演（R16.7，无 LLM）",
+)
+def run_scenario_endpoint(
+    request: Request, body: RunScenarioRequest, session: PlannerSession
+) -> ScenarioResultOut | JSONResponse:
+    """在沙箱里确定性推演一个场景并与当前 `ACTIVE` 计划对比。写端点。"""
+    factory = request.app.state.session_factory
+    now = body.now or DEMO_ANCHOR
+    mutations = list(body.mutations)
+    store = _store(request)
+    with factory() as db:
+        try:
+            result = run_sandbox(db, mutations=mutations, now=now, store=store)
+        except NoActivePlanError:
+            return error_response(
+                status_code=409,
+                code=ErrorCode.NO_ACTIVE_PLAN,
+                message="当前没有 ACTIVE 计划，无法运行 What-if 推演。请先生成并批准一个计划。",
+                next_actions=[NextAction(action="generate_plan", href="/plans/generate")],
+            )
+        except ScenarioMutationError as error:
+            return error_response(
+                status_code=422,
+                code=ErrorCode.SCENARIO_INVALID_MUTATION,
+                message=str(error),
+                next_actions=[NextAction(action="fix_scenario", href="/whatif")],
+            )
+    return ScenarioResultOut(
+        scenario_id=result.scenario_id,
+        feasibility=result.feasibility,
+        late_order_count=result.late_order_count,
+        active_late_order_count=result.active_late_order_count,
+        late_order_count_delta=result.late_order_count_delta,
+        total_tardiness_minutes=result.total_tardiness_minutes,
+        active_total_tardiness_minutes=result.active_total_tardiness_minutes,
+        total_tardiness_delta_minutes=result.total_tardiness_delta_minutes,
+        total_score=result.total_score,
+        active_total_score=result.active_total_score,
+        new_unschedulable_jobs=list(result.new_unschedulable_jobs),
+        delayed_order_ids=list(result.delayed_order_ids),
+    )
+
+
+@router.post(
+    "/{scenario_id}/adopt",
+    response_model=AdoptScenarioResponse,
+    summary="以该场景生成正式提案，仍走审批（R16.9）",
+)
+def adopt_scenario_endpoint(
+    request: Request, scenario_id: str, session: PlannerSession
+) -> AdoptScenarioResponse | JSONResponse:
+    """采纳一个场景 → 生成 `PENDING_APPROVAL` 提案（仍须审批）。写端点。"""
+    factory = request.app.state.session_factory
+    store = _store(request)
+    with factory() as db:
+        try:
+            plan_id = adopt_scenario(db, scenario_id=scenario_id, store=store, now=DEMO_ANCHOR)
+        except ScenarioNotFoundError:
+            return error_response(
+                status_code=404,
+                code=ErrorCode.SCENARIO_NOT_FOUND,
+                message=f"场景 {scenario_id} 不存在或已过期，请重新运行 What-if 推演。",
+                next_actions=[NextAction(action="run_scenario", href="/whatif")],
+                details={"scenario_id": scenario_id},
+            )
+    return AdoptScenarioResponse(
+        scenario_id=scenario_id, plan_id=plan_id, status="PENDING_APPROVAL"
+    )

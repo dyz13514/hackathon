@@ -461,12 +461,36 @@ def _now_module() -> datetime:
 def run_scenario(args: m.RunScenarioIn, ctx: ToolContext) -> m.ScenarioOut:
     """沙箱推演（R16）。委派给 §8 的 `Scenario_Sandbox.run_sandbox`（句柄形态，ADR-004）。
 
-    5 类结构化 `ScenarioMutation` 已在契约里定义（R16.2）。沙箱在生产数据的**内存副本**上跑
-    内核（design.md §3.7 的两层隔离），返回聚合摘要 + 相对 ACTIVE 的 delta——无逐作业明细。
-    沙箱随 §8 落地。
+    5 类结构化 `ScenarioMutation`（R16.2）在生产数据的**内存副本**上跑内核（design.md §3.7
+    的两层隔离），返回聚合摘要 + 相对 ACTIVE 的 delta——无逐作业明细。工具契约的 mutation 与
+    `core.sandbox.apply_mutations` 按 `kind` 字段结构化分派，形状一致，直接透传。无 LLM。
     """
-    raise NotImplementedError(
-        "run_scenario 委派 §8 的 Scenario_Sandbox.run_sandbox；5 类 mutation 契约已定义"
+    from app.services.sandbox import run_sandbox
+
+    session = _session(ctx)
+    result = run_sandbox(session, mutations=list(args.mutations), now=_now(ctx))
+
+    objective = m.ObjectiveSummary(
+        total_score=result.total_score,
+        late_order_count=result.late_order_count,
+        total_tardiness_minutes=result.total_tardiness_minutes,
+        churn_ratio=None,
+        total_changeover_minutes=0,
+        preference_penalty=0.0,
+    )
+    delta = m.ObjectiveDelta(
+        total_score=result.total_score - result.active_total_score,
+        late_order_count=result.late_order_count_delta,
+        total_tardiness_minutes=result.total_tardiness_delta_minutes,
+        total_changeover_minutes=0,
+    )
+    return m.ScenarioOut(
+        scenario_id=result.scenario_id,
+        feasibility=result.feasibility,  # type: ignore[arg-type]
+        objective=objective,
+        delta_vs_active=delta,
+        new_unschedulable_count=len(result.new_unschedulable_jobs),
+        delayed_order_ids=list(result.delayed_order_ids)[:10],
     )
 
 

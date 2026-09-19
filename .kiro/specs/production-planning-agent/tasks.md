@@ -496,7 +496,7 @@
     - _Properties: 21_
     - _Design: Correctness Properties「Property 21」_
 
-  - [~] 8.3 实现 `run_sandbox` 统一入口与结构化表单 What-if
+  - [x] 8.3 实现 `run_sandbox` 统一入口与结构化表单 What-if
     - `SandboxRequest`（`purpose ∈ {WHATIF, COUNTERFACTUAL, BOTTLENECK, PROMISE_DATE}`、`mutations` ≤5、`reference_plan_id`、`freeze_job_ids`）；四个调用方共用同一入口（后两个 P1 才接线，入口一次做齐）
     - 支持 5 类 `ScenarioMutation`：新增订单或改交期、机器不可用（含时间区间）、改物料可用量、工人不可用、改订单优先级
     - **`POST /api/scenarios/run` 是 P0 唯一的 What-if 入口**（无 LLM）：30 秒内返回结果，输出与当前 `ACTIVE` 计划的对比（`feasibility`、`late_order_count` 变化、`total_tardiness_minutes` 变化、新增 `unschedulable` 清单）
@@ -505,7 +505,7 @@
     - _Requirements: R16.2, R16.7, R16.8, R16.9_
     - _Design: Components §3.7、§5、§6_
 
-  - [~] 8.4 实现反事实解释与 `pick_pivotal_job`
+  - [x] 8.4 实现反事实解释与 `pick_pivotal_job`
     - `counterfactual` 是**恰好 1 项**（单值类型），因此 `run_sandbox(purpose=COUNTERFACTUAL)` 每次解释恰好调用一次，解释路径上的沙箱调用次数是常数 1
     - `pick_pivotal_job(delta, brk, active, cand)` 为**纯函数、无 LLM**，三级排序键从 `MOVED ∪ REASSIGNED` 选唯一对象：①对**主导目标分量**（加权贡献绝对值最大的分量）的贡献绝对值最大；②tie-break 比较对 `total_score` 的贡献；③仍并列按 `job_id` 升序
     - `changed` 为空（如纯新增作业的插单）时退化为对新增作业集合按同样规则挑选；两者都为空时输出 `NoTradeoff(reason=...)` 并写审计，而不是编一个

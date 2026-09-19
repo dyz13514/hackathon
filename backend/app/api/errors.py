@@ -95,6 +95,12 @@ class ErrorCode(StrEnum):
     #: `GET /disruptions/{id}/impact` 请求的扰动不存在或尚无影响分析。
     DISRUPTION_NOT_FOUND = "DISRUPTION_NOT_FOUND"
 
+    # What-if 场景（R16，任务 8.3）。
+    #: `POST /scenarios/run` 的某条 `ScenarioMutation` 指向不存在的实体或参数非法（R16.2）。
+    SCENARIO_INVALID_MUTATION = "SCENARIO_INVALID_MUTATION"
+    #: `POST /scenarios/{id}/adopt` 的场景不存在或已过期（进程内暂存失效，R16.9）。
+    SCENARIO_NOT_FOUND = "SCENARIO_NOT_FOUND"
+
 
 class NextAction(BaseModel):
     """一个可执行的下一步。`href` 为空表示动作在当前界面内完成。"""

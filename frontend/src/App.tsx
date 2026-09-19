@@ -9,6 +9,7 @@ import { ROUTES } from './routes/routes';
 import { Schedule } from './routes/Schedule';
 import { Traces } from './routes/Traces';
 import { ValueLedger } from './routes/ValueLedger';
+import { WhatIf } from './routes/WhatIf';
 
 /**
  * 应用外壳：顶栏 + 主导航 + 路由出口。
@@ -49,6 +50,7 @@ export function App() {
           <Route path="/approval" element={<Approval />} />
           <Route path="/traces" element={<Traces />} />
           <Route path="/risks" element={<Risks />} />
+          <Route path="/whatif" element={<WhatIf />} />
           <Route path="/value" element={<ValueLedger />} />
           <Route path="/plans/:a/compare/:b" element={<PlanCompare />} />
           <Route path="*" element={<NotFound />} />
