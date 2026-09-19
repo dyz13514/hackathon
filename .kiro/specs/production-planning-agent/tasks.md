@@ -601,7 +601,7 @@
     - _Requirements: R3.4, R3.5_
     - _Design: Components §4.2_
 
-- [ ] 11. P0-H 偏好记忆、价值台账与降级模式（**不依赖 LLM**：规则由规划员手写）
+- [x] 11. P0-H 偏好记忆、价值台账与降级模式（**不依赖 LLM**：规则由规划员手写）
 
   - [x] 11.1 实现 `Preference_Store` 与手写规则创建入口
     - `PreferenceForm` 为**封闭判别联合**，只有 `AvoidMachineForOrder` / `AvoidMachineForProduct` / `PreferWorkerForSkill` / `AdjustObjectiveWeight` 四个成员，无自由谓词、无表达式字段
@@ -664,7 +664,7 @@
 
 - [ ] 12. P0-I 评估、部署与硬化
 
-  - [~] 12.1 搭建评估套件骨架与一条命令入口
+  - [x] 12.1 搭建评估套件骨架与一条命令入口
     - `tests/eval/` 用 Pytest `-m eval`；`make eval`（`LLM_MODE=REPLAY`，零成本，CI 默认，全部 29 个用例）、`make eval-live`（`LIVE`，计入 `PROJECT_REAL_RUN_CAP`，仅演示前使用）、`make eval-report`（生成 `eval_report.md`，逐用例状态 + 断言明细）
     - `tests/cassettes/`：cassette 目录与新鲜度纪律（提示词变更时必须重新录制）
     - _Requirements: R26.1, R26.4, R26.5_

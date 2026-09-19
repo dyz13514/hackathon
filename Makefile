@@ -22,13 +22,14 @@ PYTHON    ?= python3
 API_PORT ?= 8000
 WEB_PORT ?= 5173
 
-.PHONY: help dev test eval eval-live deploy venv node-modules env-check lint clean
+.PHONY: help dev test eval eval-report eval-live deploy venv node-modules env-check lint clean
 
 help:
 	@echo "make dev        建虚拟环境 → 迁移 → seed 演示数据 → 并行启动 uvicorn 与 Vite"
 	@echo "make test       后端 pytest（不含 eval）+ 前端 vitest"
-	@echo "make eval       评估套件，LLM_MODE=REPLAY，零 Bedrock 消耗"
-	@echo "make eval-live  评估套件，LLM_MODE=LIVE，消耗真实额度（需二次确认）"
+	@echo "make eval        评估套件，LLM_MODE=REPLAY，零 Bedrock 消耗"
+	@echo "make eval-report 评估套件（REPLAY）并生成 eval_report.md（逐用例状态 + 断言明细）"
+	@echo "make eval-live   评估套件，LLM_MODE=LIVE，消耗真实额度（需二次确认）"
 	@echo "make deploy     部署到 Lightsail（deploy/deploy.sh，任务 12.6）"
 	@echo "make lint       ruff + mypy + 前端 typecheck"
 
@@ -83,6 +84,18 @@ eval: venv
 	  SESSION_SHARED_PASSWORD=test-shared-password \
 	  SESSION_SECRET_KEY=test-secret-key-that-is-long-enough-32 \
 	  $(PYTEST) tests/eval
+
+# 生成 eval_report.md（R26.4）：逐用例通过状态 + 失败断言明细。仍是 REPLAY，零成本。
+# EVAL_REPORT 指向输出路径，tests/eval/conftest.py 的会话钩子据此汇总落盘；不加 -q
+# 以保留常规 pytest 摘要。报告写到仓库根的 eval_report.md。
+eval-report: venv
+	cd $(BACKEND) && LLM_MODE=REPLAY \
+	  DATABASE_URL=sqlite:///:memory: \
+	  SESSION_SHARED_PASSWORD=test-shared-password \
+	  SESSION_SECRET_KEY=test-secret-key-that-is-long-enough-32 \
+	  EVAL_REPORT=$(ROOT)/eval_report.md \
+	  $(PYTEST) tests/eval
+	@echo "报告已生成：$(ROOT)/eval_report.md"
 
 # 真实调用会计入 PROJECT_REAL_RUN_CAP = 150 的配额并产生美元支出，
 # 因此要求显式确认，不做成一条随手可敲的命令。

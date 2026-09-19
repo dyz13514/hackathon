@@ -44,6 +44,7 @@ include = ["app*"]
 testpaths = ["tests"]
 addopts = "-q --strict-markers"
 markers = [
+    "eval: 评估套件用例（EVAL-xxx），由 `make eval`（LLM_MODE=REPLAY，零成本）运行；`--strict-markers` 下必须在此登记",
     "live: 需要真实 Bedrock 调用，只在 `make eval-live` 中执行（消耗真实额度）",
 ]
 
