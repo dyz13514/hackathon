@@ -536,7 +536,7 @@
     - _Requirements: R14.5, R14.6, R14.7, R14.11_
     - _Design: Components §3.8、§6_
 
-- [~] 9. 检查点 — 演示情节 3、4、5、6 可完整走通
+- [x] 9. 检查点 — 演示情节 3、4、5、6 可完整走通
   - 确认风险雷达（模板叙述）、结构化表单 What-if、90 秒重排、并排对比与恰好 1 项反事实全部可演示
   - 确认重排周期 token 消耗 ≤14,000
   - Ensure all tests pass, ask the user if questions arise.
