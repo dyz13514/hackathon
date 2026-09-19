@@ -723,9 +723,9 @@
     - _Requirements: R25.9, R24.4, R26.1_
     - _Design: Components §2.6、Data Models §7_
 
-- [ ] 13. P1-J 可选增强（按 design.md 的可砍顺序倒序编号，每项均可独立删除）
+- [x] 13. P1-J 可选增强（按 design.md 的可砍顺序倒序编号，每项均可独立删除）
 
-  - [ ]* 13.1 实现自然语言 What-if 翻译（P1-J ①，最后才砍）
+  - [x]* 13.1 实现自然语言 What-if 翻译（P1-J ①，最后才砍）
     - `POST /api/scenarios/translate`：`Planning_Agent` ReAct ≤3 步，把自然语言翻译为结构化 `Scenario`，**执行前必须把该结构化对象展示给 Planner 确认**，确认后落回任务 8.3 的同一表单载荷再执行
     - 无法映射 → `UNSUPPORTED_SCENARIO` 并列出支持的场景类型
     - 查询文本按不受信任输入处理（`wrap_untrusted("whatif.query")` + `scan_injection`）；`EVAL-203` 扩展为同时覆盖该字段
@@ -733,14 +733,14 @@
     - _Requirements: R16.1, R16.3, R16.10, R21.13_
     - _Design: Components §2.3、§3.7、§6_
 
-  - [ ]* 13.2 实现 LLM 风险归因叙述（P1-J ②）
+  - [x]* 13.2 实现 LLM 风险归因叙述（P1-J ②）
     - 接线 `agents/risk_monitor_agent.py`：只读白名单（只读工具 + `scan_risks`），不修改任何生产数据；为每项 `WARNING` 及以上的风险生成归因叙述
     - 单次扫描最多为 5 项最高严重度风险生成叙述（R14.10 的成本闸门，仅对 LLM 叙述生效）
     - 命中的发现 `narrative_source` 改为 `LLM`，**保留任务 8.6 的模板文本作为回退**；UI 徽章据此区分
     - _Requirements: R14.5, R14.8, R14.10_
     - _Design: Components §3.8、§2.3_
 
-  - [ ]* 13.3 实现 LLM 偏好规则蒸馏（P1-J ③）
+  - [x]* 13.3 实现 LLM 偏好规则蒸馏（P1-J ③）
     - `POST /api/preferences/distil`：`Planning_Agent` ReAct ≤2 步，从 `planner_decisions` 生成候选规则（`human_text`、`structured_form`、`source_decision_ids`）；接线 `propose_preference_rule`（契约已在任务 5.2 定义）
     - 候选一律 `enabled = false`，仍须逐条人工确认；`source_decision_ids` < 2 仍标 `LOW_EVIDENCE`
     - 前端 `/preferences` 追加「从历史决策蒸馏」按钮
@@ -749,7 +749,7 @@
     - _Requirements: R18.3_
     - _Design: Components §4.3、§2.3_
 
-  - [ ]* 13.4 实现 L4 自动应用与一键回滚（P1-J ④）
+  - [x]* 13.4 实现 L4 自动应用与一键回滚（P1-J ④）
     - 打开 `auto_apply_minor_enabled` 后任务 7.3 的 L4 分支生效；`IMPACT_MINOR` 自动应用并写 `AutoAppliedChange`（变更前后完整 `scheduled_jobs` 快照、`impact_class` 判定依据、`reverted = false`）；`execution_path` 开始出现 `AUTO_APPLIED`
     - `POST /api/autonomy/changes/{id}/revert`：从 `snapshot_before` 重建计划行，**仍经 `Approval_Service.activate_internal()` 走一次完整校验**（回滚也不能产生违规计划），置 `ACTIVE`，把 `plan_id_after` 置 `SUPERSEDED`，标 `reverted = true`
     - `GET /api/autonomy/changes`；前端顶栏通知区呈现变更与一键回滚入口
@@ -758,14 +758,14 @@
     - _Requirements: R13.7, R13.9, R13.10_
     - _Design: Components §3.6、Data Models §4、§8_
 
-  - [ ]* 13.5 实现瓶颈与产能洞察视图（P1-J ⑤）
+  - [x]* 13.5 实现瓶颈与产能洞察视图（P1-J ⑤）
     - `GET /api/insights/bottlenecks`：每台机器在 `ACTIVE` 计划中的利用率、承担作业数、承担订单价值占比；无同 `capabilities` 替代的关键机器标识；按 `required_worker_skill` 聚合的技能缺口
     - 「机器可用工时 +20% 时 `total_tardiness_minutes` 的变化量」由 `run_sandbox(purpose=BOTTLENECK)` 实际计算（入口已在任务 8.3 做齐）
     - 前端 `/insights`
     - _Requirements: R15.1, R15.2, R15.3, R15.4_
     - _Design: Components §3.7、§6_
 
-  - [ ]* 13.6 实现可承诺交期报价（P1-J ⑥，最先砍）
+  - [x]* 13.6 实现可承诺交期报价（P1-J ⑥，最先砍）
     - `POST /api/quotes/promise-date`：`run_sandbox(purpose=PROMISE_DATE)` 计算最早可承诺完工日；输出被推迟订单清单与 `total_tardiness_minutes` 变化；期望交期不可满足时输出最早可行日期与具体约束原因
     - 不因报价计算而修改任何生产数据或计划
     - 前端 `/quote`

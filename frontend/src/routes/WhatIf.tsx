@@ -11,15 +11,18 @@
  * 文字方向标注（「变差 / 变好」）；按钮可键盘到达并有 `aria-label`。
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { ApiError } from '../api/client';
+import { getHealth } from '../api/health';
 import {
   type AdoptResult,
   type ScenarioMutation,
   type ScenarioResult,
+  type TranslateResult,
   adoptScenario,
   runScenario,
+  translateScenario,
 } from '../api/scenarios';
 
 type MutationKind = ScenarioMutation['kind'];
@@ -47,6 +50,29 @@ export function WhatIf() {
   const [adopted, setAdopted] = useState<AdoptResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // ---- 任务 13.1 自然语言 What-if 翻译（P1）----
+  // `nlEnabled` 由 GET /api/health 的 mode 决定：DETERMINISTIC_ONLY（降级）时隐藏自然语言
+  // 输入框、只留结构化表单（R16 范围说明）。默认隐藏，拉到 health 且非降级才显示——这样
+  // health 不可达时保守地退回纯结构化表单，不会露出一个会 503 的入口。
+  const [nlEnabled, setNlEnabled] = useState(false);
+  const [nlQuery, setNlQuery] = useState('');
+  const [translation, setTranslation] = useState<TranslateResult | null>(null);
+  const [translateError, setTranslateError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getHealth()
+      .then((h) => {
+        if (!cancelled) setNlEnabled(h.mode !== 'DETERMINISTIC_ONLY');
+      })
+      .catch(() => {
+        if (!cancelled) setNlEnabled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const set = (name: string, value: string) =>
     setFields((prev) => ({ ...prev, [name]: value }));
@@ -124,9 +150,136 @@ export function WhatIf() {
     }
   }, [result]);
 
+  // 翻译：不执行，只把结构化结果放进确认卡（R16.1「执行前必须展示给 Planner 确认」）。
+  const onTranslate = useCallback(async () => {
+    if (!nlQuery.trim()) return;
+    setBusy(true);
+    setTranslateError(null);
+    setTranslation(null);
+    setResult(null);
+    setAdopted(null);
+    try {
+      setTranslation(await translateScenario(nlQuery));
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'UNSUPPORTED_SCENARIO') {
+        const kinds = (err.details.supported_kinds as string[] | undefined) ?? [];
+        setTranslateError(
+          `无法把该提问映射到支持的场景类型。支持的类型：${kinds.join('、')}。请改用下方结构化表单。`,
+        );
+      } else if (err instanceof ApiError && err.code === 'LLM_UNAVAILABLE_USE_STRUCTURED_FORM') {
+        setNlEnabled(false);
+        setTranslateError('LLM 处于降级模式，自然语言翻译不可用。请使用下方结构化表单。');
+      } else {
+        setTranslateError(
+          err instanceof ApiError
+            ? `翻译失败（${err.code}）：${err.message}`
+            : '翻译失败：后端服务不可用。',
+        );
+      }
+    } finally {
+      setBusy(false);
+    }
+  }, [nlQuery]);
+
+  // 确认翻译结果 → 回填并执行：把确认过的结构化 mutations 原样交 /scenarios/run（复用 8.3）。
+  const onConfirmTranslation = useCallback(async () => {
+    if (!translation || translation.mutations.length === 0) return;
+    setBusy(true);
+    setError(null);
+    setAdopted(null);
+    try {
+      setResult(await runScenario(translation.mutations));
+      setTranslation(null);
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? `推演失败（${err.code}）：${err.message}`
+          : '推演失败：后端服务不可用。',
+      );
+    } finally {
+      setBusy(false);
+    }
+  }, [translation]);
+
   return (
     <section aria-labelledby="whatif-heading" className="whatif">
       <h2 id="whatif-heading">What-if 推演</h2>
+
+      {nlEnabled && (
+        <section aria-labelledby="whatif-nl-heading" className="whatif-nl">
+          <h3 id="whatif-nl-heading">用自然语言提问（可选）</h3>
+          <p className="whatif-nl-hint">
+            例如「如果 CNC-01 明天上午停机 6 小时会怎样」。翻译结果会先展示给你确认，
+            确认后才会执行——不会直接改动任何计划。
+          </p>
+          <label htmlFor="whatif-nl-query">自然语言 What-if 提问</label>
+          <textarea
+            id="whatif-nl-query"
+            className="whatif-nl-input"
+            rows={2}
+            value={nlQuery}
+            onChange={(e) => setNlQuery(e.target.value)}
+            placeholder="用一句话描述你想推演的假设……"
+          />
+          <button
+            type="button"
+            onClick={() => void onTranslate()}
+            disabled={busy || !nlQuery.trim()}
+            aria-label="翻译为结构化场景"
+          >
+            {busy ? '翻译中…' : '翻译为结构化场景'}
+          </button>
+
+          {translateError && (
+            <p role="alert" className="whatif-error">
+              <span aria-hidden="true">⚠ </span>
+              {translateError}
+            </p>
+          )}
+
+          {translation && (
+            <div className="whatif-translation-card" role="group" aria-label="翻译结果确认卡">
+              <h4>翻译结果（请确认后执行）</h4>
+              {translation.injection_suspected && (
+                <p role="alert" className="whatif-injection-warning">
+                  <span aria-hidden="true">⚠ </span>
+                  你的提问中检测到疑似提示注入模式；系统已作为普通数据处理并记入审计，翻译不受其指令影响。
+                </p>
+              )}
+              <p className="whatif-translation-echo">
+                原始提问（作为数据回显）：
+                <q>{translation.source_query_echo}</q>
+              </p>
+              <ol className="whatif-translation-mutations">
+                {translation.mutations.map((m, i) => (
+                  <li key={i}>
+                    <strong>{KIND_LABEL[m.kind]}</strong>
+                    <code>{JSON.stringify(m)}</code>
+                  </li>
+                ))}
+              </ol>
+              <div className="whatif-translation-actions">
+                <button
+                  type="button"
+                  onClick={() => void onConfirmTranslation()}
+                  disabled={busy || translation.mutations.length === 0}
+                  aria-label="确认并执行推演"
+                >
+                  确认并推演
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTranslation(null)}
+                  disabled={busy}
+                  aria-label="放弃翻译结果"
+                >
+                  放弃
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       <section aria-labelledby="whatif-form-heading" className="whatif-form">
         <h3 id="whatif-form-heading">场景变更</h3>

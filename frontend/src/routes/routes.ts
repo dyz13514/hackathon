@@ -25,6 +25,6 @@ export const ROUTES: readonly RouteDescriptor[] = [
   { path: '/whatif', label: 'What-if', task: '8.3', implemented: true },
   { path: '/preferences', label: '偏好规则管理', task: '11.1', implemented: true },
   { path: '/value', label: '价值台账', task: '7.6', implemented: true },
-  { path: '/quote', label: '交期报价 (P1)', task: '13.x', implemented: false },
-  { path: '/insights', label: '瓶颈与产能 (P1)', task: '13.x', implemented: false },
+  { path: '/quote', label: '交期报价', task: '13.6', implemented: true },
+  { path: '/insights', label: '瓶颈与产能', task: '13.5', implemented: true },
 ];

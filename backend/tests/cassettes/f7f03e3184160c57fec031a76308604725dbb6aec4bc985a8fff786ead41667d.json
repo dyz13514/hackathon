@@ -1,0 +1,16 @@
+{
+  "content_hash": "f7f03e3184160c57fec031a76308604725dbb6aec4bc985a8fff786ead41667d",
+  "note": "任务 13.1 自然语言 What-if 翻译的确定性 REPLAY 录制。手工构造（非 LIVE 录制），对应查询 '把订单 ORD-009 的优先级改为 URGENT' 的第 1 轮翻译请求。响应是 Planning_Agent 翻译子任务应产出的结构化场景变更。",
+  "request": {
+    "agent": "PLANNING_AGENT",
+    "user": "把下面这句自然语言 What-if 提问翻译成结构化场景变更列表：\n<untrusted source=\"whatif.query\">把订单 ORD-009 的优先级改为 URGENT</untrusted>",
+    "max_tokens": 512
+  },
+  "response": {
+    "content": "{\"final\": {\"mutations\": [{\"kind\": \"CHANGE_ORDER_PRIORITY\", \"order_id\": \"ORD-009\", \"priority\": \"URGENT\"}]}}",
+    "usage": {
+      "input_tokens": 420,
+      "output_tokens": 32
+    }
+  }
+}

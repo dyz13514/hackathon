@@ -665,6 +665,133 @@ class ApprovalService:
         return ApprovalResult(status=ApprovalStatus.OK, plan_id=plan_id)
 
     # ----------------------------------------------------------------------
+    # activate_internal —— 系统内部激活（L4 自动应用 与 一键回滚，任务 13.4，R13.7/R13.9/R13.10）
+    # ----------------------------------------------------------------------
+
+    def activate_internal(
+        self, plan_id: str, *, actor: str = "SYSTEM"
+    ) -> ApprovalResult:
+        """把一个 `PENDING_APPROVAL` 计划激活为 `ACTIVE`——**仍走一次完整硬约束重校验**（R13.10）。
+
+        这是 design.md §8 状态机表里 `ACTIVE → SUPERSEDED`「或 P1 activate_internal」那条注解的
+        落点，供两处系统内部激活复用：
+
+        - **L4 自动应用**（`auto_apply_minor_enabled=true` 且 `IMPACT_MINOR`）：确定性重排刚产出
+          的修订计划被系统自动激活，无需人工点「批准」。
+        - **一键回滚**（`AutoAppliedChange.revert`）：从 `snapshot_before` 重建的计划被重新激活。
+
+        与 `approve()` 的异同：
+
+        - **相同（不可削弱的部分）**：② 完整重校验（在当前快照上重跑 `validate`，任一硬约束违反
+          即拒绝、状态保持 `PENDING_APPROVAL`）、③ 原子状态迁移经**唯一**的
+          `update_plan_status_if_version`、supersede 旧 ACTIVE、写 `plan_approvals`、emit
+          `PlanActivated`。**回滚也不能产生违规计划**（R13.10）正是靠这道重校验守住。
+        - **不同**：不做 ① 陈旧检测（L4/回滚发生在系统内部、计划刚基于当前快照构建，`input_
+          snapshot_version` 天然一致）；不要求调用方传 `expected_version`（内部激活不面临两个
+          规划员并发点批准的竞态，用计划当前 `version` 做乐观并发即可）。审批记录的 `action`
+          记为 `AUTO_APPLY`，与人工 `APPROVE` 在审计上可区分。
+
+        返回 `ApprovalResult`：`OK` 表示已激活；`REVALIDATION_FAILED` 附违反清单且计划仍
+        `PENDING_APPROVAL`（回滚/自动应用被拒，绝不落一个违规的 ACTIVE）；
+        `INVALID_STATE_TRANSITION` 表示计划不是可激活的 `PENDING_APPROVAL`。
+        """
+        plan = self.session.get(orm.ProductionPlan, plan_id)
+        if plan is None or not is_allowed_transition(plan.status, PlanStatus.ACTIVE):
+            return ApprovalResult(
+                status=ApprovalStatus.INVALID_STATE_TRANSITION,
+                plan_id=plan_id,
+                current_status=None if plan is None else plan.status,
+            )
+
+        production_date = plan.production_date
+        proposal_version = plan.input_snapshot_version
+        feasibility = plan.feasibility
+        current_version = plan.version
+
+        # ---- ② 完整重校验（R13.10：回滚/自动应用也不能产生违规计划）----
+        snapshot = load_snapshot(
+            self.session,
+            now=self.now,
+            production_date=production_date,
+            snapshot_version=proposal_version,
+        )
+        candidate = _candidate_from_plan(self.session, plan_id, feasibility)
+        report = validate(candidate, snapshot)
+        if not report.is_feasible:
+            audit.append(
+                event_category="APPROVAL_ACTION",
+                event_type="AUTO_APPLY_REVALIDATION_FAILED",
+                actor=actor,
+                payload={
+                    "plan_id": plan_id,
+                    "violation_count": len(report.violations),
+                    "violations": [v.model_dump(mode="json") for v in report.violations],
+                },
+                subject_type="ProductionPlan",
+                subject_id=plan_id,
+                occurred_at=self.now,
+            )
+            return ApprovalResult(
+                status=ApprovalStatus.REVALIDATION_FAILED,
+                plan_id=plan_id,
+                current_status=plan.status,
+                violations=report.violations,
+            )
+
+        # ---- ③ 乐观并发 + 原子状态迁移（经唯一的 update_plan_status_if_version）----
+        try:
+            # 先 supersede 旧 ACTIVE，再把目标置 ACTIVE：`ux_active_per_day` 是部分唯一索引
+            # （WHERE status='ACTIVE'），SQLite 逐语句校验，若先置目标为 ACTIVE 会与仍 ACTIVE 的
+            # 旧计划在同一生产日短暂并存而撞索引。顺序反过来（先让位、后就位）避免这一瞬时冲突。
+            superseded = supersede_previous_active(
+                self.session, production_date, except_id=plan_id
+            )
+            self.session.flush()
+            affected = update_plan_status_if_version(
+                self.session, plan_id, ACTIVE_STATUS, current_version
+            )
+            if affected == 0:
+                self.session.rollback()
+                return ApprovalResult(
+                    status=ApprovalStatus.CONCURRENT_MODIFICATION,
+                    plan_id=plan_id,
+                    current_status=plan.status,
+                )
+            del superseded  # 已让位；此处不需要返回值，保留调用是为其副作用
+            self.session.add(
+                orm.PlanApproval(
+                    approval_id=f"APR-{uuid4().hex[:16]}",
+                    plan_id=plan_id,
+                    action="AUTO_APPLY",
+                    actor=actor,
+                    timestamp=self.now,
+                    rejection_reason=None,
+                    revalidation_result=_revalidation_result(report),
+                    modifications=None,
+                )
+            )
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise
+
+        audit.append(
+            event_category="APPROVAL_ACTION",
+            event_type="AUTO_APPLY",
+            actor=actor,
+            payload={
+                "plan_id": plan_id,
+                "production_date": production_date.isoformat(),
+                "input_snapshot_version": proposal_version,
+            },
+            subject_type="ProductionPlan",
+            subject_id=plan_id,
+            occurred_at=self.now,
+        )
+        self.events.emit(PlanActivated(plan_id=plan_id))
+        return ApprovalResult(status=ApprovalStatus.OK, plan_id=plan_id)
+
+    # ----------------------------------------------------------------------
     # REJECT（R11.4、R18.1、design.md §4.1）
     # ----------------------------------------------------------------------
 

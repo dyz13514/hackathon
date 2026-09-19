@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import axe from 'axe-core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -16,15 +16,18 @@ vi.mock('../api/preferences', async () => {
     deletePreference: vi.fn(),
     updatePreference: vi.fn(),
     getAffectedJobs: vi.fn(),
+    distilPreferences: vi.fn(),
   };
 });
 
 import {
   createPreference,
   disablePreference,
+  distilPreferences,
   enablePreference,
   listPreferences,
 } from '../api/preferences';
+import type { DistilResult } from '../api/preferences';
 import { Preferences } from '../routes/Preferences';
 
 const RULE_LOW_EVIDENCE: PreferenceRule = {
@@ -172,5 +175,85 @@ describe('Preferences 视图', () => {
       (v) => v.impact === 'serious' || v.impact === 'critical',
     );
     expect(serious).toEqual([]);
+  });
+
+  // ---- 任务 13.3 从历史决策蒸馏（P1）----
+
+  it('「从历史决策蒸馏」调用 distil 并在确认区展示候选（均未启用）', async () => {
+    vi.mocked(listPreferences).mockResolvedValue(listWith([], 0));
+    const distilled: DistilResult = {
+      outcome: 'DISTILLED',
+      injection_suspected: false,
+      considered_decision_ids: ['DEC-1', 'DEC-2'],
+      candidates: [
+        {
+          rule_id: 'PR-cand',
+          human_text: 'ORD-007 避开 CNC-03',
+          structured_form: {
+            kind: 'AVOID_MACHINE_FOR_ORDER',
+            order_id: 'ORD-007',
+            machine_id: 'CNC-03',
+            weight_delta: 1,
+          },
+          source_decision_ids: ['DEC-1', 'DEC-2'],
+          enabled: false,
+          low_evidence: false,
+        },
+      ],
+    };
+    vi.mocked(distilPreferences).mockResolvedValue(distilled);
+    render(<Preferences />);
+    await screen.findByRole('heading', { name: /偏好规则管理/ });
+
+    fireEvent.click(screen.getByRole('button', { name: /从历史决策蒸馏/ }));
+    await waitFor(() => expect(distilPreferences).toHaveBeenCalledTimes(1));
+
+    const group = await screen.findByRole('group', { name: '蒸馏候选确认' });
+    expect(group).toBeInTheDocument();
+    // 候选展示为「未启用」——蒸馏不启用任何规则。
+    expect(within(group).getByText('未启用')).toBeInTheDocument();
+    expect(within(group).getByText('ORD-007 避开 CNC-03')).toBeInTheDocument();
+  });
+
+  it('蒸馏检测到注入时在确认区显著提示', async () => {
+    vi.mocked(listPreferences).mockResolvedValue(listWith([], 0));
+    vi.mocked(distilPreferences).mockResolvedValue({
+      outcome: 'DISTILLED',
+      injection_suspected: true,
+      considered_decision_ids: ['DEC-1'],
+      candidates: [
+        {
+          rule_id: 'PR-cand',
+          human_text: 'x',
+          structured_form: {
+            kind: 'AVOID_MACHINE_FOR_ORDER',
+            order_id: 'ORD-1',
+            machine_id: 'M-1',
+            weight_delta: 1,
+          },
+          source_decision_ids: ['DEC-1'],
+          enabled: false,
+          low_evidence: true,
+        },
+      ],
+    });
+    render(<Preferences />);
+    await screen.findByRole('heading', { name: /偏好规则管理/ });
+    fireEvent.click(screen.getByRole('button', { name: /从历史决策蒸馏/ }));
+    expect(await screen.findByText(/检测到疑似提示注入/)).toBeInTheDocument();
+  });
+
+  it('降级模式蒸馏返回 LLM_UNAVAILABLE 时提示改用手写', async () => {
+    vi.mocked(listPreferences).mockResolvedValue(listWith([], 0));
+    vi.mocked(distilPreferences).mockResolvedValue({
+      outcome: 'LLM_UNAVAILABLE',
+      injection_suspected: false,
+      considered_decision_ids: [],
+      candidates: [],
+    });
+    render(<Preferences />);
+    await screen.findByRole('heading', { name: /偏好规则管理/ });
+    fireEvent.click(screen.getByRole('button', { name: /从历史决策蒸馏/ }));
+    expect(await screen.findByText(/降级模式/)).toBeInTheDocument();
   });
 });

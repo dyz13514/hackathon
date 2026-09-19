@@ -25,10 +25,12 @@ import {
   createPreference,
   deletePreference,
   disablePreference,
+  distilPreferences,
   enablePreference,
   getAffectedJobs,
   listPreferences,
   updatePreference,
+  type DistilledCandidate,
   type PreferenceForm,
   type PreferenceKind,
   type PreferenceRule,
@@ -137,6 +139,11 @@ export function Preferences() {
   const [humanText, setHumanText] = useState('');
   const [sourceIds, setSourceIds] = useState('');
   const [affected, setAffected] = useState<Record<string, readonly string[]>>({});
+
+  // ---- 任务 13.3 从历史决策蒸馏（P1）----
+  const [distilling, setDistilling] = useState(false);
+  const [candidates, setCandidates] = useState<DistilledCandidate[] | null>(null);
+  const [distilInjection, setDistilInjection] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -262,6 +269,42 @@ export function Preferences() {
     }
   }, []);
 
+  // 从历史决策蒸馏候选：候选已落库但一律 enabled=false，出现在下方规则列表里（未启用），
+  // 并在确认区列出，供逐条「启用」。蒸馏不启用任何规则。
+  const handleDistil = useCallback(async () => {
+    setDistilling(true);
+    setError(null);
+    setNotice(null);
+    setCandidates(null);
+    try {
+      const result = await distilPreferences();
+      setDistilInjection(result.injection_suspected);
+      if (result.outcome === 'NO_EVIDENCE') {
+        setNotice('暂无可蒸馏的历史决策（需要先有带理由的拒绝/修改决策）。');
+        setCandidates([]);
+      } else if (result.outcome === 'LLM_UNAVAILABLE') {
+        setNotice('LLM 处于降级模式，历史决策蒸馏不可用。可继续手写规则。');
+        setCandidates([]);
+      } else {
+        setCandidates([...result.candidates]);
+        setNotice(
+          result.candidates.length > 0
+            ? `蒸馏出 ${result.candidates.length} 条候选规则（均未启用）。请逐条确认后启用。`
+            : '未能从历史决策蒸馏出可用的候选规则。',
+        );
+      }
+      await load();
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? `蒸馏失败（${err.code}）：${err.message}`
+          : '蒸馏失败：后端服务不可用。',
+      );
+    } finally {
+      setDistilling(false);
+    }
+  }, [load]);
+
   const limitNotice = useMemo(() => {
     if (atLimit) {
       return `已启用 ${enabledCount} / ${maxEnabled}（已达上限）。要启用新规则，请先停用一条既有规则。`;
@@ -273,6 +316,15 @@ export function Preferences() {
     <section aria-labelledby="preferences-heading" className="preferences">
       <div className="preferences-header">
         <h2 id="preferences-heading">偏好规则管理</h2>
+        <button
+          type="button"
+          onClick={() => void handleDistil()}
+          disabled={distilling}
+          aria-busy={distilling}
+          aria-label="从历史决策蒸馏候选偏好规则"
+        >
+          {distilling ? '蒸馏中…' : '从历史决策蒸馏'}
+        </button>
         <button
           type="button"
           onClick={() => void load()}
@@ -299,6 +351,45 @@ export function Preferences() {
         <p role="status" className="preferences-notice">
           {notice}
         </p>
+      )}
+
+      {/* --- 任务 13.3 蒸馏候选确认区（候选均已落库但未启用，逐条确认后启用） --- */}
+      {candidates !== null && candidates.length > 0 && (
+        <section
+          aria-label="蒸馏候选确认"
+          className="preferences-candidates"
+          role="group"
+        >
+          <h3>蒸馏候选（请逐条确认后启用）</h3>
+          {distilInjection && (
+            <p role="alert" className="preferences-injection-warning">
+              <span aria-hidden="true">⚠ </span>
+              部分来源决策的理由中检测到疑似提示注入；系统已作为数据处理并记入审计，候选一律未启用。
+            </p>
+          )}
+          <ul className="distil-candidate-list">
+            {candidates.map((c) => (
+              <li key={c.rule_id} data-rule-id={c.rule_id}>
+                <span className="distil-candidate-text">{c.human_text}</span>
+                <span className="distil-candidate-form">{describeForm(c.structured_form)}</span>
+                <span className={c.enabled ? 'status status-on' : 'status status-off'}>
+                  {c.enabled ? '已启用' : '未启用'}
+                </span>
+                {c.low_evidence && (
+                  <span className="badge badge-low-evidence" title="来源决策少于 2 条">
+                    <span aria-hidden="true">⚠ </span>证据不足
+                  </span>
+                )}
+                <span className="distil-candidate-sources">
+                  来源：{c.source_decision_ids.length > 0 ? c.source_decision_ids.join('、') : '—'}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="field-hint">
+            候选已作为未启用规则加入下方列表。核对后在列表中点「启用」使其生效——蒸馏本身不会启用任何规则。
+          </p>
+        </section>
       )}
 
       {/* --- 新建规则表单（无「启用」勾选框：创建即未启用，R18.4） --- */}

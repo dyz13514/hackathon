@@ -103,6 +103,27 @@ describe('Risks 视图', () => {
     expect(screen.getAllByText('TEMPLATE').length).toBeGreaterThanOrEqual(1);
   });
 
+  it('LLM 归因叙述以独立徽章区分于 TEMPLATE（R14.11，任务 13.2）', async () => {
+    // 一条 LLM 叙述 + 一条模板叙述：两种来源徽章都应出现且可区分。
+    const [crit, warn] = RISKS.findings;
+    const withLlm: RiskList = {
+      ...RISKS,
+      findings: [
+        { ...crit!, narrative_source: 'LLM', narrative: '[LLM] CNC-01 归因叙述。' },
+        warn!,
+      ],
+    };
+    vi.mocked(getRisks).mockResolvedValue(withLlm);
+    render(<Risks />);
+    await screen.findByRole('heading', { name: /严重（1）/ });
+
+    const llmBadge = screen.getByText('LLM');
+    expect(llmBadge).toHaveClass('source-LLM');
+    expect(screen.getByText('TEMPLATE')).toHaveClass('source-TEMPLATE');
+    // 叙述来源可访问标注区分两类。
+    expect(screen.getByLabelText('叙述来源：LLM')).toBeInTheDocument();
+  });
+
   it('「重新扫描」触发 POST 后回读（R14.1）', async () => {
     vi.mocked(getRisks).mockResolvedValue(RISKS);
     vi.mocked(scanRisks).mockResolvedValue({

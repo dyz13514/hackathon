@@ -284,7 +284,13 @@ def create_rule(
     session.add(rule)
     session.flush()  # 让外键可用于 sources 行
     sources = _replace_sources(session, rule_id, source_decision_ids)
-    session.flush()
+    session.flush()  # 落定 sources 行，保证 commit 时父行先于子行（FK 依赖）
+    # 先提交业务事务、再写审计：审计走独立引擎的独立连接，而 SQLite（即使 WAL）同一时刻只允许
+    # 一个写者。若业务事务仍持有写锁就调用 `audit.append()`，同一线程的审计连接会自我死锁到
+    # `busy_timeout` 后抛 `database is locked`（见 `db/audit.py` 模块末尾的「已知 SQLite 约束」）。
+    # `ApprovalService` 已采用「commit 后再 audit」这一口径；此处对齐它。审计仍在独立事务里，
+    # 「记录一次变更」不因业务侧后续回滚而丢失这一不变量不受影响（此刻业务已提交）。
+    session.commit()
     _audit(event_type="CREATE", rule=rule, extra={"source_decision_ids": list(sources)})
     return _to_view(session, rule)
 
@@ -313,7 +319,7 @@ def update_rule(
         sources = _replace_sources(session, rule_id, source_decision_ids)
         rule.low_evidence = _is_low_evidence(sources)
     rule.updated_at = now if now is not None else datetime.now()  # noqa: DTZ005
-    session.flush()
+    session.commit()  # 见 create_rule：commit 后再 audit，避开 SQLite 审计连接自我死锁
     _audit(
         event_type="UPDATE",
         rule=rule,
@@ -343,7 +349,7 @@ def set_enabled(
         )
     rule.enabled = enabled
     rule.updated_at = now if now is not None else datetime.now()  # noqa: DTZ005
-    session.flush()
+    session.commit()  # 见 create_rule：commit 后再 audit，避开 SQLite 审计连接自我死锁
     _audit(event_type="ENABLE" if enabled else "DISABLE", rule=rule)
     return _to_view(session, rule)
 
@@ -355,13 +361,26 @@ def delete_rule(session: Session, rule_id: str, *, now: datetime | None = None) 
     且审计载荷此刻还能读到规则的完整内容。删除的是业务表行，审计行不受影响（append-only）。
     """
     rule = _get_or_raise(session, rule_id)
-    _audit(
-        event_type="DELETE",
-        rule=rule,
-        extra={"source_decision_ids": list(_sources_of(session, rule_id))},
-    )
+    # 在删除并提交之前，把审计载荷快照到普通 dict：commit 之后 `rule` 已被删除、其属性不再可读，
+    # 而审计必须先落业务事务（commit）以避开 SQLite 审计连接的自我死锁（见 create_rule 注释）。
+    audit_payload: dict[str, Any] = {
+        "rule_id": rule.rule_id,
+        "human_text": rule.human_text,
+        "structured_form": rule.structured_form,
+        "enabled": rule.enabled,
+        "low_evidence": rule.low_evidence,
+        "source_decision_ids": list(_sources_of(session, rule_id)),
+    }
     session.delete(rule)
-    session.flush()
+    session.commit()  # 见 create_rule：commit 后再 audit
+    audit.append(
+        event_category="PREFERENCE_RULE_CHANGE",
+        event_type="DELETE",
+        actor=_ACTOR,
+        subject_type="PREFERENCE_RULE",
+        subject_id=rule_id,
+        payload=audit_payload,
+    )
 
 
 # --------------------------------------------------------------------------

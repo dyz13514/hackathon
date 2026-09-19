@@ -54,6 +54,17 @@ _KNOWN_INVOKE_SITES = {
     "app/services/explanation.py",  # 计划生成解释：except LlmDisabledError → 模板
     "app/agents/ingestion_agent.py",  # 列映射驱动：其 P0 入口 get_proposal 在调用前守卫拒绝
     "app/agents/planning_agent.py",  # 重排/解释驱动：P0 重排走确定性流水线，不经此驱动
+    # --- 任务 13（P1）新增的三条 LLM 路径。每条都实现了 DETERMINISTIC_ONLY 降级回退： ---
+    # 13.1 自然语言 What-if 翻译：invoke 被 `except LlmDisabledError` 捕获 → 返回
+    # `TranslationOutcome.LLM_UNAVAILABLE`，前端退回结构化场景表单（R16 范围说明）。
+    "app/services/whatif_translate.py",
+    # 13.2 LLM 风险归因叙述：`RiskNarrativeDriver.generate` 捕获**任一** LLM 侧失败（含
+    # LlmDisabledError / CassetteMiss / BedrockUnavailable）→ 返回 None → 回退任务 8.6 的
+    # 确定性模板叙述（narrative_source=TEMPLATE，R14.5/R14.11）。
+    "app/agents/risk_monitor_agent.py",
+    # 13.3 LLM 偏好规则蒸馏：invoke 的失败被捕获 → 返回 `DistilOutcome.LLM_UNAVAILABLE`
+    # 空候选集，前端提示改用手写规则（R18.3，降级下 P0 手写入口不受影响）。
+    "app/services/preference_distil.py",
 }
 
 

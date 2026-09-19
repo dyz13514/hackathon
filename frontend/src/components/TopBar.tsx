@@ -14,8 +14,14 @@
  * 传达状态，不仅靠颜色；健康不可达时**静默**（不把"拿不到 health"渲染成一条吓人的错误横幅）。
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
+import {
+  type AutoAppliedChange,
+  listAutoAppliedChanges,
+  revertAutoAppliedChange,
+} from '../api/autonomy';
+import { ApiError } from '../api/client';
 import { getHealth, isBudgetWarning, PROJECT_USD_CEILING, type Health } from '../api/health';
 
 /** 轮询间隔（毫秒）。降级是运行期状态，顶栏需在不刷新页面时更新。 */
@@ -23,6 +29,20 @@ const POLL_INTERVAL_MS = 30_000;
 
 export function TopBar() {
   const [health, setHealth] = useState<Health | null>(null);
+  // 任务 13.4：L4 自动应用记录 + 一键回滚入口（R13.9）。未回滚的记录在顶栏通知区呈现。
+  const [changes, setChanges] = useState<readonly AutoAppliedChange[]>([]);
+  const [revertBusy, setRevertBusy] = useState<string | null>(null);
+  const [revertError, setRevertError] = useState<string | null>(null);
+
+  const loadChanges = useCallback(async () => {
+    try {
+      const result = await listAutoAppliedChanges();
+      setChanges(result.changes);
+    } catch {
+      // 拿不到时静默（顶栏是提示）。未登录的 GET 也可能失败——不喧宾夺主。
+      setChanges([]);
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -39,6 +59,9 @@ export function TopBar() {
           setHealth(null);
         }
       }
+      if (!cancelled) {
+        await loadChanges();
+      }
     };
 
     void poll();
@@ -47,16 +70,33 @@ export function TopBar() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, []);
+  }, [loadChanges]);
 
-  if (health === null) {
-    return null;
-  }
+  const onRevert = useCallback(
+    async (changeId: string) => {
+      setRevertBusy(changeId);
+      setRevertError(null);
+      try {
+        await revertAutoAppliedChange(changeId);
+        await loadChanges();
+      } catch (err) {
+        setRevertError(
+          err instanceof ApiError
+            ? `回滚失败（${err.code}）：${err.message}`
+            : '回滚失败：后端服务不可用。',
+        );
+      } finally {
+        setRevertBusy(null);
+      }
+    },
+    [loadChanges],
+  );
 
-  const degraded = health.mode === 'DETERMINISTIC_ONLY';
-  const budgetWarning = isBudgetWarning(health);
+  const activeChanges = changes.filter((c) => !c.reverted);
+  const degraded = health?.mode === 'DETERMINISTIC_ONLY';
+  const budgetWarning = health !== null && isBudgetWarning(health);
 
-  if (!degraded && !budgetWarning) {
+  if (!degraded && !budgetWarning && activeChanges.length === 0 && revertError === null) {
     return null;
   }
 
@@ -70,12 +110,38 @@ export function TopBar() {
           仅电子表格 LLM 列映射不可用，请改用手工列映射。
         </div>
       )}
-      {budgetWarning && (
+      {budgetWarning && health !== null && (
         <div role="status" className="banner banner-budget">
           <span aria-hidden="true">💰 </span>
           <strong>预算告警</strong>
           ：累计估算成本 ≈ USD {health.project_usd_spent.toFixed(2)}，已达上限 USD{' '}
           {PROJECT_USD_CEILING} 的 80% 以上。
+        </div>
+      )}
+      {activeChanges.map((change) => (
+        <div
+          key={change.change_id}
+          role="status"
+          className="banner banner-auto-applied"
+          data-change-id={change.change_id}
+        >
+          <span aria-hidden="true">🤖 </span>
+          <strong>自动应用</strong>
+          ：系统已自动应用一个小影响变更（{change.plan_id_before} → {change.plan_id_after}）。
+          <button
+            type="button"
+            onClick={() => void onRevert(change.change_id)}
+            disabled={revertBusy === change.change_id}
+            aria-label={`一键回滚自动应用变更 ${change.change_id}`}
+          >
+            {revertBusy === change.change_id ? '回滚中…' : '一键回滚'}
+          </button>
+        </div>
+      ))}
+      {revertError && (
+        <div role="alert" className="banner banner-degraded">
+          <span aria-hidden="true">⚠ </span>
+          {revertError}
         </div>
       )}
     </div>

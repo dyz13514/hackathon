@@ -39,7 +39,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.risk import ROLLING_HORIZON_DAYS, RiskFinding, scan
+from app.core.risk import ROLLING_HORIZON_DAYS, SEVERITY_RANK, RiskFinding, scan
 from app.core.risk_narrative import render_template_narrative
 from app.db import models as orm
 from app.logging_config import log_event
@@ -49,7 +49,11 @@ from app.services.snapshot_loader import load_snapshot
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["ScanResult", "scan_and_persist"]
+__all__ = ["MAX_LLM_NARRATIVES_PER_SCAN", "ScanResult", "scan_and_persist"]
+
+#: 单次扫描最多为多少项风险生成 LLM 叙述（R14.10 的成本闸门，仅对 LLM 叙述生效）。
+#: 只对**严重度最高的**这么多项 WARNING 及以上的风险生成，其余照常用确定性模板。
+MAX_LLM_NARRATIVES_PER_SCAN = 5
 
 
 class ScanResult:
@@ -80,11 +84,17 @@ def scan_and_persist(
     now: datetime | None = None,
     horizon_days: int = ROLLING_HORIZON_DAYS,
     trigger: str = "MANUAL",
+    narrative_driver: object | None = None,
 ) -> ScanResult:
     """扫描当前 `ACTIVE` 计划的风险并去重落库，返回 `ScanResult`。**自提交。**
 
     `now` 默认 `DEMO_ANCHOR`（与生成/重排端点同一演示时钟口径，使风险时域落在演示数据的
     时间坐标系里）。`trigger` 只进日志，用于区分手动 / 事件 / 定时来源。
+
+    `narrative_driver`（任务 13.2，P1）：可选的 `RiskNarrativeDriver`。给定时，为**严重度最高的
+    至多 `MAX_LLM_NARRATIVES_PER_SCAN` 项 WARNING 及以上**的风险生成 LLM 归因叙述
+    （`narrative_source=LLM`）；生成失败/不合格/降级则回退确定性模板（`TEMPLATE`）。缺省 `None`
+    保持 P0 行为——全部模板叙述，零 LLM 调用。驱动是只读的（R14.8）。
     """
     resolved_now = now if now is not None else DEMO_ANCHOR
 
@@ -102,7 +112,12 @@ def scan_and_persist(
 
     findings = scan(snapshot, candidate.scheduled_jobs, horizon_days=horizon_days)
 
-    inserted, updated, rows = _persist(session, findings, now=resolved_now)
+    # 任务 13.2：为最高严重度的至多 5 项 WARNING+ 风险生成 LLM 叙述（R14.10 成本闸门）。
+    llm_narratives = _llm_narratives(findings, narrative_driver)
+
+    inserted, updated, rows = _persist(
+        session, findings, now=resolved_now, llm_narratives=llm_narratives
+    )
     session.commit()
 
     # CRITICAL → 缓解提案（R14.7）：INFO / WARNING 仅入面板、绝不生成提案。CRITICAL 走确定性
@@ -229,23 +244,73 @@ def _propose_mitigations_for_critical(
     return [new_plan_id]
 
 
+def _llm_narratives(
+    findings: tuple[RiskFinding, ...], narrative_driver: object | None
+) -> dict[str, str]:
+    """为最高严重度的至多 `MAX_LLM_NARRATIVES_PER_SCAN` 项 WARNING+ 风险生成 LLM 叙述（R14.10）。
+
+    返回 `finding_key -> narrative_text` 的映射（只含成功生成的项）。`narrative_driver` 为 None、
+    或没有 WARNING+ 风险、或驱动对某项返回 None（不可用/不合格/降级）时，对应项不进映射，
+    `_persist` 因此回退模板。
+
+    只读、无副作用：本函数不碰会话、不写任何生产数据（R14.8）。`findings` 已按
+    `(SEVERITY_RANK, finding_key)` 升序（CRITICAL 在前），因此「前 5 项 WARNING+」正是「最高
+    严重度的 5 项」。INFO 一律不生成 LLM 叙述（成本闸门只覆盖 WARNING 及以上）。
+    """
+    if narrative_driver is None:
+        return {}
+
+    # 延迟 import，避免服务层在无需 LLM 叙述时拖入 Agent 层类型。
+    from app.agents.risk_monitor_agent import RiskFindingFacts
+
+    eligible = [f for f in findings if SEVERITY_RANK.get(f.severity, 9) <= SEVERITY_RANK["WARNING"]]
+    # findings 已按 (severity 秩, finding_key) 升序 → eligible 天然按最高严重度在前。
+    selected = eligible[:MAX_LLM_NARRATIVES_PER_SCAN]
+
+    result: dict[str, str] = {}
+    for finding in selected:
+        facts = RiskFindingFacts(
+            risk_type=finding.risk_type.value,
+            severity=finding.severity,
+            entity_type=finding.entity_type,
+            entity_id=finding.entity_id,
+            metric_value=float(finding.metric_value),
+            threshold_value=float(finding.threshold_value),
+            affected_order_ids=tuple(finding.affected_order_ids),
+        )
+        text = narrative_driver.generate(facts)  # type: ignore[attr-defined]
+        if text is not None:
+            result[finding.finding_key] = text
+    if result:
+        log_event(logger, "RISK_LLM_NARRATIVES_GENERATED", count=len(result))
+    return result
+
+
 def _persist(
     session: Session,
     findings: tuple[RiskFinding, ...],
     *,
     now: datetime,
+    llm_narratives: dict[str, str] | None = None,
 ) -> tuple[int, int, list[orm.RiskFinding]]:
     """按 `finding_key` upsert 落库（R14.9）。返回 (新增数, 更新数, 全部对应行)。
 
     去重是本函数的核心：`finding_key` 上有 UNIQUE 约束，同一风险重复出现只更新既有行的
     `last_seen_at` / `metric_value` 等，不新增。`first_seen_at` 只在新增时写，之后不动
     ——它记录「这个风险第一次被看见是什么时候」。
+
+    `llm_narratives`（任务 13.2）：`finding_key -> LLM 叙述文本` 的映射。命中的发现落
+    `narrative_source=LLM` 并用 LLM 文本；未命中的照常用确定性模板（`TEMPLATE`）。
     """
+    llm_map = llm_narratives or {}
     inserted = 0
     updated = 0
     rows: list[orm.RiskFinding] = []
     for finding in findings:
-        narrative = render_template_narrative(finding)
+        template = render_template_narrative(finding)
+        llm_text = llm_map.get(finding.finding_key)
+        narrative_text = llm_text if llm_text is not None else template.text
+        narrative_source = "LLM" if llm_text is not None else template.source
         existing = session.execute(
             select(orm.RiskFinding).where(orm.RiskFinding.finding_key == finding.finding_key)
         ).scalars().first()
@@ -260,8 +325,8 @@ def _persist(
                 metric_value=finding.metric_value,
                 threshold_value=finding.threshold_value,
                 affected_order_ids=list(finding.affected_order_ids),
-                narrative=narrative.text,
-                narrative_source=narrative.source,
+                narrative=narrative_text,
+                narrative_source=narrative_source,
                 first_seen_at=now,
                 last_seen_at=now,
             )
@@ -274,8 +339,8 @@ def _persist(
             existing.metric_value = finding.metric_value
             existing.threshold_value = finding.threshold_value
             existing.affected_order_ids = list(finding.affected_order_ids)
-            existing.narrative = narrative.text
-            existing.narrative_source = narrative.source
+            existing.narrative = narrative_text
+            existing.narrative_source = narrative_source
             existing.last_seen_at = now
             updated += 1
             rows.append(existing)

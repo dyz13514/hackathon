@@ -32,15 +32,16 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
+from enum import StrEnum
 
 from sqlalchemy.orm import Session
 
 from app.core.explain import NoTradeoff, Tradeoff
-from app.core.sandbox import apply_mutations
+from app.core.sandbox import ScenarioMutationError, apply_mutations
 from app.core.scheduler import PlanCandidate, generate_schedule
 from app.core.scoring import ObjectiveBreakdown, ObjectiveWeights, score
-from app.core.snapshot import DomainSnapshot
+from app.core.snapshot import DomainSnapshot, Machine
 from app.core.validation import validate
 from app.db import models as orm
 from app.db.sandbox_guard import sandbox_guard
@@ -66,12 +67,34 @@ logger = logging.getLogger(__name__)
 SCENARIO_ADOPTION_ORIGIN = "SCENARIO_ADOPTION"
 PENDING_STATUS = "PENDING_APPROVAL"
 
+
+class SandboxPurpose(StrEnum):
+    """沙箱推演的用途（design.md §3.7 的 `run_sandbox(purpose=...)`）。
+
+    - `WHATIF`：结构化 What-if 推演（任务 8.3）。
+    - `BOTTLENECK`：产能洞察——机器可用工时 +20% 时 `total_tardiness_minutes` 的变化（任务 13.5）。
+    - `PROMISE_DATE`：可承诺交期报价——加一个假想订单看最早可完工日（任务 13.6）。
+
+    全部走同一套沙箱隔离（`sandbox_guard` + 冻结快照 + 确定性内核），只读生产数据、无 LLM。
+    `purpose` 只进日志与审计，用于区分三类沙箱调用；不改变隔离语义。
+    """
+
+    WHATIF = "WHATIF"
+    BOTTLENECK = "BOTTLENECK"
+    PROMISE_DATE = "PROMISE_DATE"
+
+
 __all__ = [
+    "CapacitySandboxResult",
+    "PromiseDateResult",
+    "SandboxPurpose",
     "ScenarioNotFoundError",
     "ScenarioStore",
     "SandboxResult",
     "adopt_scenario",
     "build_counterfactual",
+    "run_capacity_sandbox",
+    "run_promise_date_sandbox",
     "run_sandbox",
 ]
 
@@ -208,6 +231,248 @@ def run_sandbox(
         new_unschedulable_jobs=new_unschedulable,
         delayed_order_ids=delayed,
     )
+
+
+@dataclass(frozen=True)
+class CapacitySandboxResult:
+    """机器可用工时 +X% 的沙箱推演结果（任务 13.5，R15.2）。
+
+    `total_tardiness_minutes` 是 +X% 场景下的总拖期；`active_total_tardiness_minutes` 是当前
+    `ACTIVE` 计划的总拖期（同口径）；`total_tardiness_delta_minutes` = 前者 − 后者（负=改善）。
+    全部由确定性 `generate_schedule` 实算，非静态估算。
+    """
+
+    machine_id: str
+    hours_multiplier: float
+    total_tardiness_minutes: int
+    active_total_tardiness_minutes: int
+    total_tardiness_delta_minutes: int
+    feasibility: str
+
+
+def run_capacity_sandbox(
+    session: Session,
+    *,
+    machine_id: str,
+    hours_multiplier: float,
+    now: datetime,
+    purpose: SandboxPurpose = SandboxPurpose.BOTTLENECK,
+    weights: ObjectiveWeights | None = None,
+) -> CapacitySandboxResult:
+    """在沙箱里把某台机器的可用工时按 `hours_multiplier` 放大，实算 `total_tardiness_minutes`
+    的变化（任务 13.5，R15.2）。**只读生产数据、无 LLM。** 无 ACTIVE 计划 → 抛。
+
+    「+20% 工时」建模为把该机器的可用窗口 `[available_start, available_end)` 的**时长**乘以
+    `hours_multiplier`（延后 `available_end`）——`Scheduling_Core` 用 `min(worker.shift_end,
+    machine.available_end)` 作硬边界，因此延后 `available_end` 直接给该机器更多排产容量。
+
+    与 `run_sandbox` 同构：在 `sandbox_guard(scenario_id)` 语境内读**冻结**快照、`model_copy`
+    出放大窗口的变体、跑确定性 `generate_schedule` + `validate`，与 ACTIVE 的总拖期对比。
+    整个计算在沙箱隔离下进行（EVAL-204 的引擎级 DML 拦截同样覆盖本路径），不写任何生产数据。
+    """
+    resolved_weights = weights if weights is not None else ObjectiveWeights()
+    active_plan = require_any_active_plan(session)
+    active_candidate = load_plan_candidate(session, active_plan.plan_id)
+    scenario_id = f"SCN-{purpose.value}-{uuid.uuid4().hex[:10]}"
+
+    with sandbox_guard(scenario_id):
+        base_snapshot = load_sandbox_snapshot(
+            session, now=now, production_date=active_plan.production_date
+        )
+        variant = _with_scaled_machine_hours(base_snapshot, machine_id, hours_multiplier)
+        candidate = generate_schedule(variant)
+        validate(candidate, variant)
+
+    _, active_tardiness, _ = _plan_kpis(active_candidate, base_snapshot)
+    _, scen_tardiness, _ = _plan_kpis(candidate, variant)
+
+    log_event(
+        logger,
+        "CAPACITY_SANDBOX_RUN",
+        purpose=purpose.value,
+        machine_id=machine_id,
+        hours_multiplier=hours_multiplier,
+        tardiness_delta=scen_tardiness - active_tardiness,
+    )
+    del resolved_weights  # 产能推演只看拖期，不需要评分；保留参数以与 run_sandbox 对齐
+    return CapacitySandboxResult(
+        machine_id=machine_id,
+        hours_multiplier=hours_multiplier,
+        total_tardiness_minutes=scen_tardiness,
+        active_total_tardiness_minutes=active_tardiness,
+        total_tardiness_delta_minutes=scen_tardiness - active_tardiness,
+        feasibility=candidate.feasibility,
+    )
+
+
+@dataclass(frozen=True)
+class PromiseDateResult:
+    """可承诺交期报价的沙箱推演结果（任务 13.6，R17.1–R17.3）。
+
+    - `feasible`：这笔询价能否被排进当前计划（新订单的全部作业都排上了）。
+    - `earliest_completion`：新订单最早可承诺完工时刻（其全部作业的最晚 end_time）；不可行为 None。
+    - `desired_date_met`：`earliest_completion <= desired_due_date`（可行时才有意义）。
+    - `deferred_order_ids`：因插入这笔询价而变得迟交的**既有**订单（相对 ACTIVE 新增的迟交）。
+    - `total_tardiness_delta_minutes`：全局总拖期相对 ACTIVE 的变化（正=变差）。
+    - `constraint_reason`：不可行 / 无法满足期望交期时的具体约束原因（供报价话术）。
+    """
+
+    feasible: bool
+    earliest_completion: datetime | None
+    desired_due_date: datetime
+    desired_date_met: bool
+    deferred_order_ids: tuple[str, ...]
+    total_tardiness_minutes: int
+    active_total_tardiness_minutes: int
+    total_tardiness_delta_minutes: int
+    constraint_reason: str | None = None
+
+
+def run_promise_date_sandbox(
+    session: Session,
+    *,
+    product_id: str,
+    quantity: float,
+    desired_due_date: datetime,
+    now: datetime,
+    purpose: SandboxPurpose = SandboxPurpose.PROMISE_DATE,
+) -> PromiseDateResult:
+    """把一笔假想询价（product + quantity + 期望交期）插入沙箱，实算最早可承诺完工日（任务 13.6）。
+
+    **只读生产数据、无 LLM、不改动 ACTIVE 计划或 `input_snapshot_version`（R17.4）。** 无 ACTIVE
+    计划 → 抛。
+
+    做法：在 `sandbox_guard` 语境内读冻结快照，`apply_mutations` 追加一个 `ADD_OR_CHANGE_ORDER`
+    新订单（`order_id=None` → 内核生成 `SANDBOX-ORD-N`，期望交期作为其 `due_date`），跑确定性
+    `generate_schedule`。新订单的全部已排产作业的最晚 `end_time` 即**最早可承诺完工时刻**；若其任一
+    作业进了 `unschedulable_jobs`，则该询价不可行，给出约束原因。deferred 与总拖期变化相对 ACTIVE
+    计算，供「这笔单会推迟哪些既有订单」的报价话术（R17.2）。
+    """
+    active_plan = require_any_active_plan(session)
+    active_candidate = load_plan_candidate(session, active_plan.plan_id)
+    scenario_id = f"SCN-{purpose.value}-{uuid.uuid4().hex[:10]}"
+
+    # 构造「新增订单」变更：用一个轻量对象承载 apply_mutations 需要的 getattr 字段（内核按 kind
+    # 结构化分派，不 isinstance 到具体类型，因此这里不必 import 工具契约）。
+    quote_mutation = _QuoteOrderMutation(
+        product_id=product_id,
+        quantity=quantity,
+        due_date=desired_due_date.date(),
+    )
+
+    with sandbox_guard(scenario_id):
+        base_snapshot = load_sandbox_snapshot(
+            session, now=now, production_date=active_plan.production_date
+        )
+        # 询价的产品必须存在——否则排产器展开工序时会 KeyError。提前校验并抛
+        # `ScenarioMutationError`（API 翻译成 SCENARIO_INVALID_MUTATION / 422），而不是让一个
+        # 指向不存在产品的报价以 500 冒出去。
+        if product_id not in base_snapshot.products_by_id():
+            raise ScenarioMutationError(f"产品 {product_id} 不存在，无法报价。")
+        # 追加订单前记下既有订单数，据此推出内核将分配的新订单 id（SANDBOX-ORD-{n+1}）。
+        new_order_id = f"SANDBOX-ORD-{len(base_snapshot.orders) + 1}"
+        variant = apply_mutations(base_snapshot, [quote_mutation])
+        candidate = generate_schedule(variant)
+        validate(candidate, variant)
+
+    # 新订单的作业完工时刻（最晚 end_time）——最早可承诺完工日。
+    quote_job_ends = [
+        sj.end_time for sj in candidate.scheduled_jobs if sj.order_id == new_order_id
+    ]
+    quote_unschedulable = [
+        uj for uj in candidate.unschedulable_jobs if uj.order_id == new_order_id
+    ]
+    feasible = bool(quote_job_ends) and not quote_unschedulable
+    earliest_completion = max(quote_job_ends) if quote_job_ends else None
+
+    _, active_tardiness, _ = _plan_kpis(active_candidate, base_snapshot)
+    _, scen_tardiness, _ = _plan_kpis(candidate, variant)
+
+    # 被推迟的既有订单：场景下迟交、而 ACTIVE 下不迟交的订单（不含这笔新询价本身）。
+    active_late = set(_delayed_order_ids(active_candidate, base_snapshot))
+    scen_late = set(_delayed_order_ids(candidate, variant))
+    deferred = tuple(sorted((scen_late - active_late) - {new_order_id}))
+
+    desired_met = feasible and earliest_completion is not None and (
+        earliest_completion <= desired_due_date
+    )
+    reason: str | None = None
+    if not feasible:
+        reason = (
+            f"这笔询价（产品 {product_id}，数量 {quantity}）在当前产能下无法排入："
+            f"其 {len(quote_unschedulable)} 道工序找不到可行的机器/工人/时间槽。"
+        )
+    elif not desired_met and earliest_completion is not None:
+        reason = (
+            f"期望交期 {desired_due_date.date().isoformat()} 无法满足；"
+            f"在不违反硬约束的前提下，最早可承诺完工时刻为 "
+            f"{earliest_completion.isoformat()}。"
+        )
+
+    log_event(
+        logger,
+        "PROMISE_DATE_SANDBOX_RUN",
+        purpose=purpose.value,
+        product_id=product_id,
+        feasible=feasible,
+        desired_met=desired_met,
+        deferred_count=len(deferred),
+        tardiness_delta=scen_tardiness - active_tardiness,
+    )
+    return PromiseDateResult(
+        feasible=feasible,
+        earliest_completion=earliest_completion,
+        desired_due_date=desired_due_date,
+        desired_date_met=desired_met,
+        deferred_order_ids=deferred,
+        total_tardiness_minutes=scen_tardiness,
+        active_total_tardiness_minutes=active_tardiness,
+        total_tardiness_delta_minutes=scen_tardiness - active_tardiness,
+        constraint_reason=reason,
+    )
+
+
+@dataclass(frozen=True)
+class _QuoteOrderMutation:
+    """`apply_mutations` 用的「新增订单」变更载体（kind=ADD_OR_CHANGE_ORDER，order_id=None）。
+
+    内核 `apply_mutations` 按 `kind` 字段结构化分派并用 `getattr` 取字段，因此这里用一个轻量
+    frozen dataclass 承载即可，不必 import `app.tools.models`（服务层可 import，但没有必要为
+    一次内部构造引入契约依赖）。`order_id=None` 触发内核的「新增订单」分支。
+    """
+
+    product_id: str
+    quantity: float
+    due_date: date
+    kind: str = "ADD_OR_CHANGE_ORDER"
+    order_id: str | None = None
+    priority: str | None = None
+
+
+def _with_scaled_machine_hours(
+    snapshot: DomainSnapshot, machine_id: str, multiplier: float
+) -> DomainSnapshot:
+    """返回一份把 `machine_id` 的可用窗口时长乘以 `multiplier` 的冻结快照副本（延后 end）。
+
+    指向不存在的机器时原样返回（调用方已从 ACTIVE 计划的作业里取真实 machine_id，不会走到）。
+    用 `model_copy(deep=True, update=...)`——原快照不受影响（沙箱第 1 层隔离）。
+    """
+    machines = list(snapshot.machines)
+    changed = False
+    new_machines: list[Machine] = []
+    for m in machines:
+        if m.machine_id == machine_id:
+            window = m.available_end - m.available_start
+            extra = timedelta(seconds=window.total_seconds() * (multiplier - 1.0))
+            new_machines.append(
+                m.model_copy(update={"available_end": m.available_end + extra})
+            )
+            changed = True
+        else:
+            new_machines.append(m)
+    if not changed:
+        return snapshot
+    return snapshot.model_copy(deep=True, update={"machines": tuple(new_machines)})
 
 
 def adopt_scenario(

@@ -65,6 +65,33 @@ export interface AdoptResult {
   readonly status: string;
 }
 
+/**
+ * 自然语言 What-if 翻译结果（P1，任务 13.1，R16.1）。
+ *
+ * `mutations` 是翻译得到的**任务 8.3 结构化载荷**，**未执行**——供规划员确认后原样交
+ * `runScenario` 执行。`injection_suspected` 供 UI 提示（不阻断，R16.10）。
+ */
+export interface TranslateResult {
+  readonly mutations: readonly ScenarioMutation[];
+  readonly supported_kinds: readonly string[];
+  readonly injection_suspected: boolean;
+  readonly source_query_echo: string;
+}
+
+/**
+ * 把一句自然语言 What-if 提问翻译成结构化场景变更（P1，任务 13.1）。**不执行**——返回结果
+ * 供确认后再调用 `runScenario`。写端点，需已登录会话。
+ *
+ * 后端可能返回 `UNSUPPORTED_SCENARIO`（422）或 `LLM_UNAVAILABLE_USE_STRUCTURED_FORM`（503，
+ * 降级模式）——两者都以 `ApiError` 抛出，调用方据 `code` 分别提示。
+ */
+export function translateScenario(query: string): Promise<TranslateResult> {
+  return apiFetch<TranslateResult>('/scenarios/translate', {
+    method: 'POST',
+    body: JSON.stringify({ query }),
+  });
+}
+
 /** 运行一个结构化 What-if 推演（R16.7）。写端点，需已登录会话。 */
 export function runScenario(mutations: readonly ScenarioMutation[]): Promise<ScenarioResult> {
   return apiFetch<ScenarioResult>('/scenarios/run', {
