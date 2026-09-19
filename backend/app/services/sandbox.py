@@ -32,7 +32,8 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
+from enum import StrEnum
 
 from sqlalchemy.orm import Session
 
@@ -40,7 +41,7 @@ from app.core.explain import NoTradeoff, Tradeoff
 from app.core.sandbox import apply_mutations
 from app.core.scheduler import PlanCandidate, generate_schedule
 from app.core.scoring import ObjectiveBreakdown, ObjectiveWeights, score
-from app.core.snapshot import DomainSnapshot
+from app.core.snapshot import DomainSnapshot, Machine
 from app.core.validation import validate
 from app.db import models as orm
 from app.db.sandbox_guard import sandbox_guard
@@ -66,12 +67,32 @@ logger = logging.getLogger(__name__)
 SCENARIO_ADOPTION_ORIGIN = "SCENARIO_ADOPTION"
 PENDING_STATUS = "PENDING_APPROVAL"
 
+
+class SandboxPurpose(StrEnum):
+    """沙箱推演的用途（design.md §3.7 的 `run_sandbox(purpose=...)`）。
+
+    - `WHATIF`：结构化 What-if 推演（任务 8.3）。
+    - `BOTTLENECK`：产能洞察——机器可用工时 +20% 时 `total_tardiness_minutes` 的变化（任务 13.5）。
+    - `PROMISE_DATE`：可承诺交期报价——加一个假想订单看最早可完工日（任务 13.6）。
+
+    全部走同一套沙箱隔离（`sandbox_guard` + 冻结快照 + 确定性内核），只读生产数据、无 LLM。
+    `purpose` 只进日志与审计，用于区分三类沙箱调用；不改变隔离语义。
+    """
+
+    WHATIF = "WHATIF"
+    BOTTLENECK = "BOTTLENECK"
+    PROMISE_DATE = "PROMISE_DATE"
+
+
 __all__ = [
+    "CapacitySandboxResult",
+    "SandboxPurpose",
     "ScenarioNotFoundError",
     "ScenarioStore",
     "SandboxResult",
     "adopt_scenario",
     "build_counterfactual",
+    "run_capacity_sandbox",
     "run_sandbox",
 ]
 
@@ -208,6 +229,104 @@ def run_sandbox(
         new_unschedulable_jobs=new_unschedulable,
         delayed_order_ids=delayed,
     )
+
+
+@dataclass(frozen=True)
+class CapacitySandboxResult:
+    """机器可用工时 +X% 的沙箱推演结果（任务 13.5，R15.2）。
+
+    `total_tardiness_minutes` 是 +X% 场景下的总拖期；`active_total_tardiness_minutes` 是当前
+    `ACTIVE` 计划的总拖期（同口径）；`total_tardiness_delta_minutes` = 前者 − 后者（负=改善）。
+    全部由确定性 `generate_schedule` 实算，非静态估算。
+    """
+
+    machine_id: str
+    hours_multiplier: float
+    total_tardiness_minutes: int
+    active_total_tardiness_minutes: int
+    total_tardiness_delta_minutes: int
+    feasibility: str
+
+
+def run_capacity_sandbox(
+    session: Session,
+    *,
+    machine_id: str,
+    hours_multiplier: float,
+    now: datetime,
+    purpose: SandboxPurpose = SandboxPurpose.BOTTLENECK,
+    weights: ObjectiveWeights | None = None,
+) -> CapacitySandboxResult:
+    """在沙箱里把某台机器的可用工时按 `hours_multiplier` 放大，实算 `total_tardiness_minutes`
+    的变化（任务 13.5，R15.2）。**只读生产数据、无 LLM。** 无 ACTIVE 计划 → 抛。
+
+    「+20% 工时」建模为把该机器的可用窗口 `[available_start, available_end)` 的**时长**乘以
+    `hours_multiplier`（延后 `available_end`）——`Scheduling_Core` 用 `min(worker.shift_end,
+    machine.available_end)` 作硬边界，因此延后 `available_end` 直接给该机器更多排产容量。
+
+    与 `run_sandbox` 同构：在 `sandbox_guard(scenario_id)` 语境内读**冻结**快照、`model_copy`
+    出放大窗口的变体、跑确定性 `generate_schedule` + `validate`，与 ACTIVE 的总拖期对比。
+    整个计算在沙箱隔离下进行（EVAL-204 的引擎级 DML 拦截同样覆盖本路径），不写任何生产数据。
+    """
+    resolved_weights = weights if weights is not None else ObjectiveWeights()
+    active_plan = require_any_active_plan(session)
+    active_candidate = load_plan_candidate(session, active_plan.plan_id)
+    scenario_id = f"SCN-{purpose.value}-{uuid.uuid4().hex[:10]}"
+
+    with sandbox_guard(scenario_id):
+        base_snapshot = load_sandbox_snapshot(
+            session, now=now, production_date=active_plan.production_date
+        )
+        variant = _with_scaled_machine_hours(base_snapshot, machine_id, hours_multiplier)
+        candidate = generate_schedule(variant)
+        validate(candidate, variant)
+
+    _, active_tardiness, _ = _plan_kpis(active_candidate, base_snapshot)
+    _, scen_tardiness, _ = _plan_kpis(candidate, variant)
+
+    log_event(
+        logger,
+        "CAPACITY_SANDBOX_RUN",
+        purpose=purpose.value,
+        machine_id=machine_id,
+        hours_multiplier=hours_multiplier,
+        tardiness_delta=scen_tardiness - active_tardiness,
+    )
+    del resolved_weights  # 产能推演只看拖期，不需要评分；保留参数以与 run_sandbox 对齐
+    return CapacitySandboxResult(
+        machine_id=machine_id,
+        hours_multiplier=hours_multiplier,
+        total_tardiness_minutes=scen_tardiness,
+        active_total_tardiness_minutes=active_tardiness,
+        total_tardiness_delta_minutes=scen_tardiness - active_tardiness,
+        feasibility=candidate.feasibility,
+    )
+
+
+def _with_scaled_machine_hours(
+    snapshot: DomainSnapshot, machine_id: str, multiplier: float
+) -> DomainSnapshot:
+    """返回一份把 `machine_id` 的可用窗口时长乘以 `multiplier` 的冻结快照副本（延后 end）。
+
+    指向不存在的机器时原样返回（调用方已从 ACTIVE 计划的作业里取真实 machine_id，不会走到）。
+    用 `model_copy(deep=True, update=...)`——原快照不受影响（沙箱第 1 层隔离）。
+    """
+    machines = list(snapshot.machines)
+    changed = False
+    new_machines: list[Machine] = []
+    for m in machines:
+        if m.machine_id == machine_id:
+            window = m.available_end - m.available_start
+            extra = timedelta(seconds=window.total_seconds() * (multiplier - 1.0))
+            new_machines.append(
+                m.model_copy(update={"available_end": m.available_end + extra})
+            )
+            changed = True
+        else:
+            new_machines.append(m)
+    if not changed:
+        return snapshot
+    return snapshot.model_copy(deep=True, update={"machines": tuple(new_machines)})
 
 
 def adopt_scenario(
