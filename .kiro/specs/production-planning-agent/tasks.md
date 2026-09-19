@@ -477,7 +477,7 @@
 
 - [ ] 8. P0-F 风险与沙箱（**不依赖 LLM**：叙述走模板，What-if 走结构化表单）
 
-  - [~] 8.1 实现 `Scenario_Sandbox` 的两层隔离及其阻断证明测试
+  - [x] 8.1 实现 `Scenario_Sandbox` 的两层隔离及其阻断证明测试
     - **第 1 层 冻结的内存副本**：`load_sandbox_snapshot` 在单个只读事务读取后 `expunge_all()`，返回任务 2.1 的 `frozen=True` 快照；变体经 `model_copy(deep=True, update=mutations)`。ORM 对象在沙箱内不存在，因此没有 `session.add(obj)` 可写的对象。配套结构性事实是内核不 import `sqlalchemy`（任务 1.8 已断言）
     - **第 2 层 引擎事件级 DML 拦截**：`db/sandbox_guard.py` 用 `before_cursor_execute`，在 `SANDBOX_ACTIVE` 为真且 `AUDIT_BYPASS` 为假时匹配 `^(INSERT|UPDATE|DELETE|REPLACE|CREATE|DROP|ALTER)` 即抛 `SandboxWriteBlocked`
     - **原设计的中间层（`SandboxSession.__getattr__` 拦截 `add` / `delete` / `merge` / `commit` / `flush`）不实现**：它与第 1、2 层都重叠，是三层里唯一不增加覆盖面的一层
@@ -487,7 +487,7 @@
     - _Requirements: R16.4, R16.5, R16.6_
     - _Design: Components §3.7、ADR-009、Testing Strategy §1_
 
-  - [~] 8.2 为沙箱隔离编写属性测试
+  - [x] 8.2 为沙箱隔离编写属性测试
     - **Property 21: 沙箱隔离**
     - **Validates: Requirements 16.4, 16.5, 16.6, 17.4**
     - `max_examples=100`。对任意场景变更序列（含刻意在沙箱路径中发起写操作的用例）断言执行前后 `ACTIVE` 计划的 `plan_id`、内容哈希与 `input_snapshot_version` 均不变、生产数据表行内容不变；任何写尝试以 `SandboxWriteBlocked` 终止模拟并留审计

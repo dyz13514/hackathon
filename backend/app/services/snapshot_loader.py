@@ -276,6 +276,40 @@ def load_snapshot(
     return require_referential_integrity(snapshot)
 
 
+def load_sandbox_snapshot(
+    session: Session,
+    *,
+    now: datetime,
+    production_date: date | None = None,
+    snapshot_version: int | None = None,
+) -> DomainSnapshot:
+    """沙箱第 1 层隔离的入口（任务 8.1，design.md §3.7、ADR-009）。
+
+    委派给 `load_snapshot`——两者读同一批行、走同一个「单只读事务 → `expunge_all()` →
+    `frozen=True` 快照」的路径，因此**沙箱快照与正式快照逐字段同构**，没有第二套加载逻辑
+    会漂移。分出这个命名入口是为了让沙箱调用点在代码里自解释：读到「`load_sandbox_snapshot`」
+    就知道这份快照将喂给沙箱推演，而它天然满足 §3.7 第 1 层的两个条件——
+
+    1. **没有 ORM 对象可写**：`load_snapshot` 读完即 `expunge_all()`，快照里的每个字段都是
+       从行拷出的纯值，不再连着 `Session`；因此沙箱里根本不存在 `session.add(obj)` 能作用的
+       对象（第 1 层「写入几乎不可达」）。
+    2. **快照不可变**：`DomainSnapshot` 及其全部嵌套模型 `frozen=True`，赋值即抛
+       `ValidationError`；沙箱的变体经 `snapshot.model_copy(deep=True, update=...)` 得到一份
+       新的冻结副本，绝不就地改这一份。
+
+    第 2 层（引擎级 DML 拦截）由 `app/db/sandbox_guard.py` 在 `sandbox_guard(...)` 语境内
+    提供——它是「万一某次改动让沙箱路径上重新出现了真实会话」时的检测网。两层的分工见 ADR-009。
+
+    参数语义与 `load_snapshot` 完全一致（`now` 必填、干净会话、引用完整性预检）。
+    """
+    return load_snapshot(
+        session,
+        now=now,
+        production_date=production_date,
+        snapshot_version=snapshot_version,
+    )
+
+
 # --------------------------------------------------------------------------
 # 行 → 值对象
 # --------------------------------------------------------------------------

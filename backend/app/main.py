@@ -22,6 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app import __version__
 from app.api import api_router, ops_router
 from app.api.deps import install_session_auth
+from app.db import sandbox_guard as _sandbox_guard  # noqa: F401
 from app.db.audit import set_audit_engine
 from app.db.session import create_db_engine, create_session_factory
 from app.llm.adapter import BedrockAdapter
