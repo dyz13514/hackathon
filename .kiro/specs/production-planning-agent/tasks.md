@@ -541,7 +541,7 @@
   - 确认重排周期 token 消耗 ≤14,000
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 10. P0-G 电子表格摄取（P0 LLM 路线之三：列映射）
+- [x] 10. P0-G 电子表格摄取（P0 LLM 路线之三：列映射）
 
   - [x] 10.1 实现 `Spreadsheet_Parser` 的确定性安全闸门与解析
     - 拒绝 `.xlsm` 与含 `vbaProject.bin` → `MACRO_NOT_ALLOWED`；>5 MB → `FILE_TOO_LARGE`；>2,000 行 → `TOO_MANY_ROWS`；扩展名与魔数不匹配 → `UNSUPPORTED_FILE_TYPE`
@@ -550,7 +550,7 @@
     - _Requirements: R2.1, R2.10, R23.7_
     - _Design: Components §4.2_
 
-  - [~] 10.2 实现有界预览构造与固化输入集
+  - [x] 10.2 实现有界预览构造与固化输入集
     - 表头候选前 8 个非空行（每行 ≤40 列、每单元格 ≤40 字符，≈400 token）；列画像每列 `raw_header` / `inferred_kind` / `null_ratio` / ≤3 个去重样例值（≈600）；文件元信息（≈40）+ 目标 schema 字段说明（≈250 静态）
     - **合计 ≈1,300 token，绝不发送全部数据行**：2,000 行与 50 行的文件送进 LLM 的 token 量必须相同
     - 样例值全部经 `wrap_untrusted("upload.cell")` 并过 `scan_injection`（EVAL-202）
@@ -565,7 +565,7 @@
     - _Requirements: R2.4, R2.5_
     - _Design: Components §2.4、Testing Strategy §3_
 
-  - [~] 10.4 实现 `Ingestion_Agent` 与映射提案
+  - [x] 10.4 实现 `Ingestion_Agent` 与映射提案
     - ReAct ≤6 步（`budget_scope = None`，靠步数上限与每日 USD 上限约束），序列 `read_uploaded_file_preview → propose_column_mapping → validate_mapping`（校验失败可回到映射修正）
     - 识别 `entity_type ∈ {orders, materials, machines, workers, products}` 并给 `confidence`
     - 每字段附 `source_column`、`confidence`、≤3 个 `sample_values`；必填字段 `confidence < 0.85` → `NEEDS_CONFIRMATION` 且不落库；找不到候选列 → `MISSING_REQUIRED_FIELD` 并列出字段名与业务含义
@@ -575,7 +575,7 @@
     - _Requirements: R2.2, R2.3, R2.6, R2.7, R2.8, R22.7_
     - _Design: Components §4.2、Architecture §3.1_
 
-  - [~] 10.5 实现人工确认界面与冲突/重复处置
+  - [x] 10.5 实现人工确认界面与冲突/重复处置
     - `GET /api/imports/{upload_id}/proposal`、`POST /api/imports/{upload_id}/confirm`、`GET /api/imports`
     - 逐项展示待确认映射、`confidence`、样例值，提供「确认 / 改选其他列 / 标记为不导入」
     - 与 `MANUAL_ENTRY` 记录冲突时，写入前列出冲突项并要求逐项选择保留哪一侧

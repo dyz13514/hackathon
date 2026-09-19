@@ -135,12 +135,24 @@ def get_proposal(request: Request, upload_id: str) -> JSONResponse:
         upload = _store(request).get(upload_id)
     except KeyError:
         return _upload_not_found(upload_id)
-    proposal = ingestion.propose_mapping(upload.parsed)
+    # 列映射经真实 Ingestion_Agent ReAct 路径（STUB/REPLAY，不触网）；STUB 无 cassette 时诚实
+    # 回退确定性提议（run_ingestion_mapping 内部处理，返回 from_agent 标注）。惰性 import
+    # 打破 app.api ← imports ← ingestion_agent_run ← orchestrator ← budget ← app.api.admin 的环。
+    from app.services.ingestion_agent_run import run_ingestion_mapping
+
+    run = run_ingestion_mapping(
+        parsed=upload.parsed,
+        upload_id=upload_id,
+        adapter=request.app.state.llm_adapter,
+    )
+    proposal = run.proposed_mapping
     preview = build_preview(upload.parsed)
     return JSONResponse(
         {
             "upload_id": upload_id,
             "proposal": proposal,
+            "agent_outcome": run.agent_outcome,
+            "from_agent": run.from_agent,
             "preview": {
                 "detected_header_row": preview.detected_header_row,
                 "total_rows": preview.total_rows,
@@ -205,8 +217,16 @@ def confirm_import(
             next_actions=[NextAction(action="fix_mapping", href="/import")],
         )
 
+    from app.services.ingestion_agent_run import run_ingestion_mapping
+
     factory = request.app.state.session_factory
-    proposal = ingestion.propose_mapping(upload.parsed)
+    # 持久化 Agent 的列映射提案到 import_batches.proposed_mapping（spec 10.4/10.6）。
+    run = run_ingestion_mapping(
+        parsed=upload.parsed,
+        upload_id=upload_id,
+        adapter=request.app.state.llm_adapter,
+        entity_type_hint=body.entity_type,
+    )
     with factory() as db:
         result = ingestion.commit_batch(
             db,
@@ -214,7 +234,7 @@ def confirm_import(
             accepted=accepted,
             file_name=upload.filename,
             file_checksum=upload.checksum,
-            proposed_mapping=proposal,
+            proposed_mapping=run.proposed_mapping,
         )
     # 数据变更后触发风险扫描（R14.1 第 2 类），尽力而为、独立会话。
     trigger_scan(request.app.state.session_factory, trigger="DATA_CHANGE")

@@ -20,55 +20,101 @@
 
 from __future__ import annotations
 
-from typing import cast
+from typing import Protocol, cast
 
-from sqlalchemy.orm import Session
-
+from app.services import ingestion as ingestion_svc
+from app.services.spreadsheet import ParsedFile, build_preview
 from app.tools import models as m
 from app.tools.registry import ToolContext
 
 
-def _session(ctx: ToolContext) -> Session:
+class IngestionToolSession(Protocol):
+    """`ctx.session` 在列映射 ReAct 路径上携带的最小接口。
+
+    摄取工具需要的不是 DB 会话，而是**当前上传的已解析文件**（预览/校验都在它上面跑）。
+    `ToolContext.session` 刻意是 `Any`（registry 不硬依赖类型），因此这里用一个 Protocol 声明
+    handler 期望的形状：一个能按 `upload_id` 取 `ParsedFile` 的对象。列映射编排服务
+    （`app/services/ingestion_agent_run.py`）注入一个满足它的实例。
+    """
+
+    def parsed_for(self, upload_id: str) -> ParsedFile: ...
+
+
+def _ingestion_session(ctx: ToolContext) -> IngestionToolSession:
     if ctx.session is None:
-        raise RuntimeError("摄取 handler 需要 ctx.session；registry 装配时必须注入会话")
-    # `ToolContext.session` 刻意是 `Any`（registry 不硬依赖 ORM 类型）；handler 知道注入的
-    # 是 `Session`，在此显式收窄，避免 `warn_return_any` 泄漏一个 `Any`。
-    return cast(Session, ctx.session)
+        raise RuntimeError("摄取 handler 需要 ctx.session（IngestionToolSession）；装配时注入")
+    return cast(IngestionToolSession, ctx.session)
 
 
 def read_uploaded_file_preview(
     args: m.ReadPreviewIn, ctx: ToolContext
 ) -> m.FilePreviewOut:
-    """读上传文件的前若干行出预览（R2）。委派给 §2 的文件预览服务。
+    """读上传文件的前若干行出预览（R2.2）。确定性——不调 LLM。
 
-    样本值是 untrusted 文本（每个 ≤40 字符、每列 ≤3 个），装配提示词时须被 `<untrusted>`
-    包裹（R23.1）——契约已把上限钉在字段约束里。预览服务随 §2 落地。
+    样本值是 untrusted 文本（每个 ≤40 字符、每列 ≤3 个），由 `build_preview` 保证上界并交由
+    装配层包裹（R23.1）。委派给确定性 `Spreadsheet_Parser.build_preview`（任务 10.2）。
     """
-    raise NotImplementedError(
-        "read_uploaded_file_preview 委派 §2 的文件预览服务；契约已定义"
+    parsed = _ingestion_session(ctx).parsed_for(args.upload_id)
+    preview = build_preview(parsed, max_sample_rows=args.max_sample_rows)
+    return m.FilePreviewOut(
+        upload_id=args.upload_id,
+        detected_header_row=preview.detected_header_row,
+        total_rows=preview.total_rows,
+        columns=[
+            m.ColumnPreview(
+                index=c.index,
+                raw_header=c.raw_header,
+                inferred_kind=c.inferred_kind,  # type: ignore[arg-type]
+                null_ratio=c.null_ratio,
+                sample_values=c.sample_values,
+            )
+            for c in preview.columns
+        ],
+        formula_columns=preview.formula_columns,
+        preview_tokens=preview.preview_tokens,
     )
 
 
 def propose_column_mapping(
     args: m.ProposeColumnMappingIn, ctx: ToolContext
 ) -> m.ColumnMappingProposal:
-    """LLM 列映射提议（R2）。委派给 §2 的映射提议服务（唯一调 LLM 的摄取工具）。
+    """列映射提议（R2.6/2.7）。
 
-    低置信字段标 `NEEDS_CONFIRMATION`、缺必填字段进 `missing_required_fields`、归一化提议
-    显式给出 `conversion_factor`（R2.5）——绝不静默猜测（K-07）。提议服务随 §2 落地。
+    这是列映射路径里唯一「需要语言理解」的一步——在真实/录制 LLM 路径下由 `Ingestion_Agent`
+    产出提案（Agent 的 `final`）。作为 ReAct 循环里的**工具**，本 handler 提供一份确定性的
+    候选提议（表头别名 + 归一探测）供 Agent 参考/采纳：低置信字段标 `NEEDS_CONFIRMATION`、
+    缺必填字段进 `missing_required_fields`、归一显式给 `conversion_factor`（R2.5）——绝不静默
+    猜测（K-07）。Agent 的最终提案仍须经确定性 `validate_mapping` 与人工确认闸门。
     """
-    raise NotImplementedError(
-        "propose_column_mapping 委派 §2 的 LLM 映射提议服务；契约已定义"
+    parsed = _ingestion_session(ctx).parsed_for(args.upload_id)
+    hint = args.entity_type_hint
+    proposal = ingestion_svc.propose_mapping(parsed, entity_type_hint=hint)
+    return m.ColumnMappingProposal(
+        entity_type=proposal["entity_type"],
+        entity_type_confidence=proposal["entity_type_confidence"],
+        field_mappings=[m.FieldMapping(**fm) for fm in proposal["field_mappings"]],
+        missing_required_fields=[
+            m.MissingField(**mf) for mf in proposal["missing_required_fields"]
+        ],
+        normalisations=[
+            m.NormalisationProposal(**n) for n in proposal["normalisations"]
+        ],
     )
 
 
 def validate_mapping(args: m.ValidateMappingIn, ctx: ToolContext) -> m.ValidateMappingOut:
-    """**确定性**校验一个映射（R2.8）：拿它在整份文件上试跑解析，数出各类失败。
+    """**确定性**校验一个映射（R2.8）：拿它在整份文件上试跑解析，数出各类失败。不调 LLM。
 
-    不调 LLM——这一步可判定（见模块 docstring）。委派给 §2 的确定性解析器：逐行套用
-    `mapping` 的字段映射与归一化，把解析不了的单元格收进 `unparsed_cells`（含行号、列名、
-    原始值），并计 `type_error_count` / `normalisation_failure_count`。解析器随 §2 落地。
+    委派给确定性 `ingestion.validate_mapping`：逐行套用字段映射与归一化，把解析不了的单元格
+    收进 `unparsed_cells`（含行号、列名、原始值），并计 `type_error_count` /
+    `normalisation_failure_count`。这条是 K-07「绝不静默丢弃」的确定性一半。
     """
-    raise NotImplementedError(
-        "validate_mapping 委派 §2 的确定性解析器（不调 LLM，R2.8）；契约已定义"
+    parsed = _ingestion_session(ctx).parsed_for(args.upload_id)
+    outcome = ingestion_svc.validate_mapping(parsed, args.mapping.model_dump(mode="python"))
+    return m.ValidateMappingOut(
+        upload_id=args.upload_id,
+        parsed_row_count=outcome.parsed_row_count,
+        unparsed_cells=[m.UnparsedCell(**c) for c in outcome.unparsed_cells],
+        type_error_count=outcome.type_error_count,
+        normalisation_failure_count=outcome.normalisation_failure_count,
     )

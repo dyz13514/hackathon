@@ -20,7 +20,7 @@ export const ROUTES: readonly RouteDescriptor[] = [
   { path: '/schedule', label: '排产甘特图', task: '2.12', implemented: true },
   { path: '/approval', label: '审批', task: '3.7', implemented: true },
   { path: '/traces', label: 'Trace 查看器', task: '5.12', implemented: true },
-  { path: '/import', label: '摄取与映射确认', task: '10.5', implemented: false },
+  { path: '/import', label: '摄取与映射确认', task: '10.5', implemented: true },
   { path: '/risks', label: '风险面板', task: '8.5', implemented: true },
   { path: '/whatif', label: 'What-if', task: '8.3', implemented: true },
   { path: '/preferences', label: '偏好规则管理', task: '11.x', implemented: false },
