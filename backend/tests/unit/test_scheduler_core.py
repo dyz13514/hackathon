@@ -45,6 +45,7 @@ from app.core.snapshot import (
     Material,
     Operation,
     Order,
+    PreferenceRule,
     Product,
     Worker,
 )
@@ -155,6 +156,7 @@ def _snapshot(
     machines: tuple[Machine, ...] = (),
     workers: tuple[Worker, ...] = (),
     materials: tuple[Material, ...] = (),
+    preference_rules: tuple[PreferenceRule, ...] = (),
 ) -> DomainSnapshot:
     return DomainSnapshot(
         snapshot_version=1,
@@ -166,7 +168,7 @@ def _snapshot(
         machines=machines or (_machine(),),
         workers=workers or (_worker(),),
         changeover_rules=(),
-        preference_rules=(),
+        preference_rules=preference_rules,
     )
 
 
@@ -496,25 +498,114 @@ def test_locked_but_unfrozen_job_makes_order_unschedulable() -> None:
 
 
 # --------------------------------------------------------------------------
-# 6. 桩：preference_delta 恒 0（任务 11.2 接入）
+# 6. preference_delta：命中的候选放置加正惩罚，未命中/空规则集为 0（任务 11.2）
 # --------------------------------------------------------------------------
 
 
-def test_preference_delta_is_zero_stub() -> None:
-    job = ProductionJob(
-        job_id="J",
-        order_id="O",
-        product_id="P",
+def _job(
+    *, order_id: str = "O", product_id: str = "P", skill: str = "CNC_OP"
+) -> ProductionJob:
+    return ProductionJob(
+        job_id=f"{order_id}-OP1",
+        order_id=order_id,
+        product_id=product_id,
         quantity=Decimal("1"),
         operation_sequence=1,
         predecessor_job_id=None,
         required_machine_type="CNC",
         required_capability=None,
-        required_worker_skill="CNC_OP",
+        required_worker_skill=skill,
         base_processing_time_per_unit=Decimal("1"),
         setup_time=0,
     )
-    assert preference_delta(job, _machine(), _worker(), ()) == Decimal("0")
+
+
+def _pref(rule_id: str, structured_form: dict[str, object]) -> PreferenceRule:
+    return PreferenceRule(rule_id=rule_id, human_text=rule_id, structured_form=structured_form)
+
+
+def test_preference_delta_zero_for_empty_rules() -> None:
+    """空规则集 → 0（无偏好时排产与接入前逐字段相同）。"""
+    assert preference_delta(_job(), _machine(), _worker(), ()) == Decimal("0")
+
+
+def test_preference_delta_positive_on_matching_avoid_order() -> None:
+    """AVOID_MACHINE_FOR_ORDER 命中当前放置 → 加 weight_delta × 60（分钟等价）。"""
+    rule = _pref(
+        "PR-1",
+        {
+            "kind": "AVOID_MACHINE_FOR_ORDER",
+            "order_id": "O",
+            "machine_id": "CNC-01",
+            "weight_delta": 2,
+        },
+    )
+    delta = preference_delta(_job(order_id="O"), _machine("CNC-01"), _worker(), (rule,))
+    assert delta == Decimal("120.0")  # 2 × 60
+
+
+def test_preference_delta_zero_when_machine_differs() -> None:
+    """把作业放在**别的**机器上 → 不命中 → 0（因此规则改变的是「选谁」，而非可行性）。"""
+    rule = _pref(
+        "PR-1",
+        {
+            "kind": "AVOID_MACHINE_FOR_ORDER",
+            "order_id": "O",
+            "machine_id": "CNC-01",
+            "weight_delta": 2,
+        },
+    )
+    off = preference_delta(_job(order_id="O"), _machine("CNC-02"), _worker(), (rule,))
+    assert off == Decimal("0")
+
+
+def test_preference_delta_never_negative() -> None:
+    """偏好惩罚恒 >= 0：即使多条规则命中，也只会让候选更不划算，绝不更划算（R18.8 方向性）。"""
+    rules = (
+        _pref(
+            "PR-1",
+            {"kind": "AVOID_MACHINE_FOR_ORDER", "order_id": "O", "machine_id": "CNC-01"},
+        ),
+        _pref(
+            "PR-2",
+            {"kind": "AVOID_MACHINE_FOR_PRODUCT", "product_id": "P", "machine_id": "CNC-01"},
+        ),
+    )
+    job = _job(order_id="O", product_id="P")
+    delta = preference_delta(job, _machine("CNC-01"), _worker(), rules)
+    assert delta >= Decimal("0")
+    assert delta == Decimal("120.0")  # 两条各 1 × 60
+
+
+def test_preference_rule_changes_machine_selection() -> None:
+    """EVAL-011 第一断言：一条 AVOID_MACHINE_FOR_ORDER 规则**改变排产结果**（换到别的机器）。
+
+    两台等价机器 CNC-01 / CNC-02，无偏好时主循环按 machine_id 升序 tie-break 选 CNC-01。加一条
+    「ORD-01 避开 CNC-01」的规则后，CNC-01 的候选 cost 被 `W_PREF × preference_delta` 抬高，
+    主循环改选 CNC-02——证明规则真的进了候选打分并改变了选型。可行性不变（两台都能干）。
+    """
+    product = _product(operations=(_op(1),))
+    order = _order("ORD-01")
+    machines = (_machine("CNC-01"), _machine("CNC-02"))
+
+    base = generate_schedule(_snapshot(orders=(order,), products=(product,), machines=machines))
+    assert base.scheduled_jobs[0].machine_id == "CNC-01"  # 无偏好：ID 最小者
+
+    rule = _pref(
+        "PR-1",
+        {
+            "kind": "AVOID_MACHINE_FOR_ORDER",
+            "order_id": "ORD-01",
+            "machine_id": "CNC-01",
+            "weight_delta": 10,
+        },
+    )
+    steered = generate_schedule(
+        _snapshot(orders=(order,), products=(product,), machines=machines, preference_rules=(rule,))
+    )
+    assert steered.scheduled_jobs[0].machine_id == "CNC-02"  # 偏好把它推到别的机器
+    # 可行性未被偏好改变：作业仍被排上（偏好只改选谁，不改能不能排）。
+    assert steered.feasibility == "FEASIBLE"
 
 
 def test_failure_value_object_carries_reason_and_context() -> None:

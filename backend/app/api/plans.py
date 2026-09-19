@@ -141,6 +141,23 @@ class ComponentScoreOut(BaseModel):
     weighted_contribution: float
 
 
+class PreferenceContributionOut(BaseModel):
+    """一条偏好规则对成型计划的惩罚贡献（R18.7、design.md §4.3）。
+
+    UI 据此标注「JOB-012 的排产受 PR-003 影响」：`violating_job_ids` 是被该规则命中的作业
+    （至多 10 条），`raw_value` = 命中数 × weight_delta，`weighted_contribution` = raw × PREF_UNIT。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    rule_id: str
+    human_text: str
+    kind: str = ""
+    violating_job_ids: list[str] = Field(default_factory=list)
+    raw_value: float = 0.0
+    weighted_contribution: float = 0.0
+
+
 class ObjectiveBreakdownOut(BaseModel):
     """目标评分拆解（R7.2、R7.3）。UI 逐条展示 7 个分量的原始值、权重、加权贡献。"""
 
@@ -148,8 +165,10 @@ class ObjectiveBreakdownOut(BaseModel):
 
     components: list[ComponentScoreOut]
     total_score: float
-    preference_contributions: list[str] = Field(default_factory=list)
-    weight_overrides_applied: list[str] = Field(default_factory=list)
+    #: 逐 `rule_id` 的偏好惩罚归因（R18.7）。无启用偏好或无命中时为空。
+    preference_contributions: list[PreferenceContributionOut] = Field(default_factory=list)
+    #: 生效的 `ADJUST_OBJECTIVE_WEIGHT` 覆盖（design.md §4.3），每条为一个 dict。
+    weight_overrides_applied: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class BaselineComparisonOut(BaseModel):
@@ -735,8 +754,20 @@ def _detail_from_result(result: PlanGenerationResult) -> PlanDetailOut:
             for c in result.objective_breakdown.components
         ],
         total_score=result.objective_breakdown.total_score,
-        preference_contributions=list(result.objective_breakdown.preference_contributions),
-        weight_overrides_applied=list(result.objective_breakdown.weight_overrides_applied),
+        preference_contributions=[
+            PreferenceContributionOut(
+                rule_id=c.rule_id,
+                human_text=c.human_text,
+                kind=c.kind,
+                violating_job_ids=list(c.violating_job_ids),
+                raw_value=c.raw_value,
+                weighted_contribution=c.weighted_contribution,
+            )
+            for c in result.objective_breakdown.preference_contributions
+        ],
+        weight_overrides_applied=[
+            dict(o) for o in result.objective_breakdown.weight_overrides_applied
+        ],
     )
     bc = result.baseline
     baseline = BaselineComparisonOut(
@@ -820,10 +851,14 @@ def _detail_from_db(db: Session, plan: orm.ProductionPlan) -> PlanDetailOut:
             components=components,
             total_score=float(_as_decimal(breakdown_row.total_score)),
             preference_contributions=[
-                str(x) for x in _as_list(breakdown_row.preference_contributions)
+                PreferenceContributionOut(**contribution)
+                for contribution in _as_list(breakdown_row.preference_contributions)
+                if isinstance(contribution, dict)
             ],
             weight_overrides_applied=[
-                str(x) for x in _as_list(breakdown_row.weight_overrides_applied)
+                override
+                for override in _as_list(breakdown_row.weight_overrides_applied)
+                if isinstance(override, dict)
             ],
         )
 

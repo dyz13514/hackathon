@@ -615,7 +615,7 @@
     - _Requirements: R18.3, R18.4, R18.5, R18.6, R18.8, R18.9, R18.10, R18.11, R18.12_
     - _Design: Components §4.3、ADR-008、Testing Strategy §1_
 
-  - [~] 11.2 把偏好规则接入排产打分与目标评分两处
+  - [x] 11.2 把偏好规则接入排产打分与目标评分两处
     - `PREF_UNIT = 60.0`（分钟等价基数：违反 1 条规则 ≈ 晚完工 60 分钟的代价），使惩罚与「晚完工」同量纲、规划员能理解「这条规则值多少分钟」
     - `preference_penalty(plan, rules)` 逐规则求和，每项带 `rule_id`、`human_text`、`violating_job_ids`（≤10）、`raw_value`、`weighted_contribution`；`AdjustObjectiveWeight` 不进 penalty，走 `weight_overrides_applied`
     - **同一函数在两处使用，两处都是 P0，这是「规则真的生效」的关键**：①排产时替换任务 2.4 的桩函数，`preference_delta(job, machine, worker, rules)` 直接加进候选 `cost`，因此规则**改变排产结果**（EVAL-011 第一断言）；②评分时对成型计划算总惩罚并输出 `contributions`，UI 标注「`JOB-012` 受 `PR-003` 影响」（EVAL-011 第二断言）
@@ -624,7 +624,7 @@
     - _Requirements: R7.6, R18.7, R18.9_
     - _Design: Components §4.3、§3.1.2、§3.3_
 
-  - [~] 11.3 为偏好规则的安全不变量编写属性测试
+  - [x] 11.3 为偏好规则的安全不变量编写属性测试
     - **Property 10: 偏好规则的安全不变量**
     - **Validates: Requirements 18.4, 18.8, 18.9, 18.10, 18.11**
     - `max_examples=100`。对任意规则集合（含任意权重取值）断言：(a) 该规则集下的计划仍零违反；(b) 全部规则 `enabled=false` 后的计划逐字段等于空规则集下的计划；(c) 不存在任何调用序列能使规则在无显式人工确认时变为 `enabled=true`，启用数恒 ≤ 20，`source_decision_ids` < 2 的候选恒被标 `LOW_EVIDENCE`

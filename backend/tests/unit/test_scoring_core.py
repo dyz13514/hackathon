@@ -343,17 +343,23 @@ def test_churn_ratio_counts_moved_when_only_start_time_changes() -> None:
 
 
 # --------------------------------------------------------------------------
-# 7. preference_penalty 先留空（任务 11.2）
+# 7. preference_penalty：无启用偏好时该分量为 0、归因为空（任务 11.2 的基线不变性）
 # --------------------------------------------------------------------------
 
 
-def test_preference_penalty_is_stubbed_zero_and_contributions_empty() -> None:
+def test_preference_penalty_zero_when_no_rules() -> None:
+    """快照无偏好规则 → preference_penalty 分量 raw_value == 0、contributions 为空。
+
+    这条守的是「无启用偏好时评分逐字段等于偏好接入前」（属性 10b）：偏好接线不改变没有规则
+    时的任何评分数值。四类规则真正生效的归因由 `test_preference_scoring.py` 覆盖。
+    """
     snap = _snapshot(orders=(_order("ORD-01"),))
     plan = _plan(_sched("ORD-01", start=DAY, end=datetime(2026, 3, 2, 9, 0)))
 
     breakdown = score(plan, snap, ObjectiveWeights())
     assert _component(breakdown, "preference_penalty").raw_value == 0.0
     assert breakdown.preference_contributions == ()
+    assert breakdown.weight_overrides_applied == ()
 
 
 # --------------------------------------------------------------------------

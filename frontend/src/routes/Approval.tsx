@@ -329,8 +329,25 @@ export function Approval() {
                 </table>
                 {breakdown.weight_overrides_applied.length > 0 && (
                   <p className="approval-overrides">
-                    已应用权重覆盖：{breakdown.weight_overrides_applied.join('、')}
+                    已应用权重覆盖：
+                    {breakdown.weight_overrides_applied
+                      .map((o) => `${o.component} ×${o.multiplier}（${o.rule_id}）`)
+                      .join('、')}
                   </p>
+                )}
+                {breakdown.preference_contributions.length > 0 && (
+                  <div className="approval-preferences">
+                    <h4>偏好规则影响（R18.7）</h4>
+                    <ul>
+                      {breakdown.preference_contributions.map((c) => (
+                        <li key={c.rule_id}>
+                          <span className="pref-rule-text">{c.human_text}</span>（{c.rule_id}）：
+                          影响作业 {c.violating_job_ids.join('、') || '—'}，惩罚{' '}
+                          {c.weighted_contribution} 分钟等价
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
               </>
             ) : (

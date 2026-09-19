@@ -478,7 +478,9 @@ def save_proposed_plan(
             components=[component.model_dump(mode="json") for component in breakdown.components],
             total_score=Decimal(str(breakdown.total_score)),
             weights=weights.model_dump(mode="json"),
-            preference_contributions=list(breakdown.preference_contributions),
+            preference_contributions=[
+                c.model_dump(mode="json") for c in breakdown.preference_contributions
+            ],
             weight_overrides_applied=list(breakdown.weight_overrides_applied),
         )
     )
@@ -567,7 +569,9 @@ def save_candidate(
             components=[c.model_dump(mode="json") for c in breakdown.components],
             total_score=Decimal(str(breakdown.total_score)),
             weights=ObjectiveWeights().model_dump(mode="json"),
-            preference_contributions=list(breakdown.preference_contributions),
+            preference_contributions=[
+                c.model_dump(mode="json") for c in breakdown.preference_contributions
+            ],
             weight_overrides_applied=list(breakdown.weight_overrides_applied),
         )
     )

@@ -38,11 +38,33 @@ export interface ComponentScore {
   readonly weighted_contribution: number;
 }
 
+/** 一条偏好规则对成型计划的惩罚贡献（R18.7、design.md §4.3）。 */
+export interface PreferenceContribution {
+  readonly rule_id: string;
+  readonly human_text: string;
+  readonly kind: string;
+  /** 被该规则命中的作业（至多 10 条）。 */
+  readonly violating_job_ids: readonly string[];
+  /** 命中数 × weight_delta。 */
+  readonly raw_value: number;
+  /** raw_value × PREF_UNIT（分钟等价）。 */
+  readonly weighted_contribution: number;
+}
+
+/** 一条生效的 ADJUST_OBJECTIVE_WEIGHT 覆盖（design.md §4.3）。 */
+export interface WeightOverride {
+  readonly rule_id: string;
+  readonly component: string;
+  readonly multiplier: number;
+  readonly original_weight: number;
+  readonly new_weight: number;
+}
+
 export interface ObjectiveBreakdown {
   readonly components: readonly ComponentScore[];
   readonly total_score: number;
-  readonly preference_contributions: readonly string[];
-  readonly weight_overrides_applied: readonly string[];
+  readonly preference_contributions: readonly PreferenceContribution[];
+  readonly weight_overrides_applied: readonly WeightOverride[];
 }
 
 export interface BaselineComparison {

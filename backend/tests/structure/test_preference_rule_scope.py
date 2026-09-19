@@ -20,15 +20,21 @@
    （`component="allow_shift_overflow"`），断言 Pydantic 判别联合拒绝它；再断言 4 类合法成员
    的 `weight_delta`/`multiplier` 边界（惩罚只能为正、倍数有界），使规则无法把「不可行」变成
    「可行」。
+
+3. **11.2 接线的调用路径不碰硬约束**——偏好接入软评分/排序后，再从行为侧证一遍：
+   `preference_delta` 恒 `>= 0`（只能让候选更不划算，不能更划算）；`apply_weight_overrides`
+   只写 6 个软目标权重，绝不产生指向任何硬约束键的覆盖（即便喂给它一条越界规则）。
 """
 
 from __future__ import annotations
 
 import inspect
+from decimal import Decimal
 
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
+from app.core import preference as pref
 from app.core.scheduling import is_feasible_slot
 from app.core.validation import validate
 from app.tools.models import PreferenceForm
@@ -141,3 +147,102 @@ def test_four_legal_forms_accepted() -> None:
     for form in legal:
         model = _FORM_ADAPTER.validate_python(form)
         assert model.kind == form["kind"]  # type: ignore[attr-defined]
+
+
+# --------------------------------------------------------------------------
+# 保障（行为侧，任务 11.2 接线）：偏好只加非负惩罚、只缩放软目标
+# --------------------------------------------------------------------------
+
+
+class _Rule:
+    """最小的 rule 替身：只有 `rule_id` 与 `structured_form`（`core.preference` 只读这两者）。"""
+
+    def __init__(self, rule_id: str, structured_form: dict[str, object]) -> None:
+        self.rule_id = rule_id
+        self.human_text = rule_id
+        self.structured_form = structured_form
+
+
+def test_preference_delta_signature_has_no_feasibility_inputs() -> None:
+    """`preference_delta` 只接受 (job, machine, worker, rules)——不接受时间线/槽位等可行性输入。
+
+    它算的是「这个放置新增多少偏好惩罚」，是候选**排序**的一项，绝不参与可行性判定。
+    """
+    params = _param_names(pref.preference_delta)
+    assert params == ["job", "machine", "worker", "rules"], params
+
+
+def test_preference_delta_is_never_negative_even_for_bogus_weight() -> None:
+    """即便一条越界规则带来非正/超大 `weight_delta`，`preference_delta` 也恒 `>= 0`（方向性）。
+
+    非负性是「偏好只能让候选更不划算、不能更划算」的数值保证——负惩罚会把不划算的选择变成
+    更优选择，等于用偏好改变了排序方向乃至可行性论证。用简单替身对象喂各种权重。
+    """
+
+    class _Job:
+        order_id = "O"
+        product_id = "P"
+        required_worker_skill = "welding"
+
+    class _Machine:
+        machine_id = "M"
+
+    class _Worker:
+        worker_id = "W2"
+
+    for bogus_weight in (-100, 0, 10, 10**9):
+        rule = _Rule(
+            "PR-x",
+            {
+                "kind": "AVOID_MACHINE_FOR_ORDER",
+                "order_id": "O",
+                "machine_id": "M",
+                "weight_delta": bogus_weight,
+            },
+        )
+        delta = pref.preference_delta(_Job(), _Machine(), _Worker(), (rule,))
+        assert delta >= Decimal("0"), f"weight_delta={bogus_weight} 时惩罚为负：{delta}"
+
+
+def test_apply_weight_overrides_only_touches_soft_keys() -> None:
+    """`apply_weight_overrides` 绝不产生指向硬约束键的覆盖，也不新增软目标之外的键。
+
+    即便喂进一条 `component` 指向硬约束开关的越界规则，它也被跳过（不生效、不进 applied），
+    因此权重 dict 的键集恒不变，硬约束键永远不会被偏好写入。
+    """
+    base = {
+        "late_order_count": 100.0,
+        "total_tardiness_minutes": 1.0,
+        "urgent_order_lateness": 300.0,
+        "churn_ratio": 500.0,
+        "machine_utilisation": -50.0,
+        "total_changeover_minutes": 0.5,
+        "preference_penalty": 1.0,
+    }
+    rules = (
+        _Rule(
+            "PR-legit",
+            {
+                "kind": "ADJUST_OBJECTIVE_WEIGHT",
+                "component": "total_tardiness_minutes",
+                "multiplier": 2.0,
+            },
+        ),
+        _Rule(
+            "PR-bogus",
+            {
+                "kind": "ADJUST_OBJECTIVE_WEIGHT",
+                "component": "allow_shift_overflow",
+                "multiplier": 2.0,
+            },
+        ),
+    )
+    result, applied = pref.apply_weight_overrides(base, rules)
+
+    # 键集不变：没有任何硬约束键被引入。
+    assert set(result) == set(base)
+    # 合法软目标覆盖生效，越界规则被跳过（只 1 条 applied）。
+    assert [o["component"] for o in applied] == ["total_tardiness_minutes"]
+    assert result["total_tardiness_minutes"] == 2.0
+    # preference_penalty 分量本身不是 ADJUST_OBJECTIVE_WEIGHT 的合法 component，未被改。
+    assert result["preference_penalty"] == 1.0
