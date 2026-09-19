@@ -572,3 +572,74 @@ body {
   margin: 0;
   padding-left: 1.1rem;
 }
+
+
+/* --- 价值台账 11.4 扩展（/value，任务 11.4，R19） --- */
+
+.value-ledger-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.value-ledger-export {
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.value-ledger-kpis table,
+.value-ledger-cost table,
+.value-ledger-manual-steps table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.5rem 0 1rem;
+}
+
+.value-ledger-kpis th,
+.value-ledger-kpis td,
+.value-ledger-cost th,
+.value-ledger-cost td,
+.value-ledger-manual-steps th,
+.value-ledger-manual-steps td {
+  border: 1px solid var(--border);
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+}
+
+/* 标签：图标 + 文字为主，颜色为辅（R27.9）。 */
+.metric-label {
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+.metric-label-MEASURED {
+  color: #027a48;
+}
+
+.metric-label-ESTIMATED {
+  color: #b26a00;
+}
+
+.metric-label-PROJECTED {
+  color: #3538cd;
+}
+
+.value-ledger-quota {
+  color: var(--muted);
+}
+
+/* 屏幕阅读器专用（表格 caption 等），视觉隐藏但可被辅助技术读取。 */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

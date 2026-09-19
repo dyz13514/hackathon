@@ -633,7 +633,7 @@
     - _Properties: 10_
     - _Design: Correctness Properties「Property 10」_
 
-  - [~] 11.4 实现 `Value_Ledger` 与台账界面
+  - [x] 11.4 实现 `Value_Ledger` 与台账界面
     - `ValueMetrics` 全字段度量与持久化（含 `plan_generation_seconds`、`disruption_response_seconds`、`on_time_rate` 与基线值、`total_tardiness_minutes` 与基线值、`churn_ratio`、`manual_steps_eliminated`、`auto_handled_count`、`escalated_count`、`llm_tokens_used`、`estimated_usd_cost`、`real_run_count`），全部确定性计算
     - `manual_steps_eliminated` 按 design.md §4.4 的口径表计数（每个 `ImportBatch` 计 1 步，无论 20 行还是 2,000 行，不夸大），UI 原样展示该口径表
     - 标签：人工基线时间标 `ESTIMATED` 并注明「来源：访谈估计」；系统指标标 `MEASURED`；K-17 / K-18 标 `PROJECTED` 并与实测累计**并排显示**。**两列而非三列**（实测累计 / 预测 ≈USD 30 = LLM ≈USD 21 + Lightsail USD 5–10）——requirements 现在只有一个预测口径
@@ -643,7 +643,7 @@
     - _Requirements: R19.1, R19.4–R19.8, R25.12, R25.13, R13.13_
     - _Design: Components §4.4、成本章节 §2_
 
-  - [~] 11.5 为基线同输入同口径编写属性测试
+  - [x] 11.5 为基线同输入同口径编写属性测试
     - **Property 37: 基线同输入同口径**
     - **Validates: Requirements 19.2, 19.3, 5.4**
     - `max_examples=100`。断言基线计划的 `snapshot_version` 等于正式计划的；`Baseline_Scheduler` 两次运行结果相同；对任意仅置换订单 `priority` 的输入变换基线结果不变（证明基线确实忽略优先级）
