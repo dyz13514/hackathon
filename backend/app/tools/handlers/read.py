@@ -335,10 +335,10 @@ def get_risk_findings(
                 finding_id=r.finding_id,
                 risk_type=str(r.risk_type),
                 severity=str(r.severity),  # type: ignore[arg-type]
-                subject_id=str(getattr(r, "subject_id", "") or ""),
-                metric_value=float(getattr(r, "metric_value", 0) or 0),
-                threshold=float(getattr(r, "threshold", 0) or 0),
-                narrative=str(getattr(r, "narrative", "") or ""),
+                subject_id=str(r.entity_id),
+                metric_value=float(r.metric_value),
+                threshold=float(r.threshold_value),
+                narrative=str(r.narrative or ""),
             )
         )
     return m.RiskFindingListOut(items=items, total=len(filtered))

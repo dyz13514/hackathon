@@ -471,11 +471,32 @@ def run_scenario(args: m.RunScenarioIn, ctx: ToolContext) -> m.ScenarioOut:
 
 
 def scan_risks(args: m.ScanRisksIn, ctx: ToolContext) -> m.RiskFindingListOut:
-    """滚动时域风险扫描（R14）。委派给 §8 的 `Risk_Radar`（确定性度量 + 模板叙述）。
+    """滚动时域风险扫描（R14）。委派给 §8 的 `Risk_Scanner`（确定性度量 + 模板叙述）。
 
-    5 类风险的度量与 `severity` 阈值由确定性代码计算（R14.4），叙述在 P0 恒为模板。扫描内核
-    随 §8 落地；本 handler 届时即为 `Risk_Radar.scan(snapshot, horizon_days)` 的投影。
+    5 类风险的度量与 `severity` 阈值由确定性代码计算（R14.4），叙述在 P0 恒为模板
+    （`narrative_source = TEMPLATE`）。本 handler 扫描并去重落库（`scan_and_persist`），再把
+    结果投影成句柄式 `RiskFindingListOut`（按严重度排序，`items ≤ 10`，ADR-004）。无 LLM。
     """
-    raise NotImplementedError(
-        "scan_risks 委派 §8 的 Risk_Radar.scan；契约已定义"
+    from app.services.risk_scan import scan_and_persist
+
+    session = _session(ctx)
+    result = scan_and_persist(session, now=_now(ctx), horizon_days=args.horizon_days)
+
+    severity_rank = {"CRITICAL": 0, "WARNING": 1, "INFO": 2}
+    rows = sorted(
+        result.findings,
+        key=lambda r: (severity_rank.get(str(r.severity), 2), r.finding_key),
     )
+    items = [
+        m.RiskFindingBrief(
+            finding_id=r.finding_id,
+            risk_type=str(r.risk_type),
+            severity=str(r.severity),  # type: ignore[arg-type]
+            subject_id=str(r.entity_id),
+            metric_value=float(r.metric_value),
+            threshold=float(r.threshold_value),
+            narrative=str(r.narrative or ""),
+        )
+        for r in rows[:10]
+    ]
+    return m.RiskFindingListOut(items=items, total=len(result.findings))

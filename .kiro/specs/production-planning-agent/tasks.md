@@ -517,7 +517,7 @@
     - _Requirements: R10.3_
     - _Design: Components §3.7「反事实：恰好 1 项」_
 
-  - [~] 8.5 实现 `Risk_Scanner` 与三类触发器
+  - [x] 8.5 实现 `Risk_Scanner` 与三类触发器
     - `core/risk.py` 5 类风险：`MATERIAL_RUNOUT_FORECAST` / `ZERO_SLACK_ORDER` / `BOTTLENECK_RESOURCE` / `OVERCOMMITTED_SHIFT` / `SINGLE_POINT_OF_FAILURE_MACHINE`
     - 阈值为模块级常量：`MATERIAL_CRITICAL_HOURS = 24`、`SLACK_WARNING_MINUTES = 120`、`UTIL_WARNING = 0.90`、`UTIL_CRITICAL = 0.98`、`SPOF_JOB_SHARE = 0.50`
     - 确定性排序 `(SEVERITY_RANK, finding_key)`；`finding_key = sha1(risk_type|entity_type|entity_id)` 去重，重复出现只 `UPDATE last_seen_at, metric_value`
@@ -527,7 +527,7 @@
     - _Requirements: R14.1, R14.2, R14.3, R14.4, R14.9, R27.10_
     - _Design: Components §3.8、ADR-013_
 
-  - [~] 8.6 实现确定性模板叙述与风险面板
+  - [x] 8.6 实现确定性模板叙述与风险面板
     - `render_template_narrative(f, snap)` 为**纯函数、无 LLM**：三段式对齐 R14.5 的三项内容——风险来源（度量值 + 阈值 + 实体）、受影响订单（`affected_order_ids` 展开）、建议的下一步动作（`NEXT_ACTION[risk_type]`）
     - `risk_findings.narrative_source` 在 **P0 恒为 `TEMPLATE`**，UI 以徽章显示使模板与 LLM 文本可区分（P1 接入 Agent 后 `WARNING` 及以上改 `LLM` 并保留模板回退）
     - **模板渲染无成本，因此 P0 对全部发现都渲染叙述，不设 R14.10 的「单次扫描最多 5 项」上限**——那个上限本身是为 LLM 叙述设的成本闸门

@@ -4,6 +4,7 @@ import { Approval } from './routes/Approval';
 import { Dashboard } from './routes/Dashboard';
 import { NotFound } from './routes/NotFound';
 import { PlanCompare } from './routes/PlanCompare';
+import { Risks } from './routes/Risks';
 import { ROUTES } from './routes/routes';
 import { Schedule } from './routes/Schedule';
 import { Traces } from './routes/Traces';
@@ -47,6 +48,7 @@ export function App() {
           <Route path="/schedule" element={<Schedule />} />
           <Route path="/approval" element={<Approval />} />
           <Route path="/traces" element={<Traces />} />
+          <Route path="/risks" element={<Risks />} />
           <Route path="/value" element={<ValueLedger />} />
           <Route path="/plans/:a/compare/:b" element={<PlanCompare />} />
           <Route path="*" element={<NotFound />} />

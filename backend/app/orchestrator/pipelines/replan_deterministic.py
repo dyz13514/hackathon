@@ -53,10 +53,10 @@ from app.core.autonomy import (
 from app.core.delta import PlanDelta, compute_plan_delta
 from app.core.replanner import Disruption as KernelDisruption
 from app.core.replanner import ReplanResult, replan
-from app.core.scheduler import PlanCandidate
+from app.core.scheduler import PlanCandidate, generate_schedule
 from app.core.scoring import ObjectiveBreakdown, ObjectiveWeights, score
 from app.core.snapshot import DomainSnapshot
-from app.core.validation import ValidationReport
+from app.core.validation import ValidationReport, validate
 from app.db import audit
 from app.db import models as orm
 from app.orchestrator.pipelines.plan_generation import (
@@ -75,6 +75,9 @@ from app.services.replanning import active_plan_row, cand_plan_row
 
 #: 修订计划来源。`SaveProposedPlanIn.origin` 的合法取值之一（design.md §8 状态机表）。
 REPLAN_ORIGIN = "REPLANNING"
+#: 风险缓解提案来源（任务 8.6，R14.7）。CRITICAL 风险经确定性再优化产出的提案标此来源，
+#: 与扰动重排（`REPLANNING`）区分；`PLAN_ORIGINS` 已含它（db/models.py，P0 建表即预留）。
+RISK_MITIGATION_ORIGIN = "RISK_MITIGATION"
 PENDING_STATUS = "PENDING_APPROVAL"
 
 #: Trace.kind / mode。重排在 P0 的确定性路径上也是 PIPELINE（零 LLM 编排）；ReAct 路径
@@ -339,6 +342,180 @@ def run_replan(
     return ReplanPipelineResult(plan=result, impact=impact, assessment_id=assessment_id)
 
 
+def run_risk_mitigation(
+    session: Session,
+    *,
+    active_plan_id: str,
+    active_plan: PlanCandidate,
+    snapshot: DomainSnapshot,
+    finding_id: str,
+    now: datetime,
+    session_id: str,
+    weights: ObjectiveWeights | None = None,
+    flags: FeatureFlags | None = None,
+) -> ReplanPipelineResult:
+    """为一条 CRITICAL 风险产出确定性缓解提案（任务 8.6，R14.7、用户裁决 Option 2）。
+
+    ## 与扰动重排的区别：不伪造扰动
+
+    `run_replan` 的第 1–3 步是「受影响集 → 冻结 → 在扰动后快照上 generate_schedule(freeze)」
+    ——那需要一个**真实扰动**。风险缓解**没有扰动**，因此本函数**不**调 `replan(...)`、也不构造
+    任何 `KernelDisruption`（用户约束 1、2）。它的第 1 步是对**当前快照**（已含该风险的成因，
+    如紧 slack 的订单、过载的机器）做一次完整的确定性 `generate_schedule(snapshot)` 再优化：
+    看确定性排产器能否在今天的数据上排出比当前 `ACTIVE` 更好的方案。
+
+    从第 4 步起（评分 → delta → 分级 → 自主等级 → 落库）与 `run_replan` **逐字段同构**，
+    复用同一批确定性组件（用户约束 3、4）：`score` / `compute_plan_delta` / `_plan_kpis` /
+    `classify_impact` / `decide_autonomy` / `decisive_predicates` / `_persist_revision`。
+    提案的 `origin = 'RISK_MITIGATION'`，`impact_assessments.disruption_id = None`（不伪造），
+    状态 `PENDING_APPROVAL`，因此**仍受任务 7.3 的分级判定约束**（IMPACT_MAJOR → L5 上报，
+    不会自动生效）。全程无 LLM。
+
+    再优化产出的方案若与 ACTIVE 逐作业相同（delta 为空，例如物料耗尽而无在途、排产器无从改善），
+    这是一个**诚实的确定性结果**——提案显示「无可改善」，`IMPACT_MINOR`——而不是编造一个变更。
+    """
+    resolved_weights = weights if weights is not None else ObjectiveWeights()
+    resolved_flags = flags if flags is not None else FeatureFlags()
+
+    # ---- 步 1–3：确定性再优化（无扰动、无冻结）——对当前快照重排 + 全量校验 ----
+    candidate: PlanCandidate = generate_schedule(snapshot)
+    validation: ValidationReport = validate(candidate, snapshot)
+
+    # ---- 步 4：评分（churn 以 active 为参照） ----
+    breakdown: ObjectiveBreakdown = score(
+        candidate, snapshot, resolved_weights, reference_plan=active_plan
+    )
+
+    # ---- 步 5：delta（任务 7.2） ----
+    delta: PlanDelta = compute_plan_delta(active_plan, candidate)
+
+    # ---- 同口径 KPI ----
+    active_on_time, active_tardiness, active_late = _plan_kpis(active_plan, snapshot)
+    cand_on_time, cand_tardiness, cand_late = _plan_kpis(candidate, snapshot)
+
+    # ---- 步 6：分级 + 自主等级（任务 7.3，复用同一批确定性组件） ----
+    active_row = active_plan_row(
+        session,
+        active_plan_id,
+        active_plan,
+        total_tardiness_minutes=active_tardiness,
+        unschedulable_count=len(active_plan.unschedulable_jobs),
+    )
+    cand_row = cand_plan_row(
+        session,
+        candidate,
+        total_tardiness_minutes=cand_tardiness,
+        unschedulable_count=len(candidate.unschedulable_jobs),
+        promised_date_changed=False,  # 缓解再优化不改 promised_date
+    )
+    impact_input: ImpactInput = ImpactInput.from_delta(delta, active_row, cand_row)
+    impact_class: ImpactClass = classify_impact(impact_input)
+    autonomy_level = decide_autonomy(impact_class, resolved_flags)
+    predicates = decisive_predicates(impact_input, impact_class)
+    execution_path = _execution_path_for(autonomy_level.value)
+
+    changed_orders = tuple(
+        sorted(
+            {
+                job_id.rsplit("-OP", 1)[0]
+                for job_id in (*delta.moved, *delta.reassigned, *delta.added, *delta.removed)
+            }
+        )
+    )
+    impact = ImpactAnalysis(
+        disruption_id="",  # 无扰动
+        candidate_plan_id="",  # 落库后回填
+        affected_jobs=tuple(sorted((*delta.moved, *delta.reassigned))),
+        affected_orders=changed_orders,
+        orders_at_risk_of_lateness=_orders_at_risk(candidate, snapshot),
+        tardiness_delta_minutes=cand_tardiness - active_tardiness,
+        churn_ratio=delta.churn_ratio,
+        impact_class=impact_class.value,
+        autonomy_level=autonomy_level.value,
+        decisive_predicates=tuple(predicates),
+        frozen_job_ids=(),
+        substitute_unavailable_job_ids=(),
+        execution_path=execution_path,
+    )
+
+    plan_id = _new_plan_id()
+    baseline_plan_id = _new_plan_id()
+    assessment_id = f"IA-{uuid.uuid4().hex[:12]}"
+
+    tracer = DbTracer(session, trigger_source="RISK_SCAN", session_id=session_id, now=now)
+    trace = tracer.begin(kind=TRACE_KIND, mode=TRACE_MODE, agent=None)
+    trace_id = trace.trace_id
+
+    baseline_comparison = BaselineComparison(
+        baseline_plan_id=baseline_plan_id,
+        snapshot_version=snapshot.snapshot_version,
+        on_time_rate=cand_on_time,
+        baseline_on_time_rate=active_on_time,
+        total_tardiness_minutes=cand_tardiness,
+        baseline_total_tardiness_minutes=active_tardiness,
+        late_order_count=cand_late,
+        baseline_late_order_count=active_late,
+    )
+
+    production_jobs = _expand_production_jobs(snapshot, candidate, active_plan)
+
+    result = PlanGenerationResult(
+        plan_id=plan_id,
+        production_date=snapshot.production_date,
+        status=PENDING_STATUS,
+        input_snapshot_version=snapshot.snapshot_version,
+        generated_by_trace_id=trace_id,
+        candidate=candidate,
+        objective_breakdown=breakdown,
+        validation=validation,
+        baseline=baseline_comparison,
+        production_jobs=production_jobs,
+    )
+    impact = _with_plan_id(impact, plan_id)
+
+    try:
+        _record_replan_steps(tracer, trace)
+        tracer.set_result_ref(trace, plan_id)
+        tracer.end(trace)
+        _persist_revision(
+            session,
+            result=result,
+            weights=resolved_weights,
+            impact=impact,
+            assessment_id=assessment_id,
+            active_plan_id=active_plan_id,
+            baseline_plan_id=baseline_plan_id,
+            disruption_id=None,  # 不伪造扰动（用户约束 1）
+            impact_input=impact_input,
+            now=now,
+            origin=RISK_MITIGATION_ORIGIN,
+        )
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+
+    audit.append(
+        event_category="IMPACT_CLASSIFICATION",
+        event_type="RISK_MITIGATION_CLASSIFIED",
+        actor="SYSTEM",
+        payload={
+            "assessment_id": assessment_id,
+            "candidate_plan_id": plan_id,
+            "finding_id": finding_id,
+            "impact_class": impact.impact_class,
+            "autonomy_level": impact.autonomy_level,
+            "execution_path": impact.execution_path,
+            "decisive_predicates": list(impact.decisive_predicates),
+        },
+        subject_type="ImpactAssessment",
+        subject_id=assessment_id,
+        trace_id=trace_id,
+        occurred_at=now,
+    )
+    return ReplanPipelineResult(plan=result, impact=impact, assessment_id=assessment_id)
+
+
 def _with_plan_id(impact: ImpactAnalysis, plan_id: str) -> ImpactAnalysis:
     """回填 `candidate_plan_id`（`ImpactAnalysis` 是 frozen，用 replace 语义重建）。"""
     return ImpactAnalysis(
@@ -367,9 +544,10 @@ def _persist_revision(
     assessment_id: str,
     active_plan_id: str,
     baseline_plan_id: str,
-    disruption_id: str,
+    disruption_id: str | None,
     impact_input: ImpactInput,
     now: datetime,
+    origin: str = REPLAN_ORIGIN,
 ) -> None:
     """写修订计划五表 + 基线计划头 + `impact_assessments`。**不提交**——调用方持有事务。
 
@@ -377,9 +555,11 @@ def _persist_revision(
     PENDING_APPROVAL）并 flush 让外键有指向，再写基线作业行与修订四张明细表（复用
     `save_proposed_plan` 守住 §8 前置条件），最后写 `impact_assessments`。
 
-    修订计划的 `origin = 'REPLANNING'`；基线以 active 计划为「同口径对照」——它是重排的参照
-    计划，同样以 `status = DRAFT`、`origin = 'BASELINE'` 落库一份快照供 `baseline_comparisons`
-    外键指向（重排的「基线」语义是当前 ACTIVE 计划的表现，见 `run_replan` 里的 KPI 赋值）。
+    `origin` 默认 `'REPLANNING'`（扰动重排）；风险缓解路径传 `'RISK_MITIGATION'`——两者共用
+    这套落库机具，只是修订计划头的来源标记不同（任务 8.6，用户裁决 Option 2）。`disruption_id`
+    对风险缓解为 `None`（`impact_assessments.disruption_id` 是可空 FK）——**不伪造扰动**。
+    基线以 active 计划为「同口径对照」，以 `status = DRAFT`、`origin = 'BASELINE'` 落库一份快照
+    供 `baseline_comparisons` 外键指向。
     """
     _ensure_production_jobs(session, specs=result.production_jobs)
 
@@ -406,7 +586,7 @@ def _persist_revision(
             plan_version=1,
             version=1,
             input_snapshot_version=result.input_snapshot_version,
-            origin=REPLAN_ORIGIN,
+            origin=origin,
             generated_by_trace_id=result.generated_by_trace_id,
             created_at=_created_at(result),
         )
@@ -422,7 +602,7 @@ def _persist_revision(
         session,
         result=result,
         weights=weights,
-        origin=REPLAN_ORIGIN,
+        origin=origin,
         produced_in_sandbox=False,
     )
 

@@ -5,7 +5,10 @@
 - `POST /api/disruptions` —— 登记 5 类扰动之一，触发**确定性重排**（approach b：P0 主路径走
   确定性流水线，与 `DETERMINISTIC_ONLY` 降级同构，产出的 `ImpactAnalysis` 数值与 ReAct 路径
   逐字段相同）。90 秒内返回 `ImpactAnalysis` 与一个 `status = PENDING_APPROVAL` 的修订计划
-  （R9.2）。无 `ACTIVE` 计划 → `NO_ACTIVE_PLAN`（R9.8）。写端点，受 `Session_Auth` 保护。
+  （R9.2）。无 `ACTIVE` 计划 → `NO_ACTIVE_PLAN`（R9.8）。若该生产日已有一个待审提案
+  （`PENDING_APPROVAL`，例如任务 8.6 风险扫描为 CRITICAL 生成的 `RISK_MITIGATION` 提案）→
+  `PENDING_PLAN_EXISTS`（409，R12.6）：单一待审提案是结构不变量，重排在登记与 `run_replan`
+  之前先被这道领域守卫挡住，不自动取代既有提案（spec §4.1）。写端点，受 `Session_Auth` 保护。
 - `GET /api/disruptions/{id}/impact` —— 回读该扰动的 `ImpactAnalysis`（R9.3）。
 
 ## 为什么分两个事务：先提交登记，再读快照重排
@@ -61,6 +64,7 @@ from app.services.replanning import (
     require_any_active_plan,
     to_kernel_disruption,
 )
+from app.services.risk_triggers import trigger_scan
 from app.services.snapshot_loader import load_snapshot
 
 router = APIRouter(prefix="/disruptions", tags=["disruptions"])
@@ -191,6 +195,31 @@ def post_disruption(
         active_plan = require_any_active_plan(db)
         active_plan_id = active_plan.plan_id
         production_date = active_plan.production_date
+
+        # 单一 `PENDING_APPROVAL`（R12.6，design.md §4.1）：重排会为本生产日落一个新的
+        # `PENDING_APPROVAL` 修订计划，而 `ux_pending_per_day` 部分唯一索引规定同一生产日至多
+        # 一个待审提案。若该日已有一个待审提案（例如任务 8.6 风险扫描为 CRITICAL 生成的
+        # `RISK_MITIGATION` 提案），此处**在登记扰动、调用 run_replan 之前**先返回
+        # `PENDING_PLAN_EXISTS`（409）并给「取消既有提案」入口——这是 spec 定义的冲突行为（人工
+        # 裁决，非自动取代）。不登记扰动、不重排、不改动既有提案及其 mitigation_plan_id 链接。
+        # 这是一道领域前置守卫（与 `Approval_Service.modify()` 遇同冲突时的返回同口径），
+        # 不改 run_replan / _persist_revision 语义，不把 IntegrityError 当常规控制流。
+        existing_pending = db.execute(
+            select(orm.ProductionPlan.plan_id).where(
+                orm.ProductionPlan.production_date == production_date,
+                orm.ProductionPlan.status == "PENDING_APPROVAL",
+            )
+        ).scalars().first()
+        if existing_pending is not None:
+            db.rollback()
+            return error_response(
+                status_code=409,
+                code=ErrorCode.PENDING_PLAN_EXISTS,
+                message="该生产日已存在一个待审批计划，请先取消既有提案再登记扰动。",
+                next_actions=[NextAction(action="cancel_pending", href="/plans/pending")],
+                details={"pending_plan_id": existing_pending},
+            )
+
         disruption_row = register_disruption(
             db,
             payload,
@@ -244,6 +273,11 @@ def post_disruption(
         )
     finally:
         db.close()
+
+    # 数据变更后触发一次风险扫描（R14.1 第 2 类触发器）：扰动登记改动了 Machine / Material /
+    # Worker 状态。**在两个事务都提交之后**调用，独立会话、尽力而为——扫描失败不影响已完成的
+    # 登记与重排（见 services.risk_triggers 的纪律）。
+    trigger_scan(request.app.state.session_factory, trigger="DATA_CHANGE")
 
     return RegisterDisruptionResponse(
         disruption_id=disruption_id,
