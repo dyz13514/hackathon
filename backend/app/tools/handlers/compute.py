@@ -23,9 +23,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import cast
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.scheduler import PlanCandidate, generate_schedule as kernel_generate
+from app.core.scheduler import PlanCandidate, ScheduledJob
+from app.core.scheduler import generate_schedule as kernel_generate
 from app.core.scoring import ObjectiveBreakdown, ObjectiveWeights, score
 from app.services.snapshot_loader import load_snapshot
 from app.tools import models as m
@@ -76,22 +78,78 @@ def _plan_handle_from_candidate(
 
 
 def generate_schedule(args: m.GenerateScheduleIn, ctx: ToolContext) -> m.PlanHandle:
-    """确定性全序排产，返回句柄（R22.13、ADR-004）。委派给 `scheduler.generate_schedule`。
+    """确定性全序排产，落成 **DRAFT 候选**并返回句柄（R22.13、ADR-004、design.md §8）。
 
-    在当前快照上跑排产 + 评分，产出 `PlanHandle`——**不含任何逐作业字段**。冻结集/排除机器
-    由入参透传给内核；`weight_overrides` 目前不改内核权重（任务 11.x 的 `ADJUST_OBJECTIVE_WEIGHT`
-    落地后接入），此处用默认权重评分。这条 handler 不落库——落库是 `save_proposed_plan` 的活。
+    在当前快照上跑排产 + 评分，把候选经 `save_candidate` 落成一行 `DRAFT` 计划（§8 的
+    `∅ → DRAFT`），返回携带**真实 `plan_id`** 的 `PlanHandle`——不含任何逐作业字段。
+
+    为什么要落库（相对任务 5.2 初版的窄改动）：ReAct 序列的后续步骤
+    （`check_constraints` / `classify_impact` / `save_proposed_plan`）都按 `plan_id` 读回候选，
+    而工具之间只能传句柄不能传内存对象。返回一个临时的 `CAND-` 句柄会让这些下游工具拿着一个
+    库里不存在的 id——`save_proposed_plan` 尤其需要一份可读回的 DRAFT 候选才能物化成
+    `PENDING_APPROVAL`（任务 7.4）。因此这里把候选真正写成 DRAFT 行并返回其 id。
+
+    冻结集/排除机器由入参透传给内核；`weight_overrides` 目前不改内核权重（任务 11.x 的
+    `ADJUST_OBJECTIVE_WEIGHT` 落地后接入），此处用默认权重评分。DRAFT 计划不受
+    `ux_pending_per_day` / `ux_active_per_day` 约束，因此多次调用可并存多份候选。
     """
-    snapshot = load_snapshot(
-        _session(ctx), now=_now(ctx), production_date=args.production_date
-    )
+    from app.orchestrator.pipelines.plan_generation import save_candidate
+
+    session = _session(ctx)
+    now = _now(ctx)
+    snapshot = load_snapshot(session, now=now, production_date=args.production_date)
+    frozen = _frozen_jobs(session, args.freeze_job_ids)
     candidate = kernel_generate(
         snapshot,
+        freeze=frozen,
         exclude_machine_ids=frozenset(args.exclude_machine_ids),
     )
     breakdown = score(candidate, snapshot, ObjectiveWeights())
+    plan_id = save_candidate(
+        session, candidate=candidate, snapshot=snapshot, breakdown=breakdown, now=now
+    )
     return _plan_handle_from_candidate(
-        candidate, breakdown, plan_id=f"CAND-{args.label}", trace_id=ctx.trace_id
+        candidate, breakdown, plan_id=plan_id, trace_id=ctx.trace_id
+    )
+
+
+def _frozen_jobs(session: Session, freeze_job_ids: list[str]) -> tuple[ScheduledJob, ...]:
+    """把 `freeze_job_ids` 解析成冻结的 `ScheduledJob` 元组（供 `generate_schedule(freeze=)`）。
+
+    冻结作业来自当前 `ACTIVE` 计划的已排产行——重排时不动它们（design.md §3.5）。空列表时返回
+    空元组（初始生成无冻结）。`ScheduledJob` 值对象从持久化行重建，与
+    `replanning.load_plan_candidate` 同口径。
+    """
+    if not freeze_job_ids:
+        return ()
+    from app.services.replanning import require_any_active_plan
+
+    orm = m_orm()
+    try:
+        active = require_any_active_plan(session)
+    except Exception:
+        return ()
+    rows = session.execute(
+        select(orm.ScheduledJob, orm.ProductionJob)
+        .join(orm.ProductionJob, orm.ScheduledJob.job_id == orm.ProductionJob.job_id)
+        .where(
+            orm.ScheduledJob.plan_id == active.plan_id,
+            orm.ScheduledJob.job_id.in_(list(freeze_job_ids)),
+        )
+    ).all()
+    return tuple(
+        ScheduledJob(
+            job_id=sj.job_id,
+            order_id=pj.order_id,
+            product_id=pj.product_id,
+            machine_id=sj.machine_id,
+            worker_id=sj.worker_id,
+            start_time=sj.start_time,
+            end_time=sj.end_time,
+            setup_minutes=sj.setup_minutes,
+            changeover_minutes=sj.changeover_minutes,
+        )
+        for sj, pj in rows
     )
 
 
@@ -107,9 +165,25 @@ def check_constraints(args: m.CheckConstraintsIn, ctx: ToolContext) -> m.Validat
     `PlanCandidate`——那套「读计划态回内核值对象」的机具随 §7 重排流水线落地。届时本 handler
     即为：重建 candidate → `validate(candidate, snapshot)` → 投影成 `ValidationOut`。
     """
-    raise NotImplementedError(
-        "check_constraints 需要从持久化 plan_id 重建 PlanCandidate（随 §7 重排流水线落地）；"
-        "契约已定义，接线后委派 app.core.validation.validate"
+    from app.core.validation import validate
+    from app.services.replanning import load_plan_candidate
+
+    session = _session(ctx)
+    snapshot = load_snapshot(session, now=_now(ctx))
+    candidate = load_plan_candidate(session, args.plan_id)
+    report = validate(candidate, snapshot)
+    return m.ValidationOut(
+        plan_id=args.plan_id,
+        feasibility=m.Feasibility(candidate.feasibility),
+        violation_count=len(report.violations),
+        violations=[
+            m.ViolationBrief(
+                violation_type=v.violation_type,
+                job_ids=list(v.job_ids)[:20],
+                human_description=v.human_description,
+            )
+            for v in report.violations[:20]
+        ],
     )
 
 
@@ -121,9 +195,24 @@ def evaluate_schedule(
     同 `check_constraints`：待「读计划态回内核值对象」的机具落地后，重建 candidate →
     `score(...)` → 投影成 `ObjectiveBreakdownOut`（7 条分量摘要 + 总分）。
     """
-    raise NotImplementedError(
-        "evaluate_schedule 需要从持久化 plan_id 重建 PlanCandidate（随 §7 落地）；"
-        "契约已定义，接线后委派 app.core.scoring.score"
+    from app.services.replanning import load_plan_candidate
+
+    session = _session(ctx)
+    snapshot = load_snapshot(session, now=_now(ctx))
+    candidate = load_plan_candidate(session, args.plan_id)
+    breakdown = score(candidate, snapshot, ObjectiveWeights())
+    return m.ObjectiveBreakdownOut(
+        plan_id=args.plan_id,
+        total_score=float(breakdown.total_score),
+        components=[
+            m.ComponentScoreBrief(
+                name=c.name,
+                raw_value=c.raw_value,
+                weight=c.weight,
+                weighted_contribution=c.weighted_contribution,
+            )
+            for c in breakdown.components
+        ],
     )
 
 
@@ -136,9 +225,21 @@ def compute_baseline(
     工具的 `compute_baseline` 读回该计划的 `baseline_comparisons` 行即可。此接线随 §7 的
     「计划态读回」机具一并落地。
     """
-    raise NotImplementedError(
-        "compute_baseline 读回 baseline_comparisons 行（随 §7 落地）；"
-        "契约已定义，基线纯计算委派 app.core.baseline.fcfs"
+    session = _session(ctx)
+    orm = m_orm()
+    row = session.get(orm.BaselineComparison, args.plan_id)
+    if row is None:
+        raise RuntimeError(f"计划 {args.plan_id} 无 baseline_comparisons 行")
+    return m.BaselineComparisonOut(
+        plan_id=args.plan_id,
+        baseline_plan_id=row.baseline_plan_id,
+        snapshot_version=row.snapshot_version,
+        on_time_rate=float(row.on_time_rate),
+        baseline_on_time_rate=float(row.baseline_on_time_rate),
+        total_tardiness_minutes=row.total_tardiness_minutes,
+        baseline_total_tardiness_minutes=row.baseline_total_tardiness_minutes,
+        late_order_count=row.late_order_count,
+        baseline_late_order_count=row.baseline_late_order_count,
     )
 
 
@@ -148,33 +249,211 @@ def compute_baseline(
 
 
 def compare_plans(args: m.ComparePlansIn, ctx: ToolContext) -> m.ComparePlansOut:
-    """两份计划的聚合 diff（句柄形态，ADR-004）。委派给 §7 的 `compute_plan_delta`。
+    """两份计划的聚合 diff（句柄形态，ADR-004）。委派给 `compute_plan_delta`（任务 7.2）。
 
-    只给聚合计数与 churn，不给逐行 diff——想看明细走 `get_job_details`。`compute_plan_delta`
-    随 §7 落地（design.md §3.5 的 churn 公式）。
+    只给聚合计数与 churn，不给逐行 diff——想看明细走 `get_job_details`。两份计划都从持久化的
+    `scheduled_jobs` 重建成内核 `PlanCandidate`（`replanning.load_plan_candidate`），再调
+    `compute_plan_delta`（design.md §3.5 的五集合划分 + 并集分母 churn）。`objective_delta`
+    在句柄层用两计划评分的差；`top_changed_job_ids` 取变更集前 10 个（确定性排序）。
     """
-    raise NotImplementedError(
-        "compare_plans 委派 §7 的 compute_plan_delta（design.md §3.5）；契约已定义"
+    from app.core.delta import compute_plan_delta
+    from app.core.scoring import ObjectiveWeights, score
+    from app.services.replanning import load_plan_candidate
+
+    session = _session(ctx)
+    snapshot = load_snapshot(session, now=_now(ctx))
+    plan_a = load_plan_candidate(session, args.plan_id_a)
+    plan_b = load_plan_candidate(session, args.plan_id_b)
+    delta = compute_plan_delta(plan_a, plan_b)
+
+    weights = ObjectiveWeights()
+    score_a = score(plan_a, snapshot, weights)
+    score_b = score(plan_b, snapshot, weights, reference_plan=plan_a)
+    raw_a = {c.name: c.raw_value for c in score_a.components}
+    raw_b = {c.name: c.raw_value for c in score_b.components}
+    objective_delta = m.ObjectiveDelta(
+        total_score=float(score_b.total_score - score_a.total_score),
+        late_order_count=int(
+            raw_b.get("late_order_count", 0.0) - raw_a.get("late_order_count", 0.0)
+        ),
+        total_tardiness_minutes=int(
+            raw_b.get("total_tardiness_minutes", 0.0) - raw_a.get("total_tardiness_minutes", 0.0)
+        ),
+        total_changeover_minutes=int(
+            raw_b.get("total_changeover_minutes", 0.0)
+            - raw_a.get("total_changeover_minutes", 0.0)
+        ),
+    )
+    changed = (*delta.added, *delta.removed, *delta.reassigned, *delta.moved)
+    return m.ComparePlansOut(
+        added_count=len(delta.added),
+        removed_count=len(delta.removed),
+        moved_count=len(delta.moved),
+        reassigned_count=len(delta.reassigned),
+        unchanged_count=len(delta.unchanged),
+        churn_ratio=delta.churn_ratio,
+        objective_delta=objective_delta,
+        top_changed_job_ids=list(changed[:10]),
     )
 
 
 def get_affected_jobs(args: m.GetAffectedJobsIn, ctx: ToolContext) -> m.AffectedJobsOut:
-    """扰动波及的作业/订单聚合（R9）。委派给 §7 重排流水线的受影响集合计算。"""
-    raise NotImplementedError(
-        "get_affected_jobs 委派 §7 重排流水线的受影响集合计算；契约已定义"
+    """扰动波及的作业/订单聚合（R9）。委派给 `replanner.affected_by`（任务 7.1）。
+
+    从 `disruptions` 行取回登记内容 → 映射成内核 `Disruption` → 在当前（扰动后）快照与
+    ACTIVE 计划上算受影响集。ACTIVE 计划从持久化的 `scheduled_jobs` 重建
+    （`replanning.load_plan_candidate`）。`affected_order_ids` 由作业 ID 的 `{order}-OP{seq}`
+    前缀去重得到。
+    """
+    from app.core.replanner import affected_by
+    from app.services.replanning import load_plan_candidate, to_kernel_disruption
+
+    session = _session(ctx)
+    row = session.get(m_orm().Disruption, args.disruption_id)
+    if row is None:
+        raise RuntimeError(f"扰动 {args.disruption_id} 不存在")
+    payload = _disruption_input_from_row(row)
+    kernel_disruption = to_kernel_disruption(payload)
+
+    snapshot = load_snapshot(session, now=_now(ctx))
+    active_plan = load_plan_candidate(session, row.active_plan_id)
+    affected = affected_by(kernel_disruption, active_plan, snapshot)
+    affected_sorted = tuple(sorted(affected))
+    order_ids = tuple(sorted({job_id.rsplit("-OP", 1)[0] for job_id in affected_sorted}))
+    return m.AffectedJobsOut(
+        disruption_id=args.disruption_id,
+        affected_job_ids=list(affected_sorted[:60]),
+        affected_order_ids=list(order_ids[:60]),
+        affected_job_count=len(affected_sorted),
+        affected_order_count=len(order_ids),
     )
 
 
 def classify_impact(args: m.ClassifyImpactIn, ctx: ToolContext) -> m.ImpactOut:
-    """影响分级 + 自主等级裁决（R13）。委派给 §7.3 的 `Autonomy_Policy_Engine`。
+    """影响分级 + 自主等级裁决（R13）。委派给 §7.3 的 `Autonomy_Policy_Engine`（任务 7.3）。
 
     分级只吃 `ImpactInput` 的 7 个数值字段（无字符串入口，因此不可被 LLM 影响，
-    `test_layering.py` 断言它与 LLM 无 import 边）。本 handler 只负责组装那 7 个数值并调用
-    分级函数——`core/autonomy.py` 随 §7.3 落地。
+    `test_layering.py` 断言它与 LLM 无 import 边）。本 handler 组装那 7 个数值并调用
+    `classify_impact` / `decide_autonomy` / `decisive_predicates`：
+
+    `candidate_plan_id` 是修订计划，`baseline_plan_id` 缺省取当前 ACTIVE。两份计划从持久化
+    `scheduled_jobs` 重建，`compute_plan_delta` 求变更集，KPI 由确定性口径算出，再经
+    `ImpactInput.from_delta` 组装——全程无 LLM，Agent 提供的只有经 schema 校验的 `plan_id`。
     """
-    raise NotImplementedError(
-        "classify_impact 委派 §7.3 的 core/autonomy 分级函数；契约已定义"
+    from app.core.autonomy import (
+        FeatureFlags,
+        ImpactInput,
+        decide_autonomy,
+        decisive_predicates,
     )
+    from app.core.autonomy import (
+        classify_impact as kernel_classify,
+    )
+    from app.core.delta import compute_plan_delta
+    from app.services.replanning import (
+        active_plan_row,
+        cand_plan_row,
+        load_plan_candidate,
+        require_any_active_plan,
+    )
+
+    session = _session(ctx)
+    snapshot = load_snapshot(session, now=_now(ctx))
+
+    baseline_plan_id = args.baseline_plan_id
+    if baseline_plan_id is None:
+        baseline_plan_id = require_any_active_plan(session).plan_id
+
+    active_plan = load_plan_candidate(session, baseline_plan_id)
+    candidate = load_plan_candidate(session, args.candidate_plan_id)
+    delta = compute_plan_delta(active_plan, candidate)
+
+    from app.orchestrator.pipelines.plan_generation import _plan_kpis
+
+    _, active_tardiness, _ = _plan_kpis(active_plan, snapshot)
+    _, cand_tardiness, _ = _plan_kpis(candidate, snapshot)
+
+    active_row = active_plan_row(
+        session,
+        baseline_plan_id,
+        active_plan,
+        total_tardiness_minutes=active_tardiness,
+        unschedulable_count=len(active_plan.unschedulable_jobs),
+    )
+    cand_row = cand_plan_row(
+        session,
+        candidate,
+        total_tardiness_minutes=cand_tardiness,
+        unschedulable_count=len(candidate.unschedulable_jobs),
+        promised_date_changed=False,
+    )
+    x = ImpactInput.from_delta(delta, active_row, cand_row)
+    impact_class = kernel_classify(x)
+    autonomy_level = decide_autonomy(impact_class, FeatureFlags())
+    predicates = decisive_predicates(x, impact_class)
+    return m.ImpactOut(
+        impact_class=impact_class.value,  # type: ignore[arg-type]
+        autonomy_level=autonomy_level.value,  # type: ignore[arg-type]
+        decisive_predicates=predicates[:8],
+        churn_ratio=x.churn_ratio,
+        tardiness_delta_minutes=x.tardiness_delta_minutes,
+        changed_job_count=x.changed_job_count,
+        promised_date_changed=x.promised_date_changed,
+        touches_high_priority=x.touches_urgent_or_high,
+        new_unschedulable_count=x.new_unschedulable_count,
+    )
+
+
+def m_orm():  # noqa: ANN201
+    """延迟 import ORM（避免 handler 模块顶层拖入 `app.db`；分层规则只约束 `app.core`）。"""
+    from app.db import models
+
+    return models
+
+
+def _disruption_input_from_row(row: object):  # noqa: ANN202
+    """把持久化的 `disruptions` 行还原成 `DisruptionInput`（读 `payload` JSON）。"""
+    from datetime import date as _date
+
+    from app.services.replanning import DisruptionInput
+
+    payload = getattr(row, "payload", {}) or {}
+    if not isinstance(payload, dict):
+        payload = {}
+
+    def _dt(key: str) -> datetime | None:
+        raw = payload.get(key)
+        return datetime.fromisoformat(raw) if isinstance(raw, str) else None
+
+    def _d(key: str) -> _date | None:
+        raw = payload.get(key)
+        return _date.fromisoformat(raw) if isinstance(raw, str) else None
+
+    from decimal import Decimal as _Decimal
+
+    def _dec(key: str) -> _Decimal | None:
+        raw = payload.get(key)
+        return _Decimal(str(raw)) if raw is not None else None
+
+    return DisruptionInput(
+        type=str(getattr(row, "type", "")),
+        reported_at=getattr(row, "reported_at", _now_module()),
+        machine_id=payload.get("machine_id"),
+        worker_id=payload.get("worker_id"),
+        window_start=_dt("window_start"),
+        window_end=_dt("window_end"),
+        material_id=payload.get("material_id"),
+        available_quantity=_dec("available_quantity"),
+        delivery_id=payload.get("delivery_id"),
+        new_eta=_dt("new_eta"),
+        product_id=payload.get("product_id"),
+        quantity=_dec("quantity"),
+        due_date=_d("due_date"),
+    )
+
+
+def _now_module() -> datetime:
+    return datetime.now()  # noqa: DTZ005
 
 
 def run_scenario(args: m.RunScenarioIn, ctx: ToolContext) -> m.ScenarioOut:

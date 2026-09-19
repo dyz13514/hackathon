@@ -88,6 +88,13 @@ class ErrorCode(StrEnum):
     #: `GET /traces/{trace_id}` 请求的 Trace 不存在。
     TRACE_NOT_FOUND = "TRACE_NOT_FOUND"
 
+    # 扰动与重排（R9，任务 7.4）。
+    #: `POST /disruptions` 登记时不存在 `ACTIVE` 计划（R9.8）。扰动是对当前生效计划的干扰，
+    #: 没有生效计划就无从谈影响与重排。
+    NO_ACTIVE_PLAN = "NO_ACTIVE_PLAN"
+    #: `GET /disruptions/{id}/impact` 请求的扰动不存在或尚无影响分析。
+    DISRUPTION_NOT_FOUND = "DISRUPTION_NOT_FOUND"
+
 
 class NextAction(BaseModel):
     """一个可执行的下一步。`href` 为空表示动作在当前界面内完成。"""

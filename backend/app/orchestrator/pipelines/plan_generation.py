@@ -422,7 +422,8 @@ def save_proposed_plan(
     `save_proposed_plan`，并在表下补了一句硬约束：
 
     > `DRAFT` 状态的 `BASELINE` 计划与沙箱产生的候选计划永不迁移到 `PENDING_APPROVAL`：
-    > `save_proposed_plan` 的实现校验 `origin != 'BASELINE'` 且 `plan.produced_in_sandbox == false`。
+    > `save_proposed_plan` 的实现校验 `origin != 'BASELINE'` 且
+    > `plan.produced_in_sandbox == false`。
 
     本函数就是那道校验（任务 3.3）。三件事：
 
@@ -496,6 +497,204 @@ def save_proposed_plan(
             baseline_late_order_count=bc.baseline_late_order_count,
         )
     )
+
+
+# --------------------------------------------------------------------------
+# DRAFT 候选落库（∅ → DRAFT，design.md §8「Scheduling_Core.save_candidate」）与
+# DRAFT → 新 PENDING_APPROVAL 的物化（save_proposed_plan 工具消费，任务 7.4）
+# --------------------------------------------------------------------------
+
+
+def save_candidate(
+    session: Session,
+    *,
+    candidate: PlanCandidate,
+    snapshot: DomainSnapshot,
+    breakdown: ObjectiveBreakdown,
+    now: datetime,
+    origin: str = FORMAL_ORIGIN,
+) -> str:
+    """把一份计算好的 `PlanCandidate` 落成 **DRAFT** 计划行，返回其 `plan_id`（design.md §8）。
+
+    这是 §8 状态机里 `∅ → DRAFT`（`Scheduling_Core.save_candidate`）那条创建——不是状态迁移，
+    只是「无中生有地写一行 DRAFT」。ReAct 的 `generate_schedule` 工具用它把候选持久化，使随后的
+    `save_proposed_plan(candidate_plan_id=...)` 能按 `plan_id` 读回同一份候选（否则候选只是内存
+    里的临时对象，工具间无从传递）。
+
+    写入四样：`production_jobs`（不存在才插）、DRAFT 计划头、`scheduled_jobs`、
+    `unschedulable_jobs`、`objective_breakdown`。**不写基线**——DRAFT 候选只是工作态，基线对比
+    是提案（PENDING）阶段的事，由 `materialize_pending_from_candidate` 补齐。**不提交**——
+    调用方持有事务边界。
+
+    `origin` 默认 `PLAN_GENERATION`（通用工作候选）；DRAFT 计划不受 `ux_pending_per_day` /
+    `ux_active_per_day` 部分唯一索引约束（那两个索引只覆盖 PENDING / ACTIVE），因此多份 DRAFT
+    候选可以并存。
+    """
+    plan_id = _new_plan_id()
+    specs = _expand_production_jobs(snapshot, candidate, candidate)
+    _ensure_production_jobs(session, specs=specs)
+
+    session.add(
+        orm.ProductionPlan(
+            plan_id=plan_id,
+            production_date=snapshot.production_date,
+            status=DRAFT_STATUS,
+            feasibility=candidate.feasibility,
+            plan_version=1,
+            version=1,
+            input_snapshot_version=snapshot.snapshot_version,
+            origin=origin,
+            generated_by_trace_id=None,
+            created_at=now,
+        )
+    )
+    session.flush()
+
+    _add_scheduled_jobs(session, plan_id=plan_id, candidate=candidate)
+    for uj in candidate.unschedulable_jobs:
+        session.add(
+            orm.UnschedulableJob(
+                id=_new_row_id(),
+                plan_id=plan_id,
+                job_id=uj.job_id,
+                blocking_reason=uj.blocking_reason,
+                unblock_suggestion=uj.unblock_suggestion,
+            )
+        )
+    session.add(
+        orm.ObjectiveBreakdown(
+            plan_id=plan_id,
+            components=[c.model_dump(mode="json") for c in breakdown.components],
+            total_score=Decimal(str(breakdown.total_score)),
+            weights=ObjectiveWeights().model_dump(mode="json"),
+            preference_contributions=list(breakdown.preference_contributions),
+            weight_overrides_applied=list(breakdown.weight_overrides_applied),
+        )
+    )
+    session.flush()
+    return plan_id
+
+
+@dataclass(frozen=True)
+class MaterializedProposal:
+    """`materialize_pending_from_candidate` 的返回：新 PENDING 计划的 id + 候选 + 评分。
+
+    带上 `candidate` 与 `breakdown`，让调用方（`save_proposed_plan` 工具）能**不再读一次快照**
+    就组装返回句柄——`load_snapshot` 要求干净会话，而此刻会话里已有本次落库的未提交行，再读
+    会触发那道守卫。用已算好的结果组装句柄，既正确又省一次快照加载。
+    """
+
+    plan_id: str
+    candidate: PlanCandidate
+    breakdown: ObjectiveBreakdown
+
+
+def materialize_pending_from_candidate(
+    session: Session,
+    *,
+    candidate_plan_id: str,
+    production_date: date,
+    origin: str,
+    now: datetime,
+) -> MaterializedProposal:
+    """从一份已持久化的 DRAFT 候选，创建一个**新的** `PENDING_APPROVAL` 计划行，返回其 `plan_id`。
+
+    这是 `save_proposed_plan` 工具的落库实现（任务 7.4）。它对齐 design.md §8 的
+    `DRAFT → PENDING_APPROVAL`（执行组件 `save_proposed_plan`），但采用**创建新行**而非
+    改写 DRAFT 的 `status`：
+
+    - `production_plans.status` 的直写只允许发生在 `Approval_Service`
+      （`update_plan_status_if_version`，`test_layering.py` 断言其调用点仅限 `approval.py`）。
+      因此本函数**不迁移** DRAFT 行，而是像初始生成流水线那样**新写一行** `PENDING_APPROVAL`
+      （这本身是一次创建，不触及那道受限函数）。
+    - DRAFT 候选保留原样（工作态存档），新 PENDING 行是提交给审批的提案。
+
+    步骤：读回 DRAFT 候选 → 重新评分（默认权重）→ 在同一快照上算 FCFS 基线（同口径，R19.2）
+    → 复用 `save_proposed_plan` 的 §8 守卫写四张明细表 + 基线计划头。`origin` 取
+    `SaveProposedPlanIn.origin`（如 `REPLANNING`），`save_proposed_plan` 拒绝 `BASELINE`。
+
+    传入的会话必须干净（`load_snapshot` 要求）；本函数不提交——调用方（工具 registry 装配的
+    会话）持有事务边界。
+    """
+    from app.services.replanning import load_plan_candidate
+
+    candidate = load_plan_candidate(session, candidate_plan_id)
+    snapshot = load_snapshot(session, now=now, production_date=production_date)
+
+    breakdown = score(candidate, snapshot, ObjectiveWeights())
+    baseline_result = fcfs(snapshot)
+    baseline_result.assert_same_version_as(snapshot.snapshot_version)
+
+    plan_id = _new_plan_id()
+    baseline_plan_id = _new_plan_id()
+
+    formal_on_time, formal_tardiness, formal_late = _plan_kpis(candidate, snapshot)
+    base_on_time, base_tardiness, base_late = _plan_kpis(baseline_result.plan, snapshot)
+    baseline_comparison = BaselineComparison(
+        baseline_plan_id=baseline_plan_id,
+        snapshot_version=snapshot.snapshot_version,
+        on_time_rate=formal_on_time,
+        baseline_on_time_rate=base_on_time,
+        total_tardiness_minutes=formal_tardiness,
+        baseline_total_tardiness_minutes=base_tardiness,
+        late_order_count=formal_late,
+        baseline_late_order_count=base_late,
+    )
+    production_jobs = _expand_production_jobs(snapshot, candidate, baseline_result.plan)
+
+    result = PlanGenerationResult(
+        plan_id=plan_id,
+        production_date=production_date,
+        status=PENDING_STATUS,
+        input_snapshot_version=snapshot.snapshot_version,
+        generated_by_trace_id=None,
+        candidate=candidate,
+        objective_breakdown=breakdown,
+        validation=validate(candidate, snapshot),
+        baseline=baseline_comparison,
+        production_jobs=production_jobs,
+    )
+
+    _ensure_production_jobs(session, specs=production_jobs)
+    session.add(
+        orm.ProductionPlan(
+            plan_id=baseline_plan_id,
+            production_date=production_date,
+            status=DRAFT_STATUS,
+            feasibility=baseline_result.plan.feasibility,
+            plan_version=1,
+            version=1,
+            input_snapshot_version=snapshot.snapshot_version,
+            origin=BASELINE_ORIGIN,
+            generated_by_trace_id=None,
+            created_at=now,
+        )
+    )
+    session.add(
+        orm.ProductionPlan(
+            plan_id=plan_id,
+            production_date=production_date,
+            status=PENDING_STATUS,
+            feasibility=candidate.feasibility,
+            plan_version=1,
+            version=1,
+            input_snapshot_version=snapshot.snapshot_version,
+            origin=origin,
+            generated_by_trace_id=None,
+            created_at=now,
+        )
+    )
+    session.flush()
+    _add_scheduled_jobs(session, plan_id=baseline_plan_id, candidate=baseline_result.plan)
+    # §8 守卫（origin != BASELINE 且非沙箱）在此复用；写四张明细表。
+    save_proposed_plan(
+        session,
+        result=result,
+        weights=ObjectiveWeights(),
+        origin=origin,
+        produced_in_sandbox=False,
+    )
+    return MaterializedProposal(plan_id=plan_id, candidate=candidate, breakdown=breakdown)
 
 
 def _add_scheduled_jobs(session: Session, *, plan_id: str, candidate: PlanCandidate) -> None:

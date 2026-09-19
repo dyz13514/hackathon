@@ -23,12 +23,13 @@ design.md §5 的表落地，落地任务如下（本任务只建骨架，不含
 
 from fastapi import APIRouter
 
-from app.api import admin, approvals, auth, plans, state, traces
+from app.api import admin, approvals, auth, disruptions, plans, state, traces
 
 api_router = APIRouter(prefix="/api")
 api_router.include_router(auth.router)
 api_router.include_router(admin.router)
 api_router.include_router(plans.router)
+api_router.include_router(disruptions.router)
 api_router.include_router(approvals.router)
 api_router.include_router(state.router)
 api_router.include_router(traces.router)

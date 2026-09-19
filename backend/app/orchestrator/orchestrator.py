@@ -205,6 +205,7 @@ class Orchestrator:
         tracer: Tracer,
         agent_drivers: Mapping[str, AgentDriver] | None = None,
         contracts: Mapping[str, type[AgentContract]] | None = None,
+        tool_session: object | None = None,
     ) -> None:
         self._registry = registry
         self._budget = budget
@@ -213,6 +214,12 @@ class Orchestrator:
         # Agent → 输出契约（final 的 schema 校验用）。缺省空——由跑 ReAct 的调用方注入，与
         # `agent_drivers` 成对提供（每个被驱动的 Agent 都要有它的输出契约）。
         self._contracts = dict(contracts or {})
+        # 可选的工具会话（`ToolContext.session`）。缺省 `None`：只做纯路由 / 终止性测试 / 无
+        # session-backed 工具的调用方无需提供，且既有行为完全不变。跑真实重排 ReAct 路径时，
+        # session-backed 工具（generate_schedule / save_proposed_plan / ...）需要一个会话——
+        # 由此注入，`_dispatch_action` 透传进 `ToolContext.session`。会话的事务边界由调用方
+        # 持有（与流水线一致：Orchestrator 不 commit）。
+        self._tool_session = tool_session
 
     def run(
         self, intent: Intent, payload: BaseModel, session_id: str
@@ -423,7 +430,9 @@ class Orchestrator:
                 terminal_outcome="VALIDATION_FAILED",
             )
 
-        ctx = ToolContext(trace_id=trace.trace_id, step_id=None)
+        ctx = ToolContext(
+            trace_id=trace.trace_id, step_id=None, session=self._tool_session
+        )
         result: ToolResult = self._registry.invoke(caller, tool_name, raw_args, ctx)
 
         if result.ok:

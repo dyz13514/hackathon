@@ -56,9 +56,43 @@ def save_proposed_plan(
             f"基线计划（origin={args.origin!r}）永不进审批流，不能经 save_proposed_plan 落成 "
             f"{PENDING_STATUS}（design.md §8）"
         )
-    raise NotImplementedError(
-        "save_proposed_plan 的候选物化落库随 §7 落地；状态恒为 PENDING_APPROVAL（已硬编码），"
-        "接线后委派 app.orchestrator.pipelines.plan_generation.save_proposed_plan"
+    from app.orchestrator.pipelines.plan_generation import (
+        materialize_pending_from_candidate,
+    )
+
+    session = _session(ctx)
+    now = _now()
+    # 从 DRAFT 候选（generate_schedule 落库）创建一个新的 PENDING_APPROVAL 计划行。
+    # design.md §8：DRAFT → PENDING_APPROVAL 由 save_proposed_plan 执行——采用**创建新行**
+    # 而非改写 DRAFT 的 status（后者只允许经 Approval_Service 的 update_plan_status_if_version，
+    # `test_layering.py` 断言其调用点仅限 approval.py）。§8 的基线/沙箱守卫在
+    # `materialize_pending_from_candidate` 内复用 plan_generation.save_proposed_plan 施加。
+    # 返回带上候选与评分，避免再读一次快照（会话此刻已有未提交行，load_snapshot 会拒绝脏会话）。
+    proposal = materialize_pending_from_candidate(
+        session,
+        candidate_plan_id=args.candidate_plan_id,
+        production_date=args.production_date,
+        origin=args.origin,
+        now=now,
+    )
+    candidate = proposal.candidate
+    breakdown = proposal.breakdown
+    by_name = {c.name: c.raw_value for c in breakdown.components}
+    return m.SaveProposedPlanOut(
+        plan_id=proposal.plan_id,
+        plan_version=1,
+        feasibility=m.Feasibility(candidate.feasibility),
+        objective=m.ObjectiveSummary(
+            total_score=float(breakdown.total_score),
+            late_order_count=int(by_name.get("late_order_count", 0.0)),
+            total_tardiness_minutes=int(by_name.get("total_tardiness_minutes", 0.0)),
+            churn_ratio=by_name.get("churn_ratio"),
+            total_changeover_minutes=int(by_name.get("total_changeover_minutes", 0.0)),
+            preference_penalty=float(by_name.get("preference_penalty", 0.0)),
+        ),
+        scheduled_job_count=len(candidate.scheduled_jobs),
+        unschedulable_count=len(candidate.unschedulable_jobs),
+        trace_id=ctx.trace_id,
     )
 
 
@@ -67,13 +101,83 @@ def register_disruption(
 ) -> m.RegisterDisruptionOut:
     """登记一类扰动（R9.1）。委派给 §7 的扰动登记服务（写 `disruptions` + 相应停机/缺勤窗）。
 
-    5 类扰动的判别联合载荷已在契约里定义。登记服务随 §7 落地：写 `disruptions` 行，
-    `MACHINE_BREAKDOWN` / `WORKER_UNAVAILABLE` 类同时写 `machine_downtime` / `worker_absences`
-    窗口并回指该扰动。
+    5 类扰动的判别联合载荷把 `RegisterDisruptionIn.payload` 摊平成服务层的 `DisruptionInput`，
+    再交 `replanning.register_disruption`：写 `disruptions` 行，`MACHINE_BREAKDOWN` /
+    `WORKER_UNAVAILABLE` 同时写 `machine_downtime` / `worker_absences` 并回指该扰动，物料类
+    扰动施加库存/ETA 副作用（R9.7）。无 `ACTIVE` 计划 → `NoActivePlanError`（R9.8）。
+
+    本 handler 只登记扰动并返回 `disruption_id`——重排由调用方（ReAct 循环或确定性流水线）随后
+    以 `get_affected_jobs → generate_schedule(freeze) → ...` 继续。它**不**发起重排，也不改计划
+    状态（唯一能置 `ACTIVE` 的是 `Approval_Service`）。不提交——registry 装配的会话持有事务。
     """
-    raise NotImplementedError(
-        "register_disruption 委派 §7 的扰动登记服务；5 类载荷契约已定义"
+    from app.services.replanning import (
+        register_disruption as service_register,
     )
+    from app.services.replanning import (
+        require_any_active_plan,
+    )
+
+    session = _session(ctx)
+    active_plan = require_any_active_plan(session)
+    payload = _disruption_input_from_contract(args)
+    row = service_register(
+        session,
+        payload,
+        active_plan_id=active_plan.plan_id,
+        source="PLANNER_UI",
+        registered_at=_now(),
+        trace_id=ctx.trace_id,
+    )
+    return m.RegisterDisruptionOut(
+        disruption_id=row.disruption_id,
+        type=row.type,
+        registered_at=row.registered_at,
+    )
+
+
+def _now():  # noqa: ANN202
+    from datetime import datetime
+
+    return datetime.now()  # noqa: DTZ005
+
+
+def _disruption_input_from_contract(args: m.RegisterDisruptionIn):  # noqa: ANN202
+    """把 `RegisterDisruptionIn`（判别联合载荷）摊平成服务层的 `DisruptionInput`。
+
+    按 `payload.kind` 取该类型的字段，其余留 `None`。`Decimal` 从契约的 `float` 精确构造
+    （经 `str` 中转，避免二进制浮点误差进入库/排产算术）。
+    """
+    from decimal import Decimal
+
+    from app.services.replanning import DisruptionInput
+    from app.tools import models as mm
+
+    p = args.payload
+    kwargs: dict[str, object] = {"type": args.type, "reported_at": args.reported_at}
+    if isinstance(p, mm.MachineBreakdownPayload):
+        kwargs.update(
+            machine_id=p.machine_id, window_start=p.start_time, window_end=p.end_time
+        )
+    elif isinstance(p, mm.WorkerUnavailablePayload):
+        kwargs.update(
+            worker_id=p.worker_id, window_start=p.start_time, window_end=p.end_time
+        )
+    elif isinstance(p, mm.MaterialShortagePayload):
+        kwargs.update(
+            material_id=p.material_id,
+            available_quantity=Decimal(str(p.available_quantity)),
+        )
+    elif isinstance(p, mm.MaterialDelayPayload):
+        kwargs.update(
+            material_id=p.material_id, delivery_id=p.delivery_id, new_eta=p.new_eta
+        )
+    elif isinstance(p, mm.UrgentOrderPayload):
+        kwargs.update(
+            product_id=p.product_id,
+            quantity=Decimal(str(p.quantity)),
+            due_date=p.due_date,
+        )
+    return DisruptionInput(**kwargs)  # type: ignore[arg-type]
 
 
 def propose_preference_rule(

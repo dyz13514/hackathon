@@ -448,7 +448,7 @@
     - _Requirements: R13.1–R13.6, R13.8, R13.11, R13.12, R27.10_
     - _Design: Components §3.6、ADR-010、Testing Strategy §1_
 
-  - [~] 7.4 实现扰动登记、`ImpactAnalysis` 与 `Planning_Agent` 的 ReAct 重排路径
+  - [x] 7.4 实现扰动登记、`ImpactAnalysis` 与 `Planning_Agent` 的 ReAct 重排路径
     - `POST /api/disruptions`：5 类扰动的判别联合 payload；无 `ACTIVE` 计划 → `NO_ACTIVE_PLAN`；写 `disruptions`（登记时间、来源、结构化内容、`trace_id`）
     - `MACHINE_BREAKDOWN` / `WORKER_UNAVAILABLE` 登记时写 `machine_downtime` / `worker_absences`
     - `agents/planning_agent.py`：形态 B ReAct（≤8 步，`budget_scope = REPLANNING`，上限 **14,000 token / USD 0.06**），典型序列 `get_affected_jobs → generate_schedule(freeze) → check_constraints → classify_impact → compare_plans → save_proposed_plan`；90 秒内产出 `ImpactAnalysis` 与 `PENDING_APPROVAL` 修订计划
