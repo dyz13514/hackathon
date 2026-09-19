@@ -140,11 +140,19 @@ worker 跑 FastAPI，SQLite 文件开 WAL。仅使用两类 AWS 能力：Lightsa
 Claude Sonnet 4.5 的 JSON API（R27.2）。
 
 ```bash
-make deploy      # 调用 deploy/deploy.sh（任务 12.6 落地）
+make deploy      # 在目标实例上调用 deploy/deploy.sh（幂等：建环境→迁移→seed→构建前端→装 unit/Caddy→重启→探活）
 ```
 
-部署产物见 `deploy/README.md`。备份：SQLite 每小时 `VACUUM INTO backups/`，保留最近
-24 份。
+部署产物在 `deploy/`（见 `deploy/README.md`）：`Caddyfile`（TLS + 静态文件 +
+`/api/*` 反向代理）、`planning-agent.service`（systemd，`uvicorn --workers 1`，凭证经
+`EnvironmentFile` 注入、`ProtectSystem=strict` 最小权限）、`backup.sh`（SQLite 每小时
+`VACUUM INTO backups/`，保留最近 24 份）、`deploy.sh`（`make deploy` 入口）。
+
+一次性准备（实例上手工/IaC，不由 `deploy.sh` 做——它只部署代码、不创建云资源）：开通
+Lightsail 实例并放行 80/443、装 `python3.12`/`nodejs`/`caddy`/`sqlite3`、建 `planning-agent`
+用户与 `/srv/planning-agent` 目录、写 `/etc/planning-agent.env`（权限 600，含
+`DATABASE_URL`/`SESSION_*`/可选 `BEDROCK_*`）、把 `Caddyfile` 的 `example.com` 换成真实
+域名。逐项清单见 `deploy/README.md`。仅使用两类 AWS 能力：Lightsail 与 Bedrock（R27.2）。
 
 **数据库最小权限的 SQLite 差异**（R23.9）：SQLite 无账户概念，因此以「应用只持有
 一个数据库文件句柄 + 文件权限 600 + 不开放任何 SQL 执行端点」落实等价约束。迁移到

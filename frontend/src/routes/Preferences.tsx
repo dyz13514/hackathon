@@ -554,10 +554,10 @@ export function Preferences() {
                     >
                       影响了哪些作业
                     </button>
-                    {affected[rule.rule_id] && (
+                    {affected[rule.rule_id] !== undefined && (
                       <div className="affected-jobs" role="status">
-                        {affected[rule.rule_id].length > 0 ? (
-                          <>受影响作业：{affected[rule.rule_id].join(', ')}</>
+                        {(affected[rule.rule_id] ?? []).length > 0 ? (
+                          <>受影响作业：{(affected[rule.rule_id] ?? []).join(', ')}</>
                         ) : (
                           <>当前生效计划中无受该规则影响的作业。</>
                         )}

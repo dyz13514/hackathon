@@ -1,0 +1,50 @@
+# Caddyfile —— AI Production Planning Agent 的 Lightsail 边缘（任务 12.7，design.md Architecture §4）。
+#
+# Caddy 承担三件事，都在这一个 site 块里：
+#   1. TLS —— 自动申请并续期 Let's Encrypt 证书（把下面的 example.com 换成真实域名后即生效）；
+#   2. 静态文件 —— 前端 `npm run build` 产物（Vite → frontend/dist）由 Caddy 直接伺服；
+#   3. 反向代理 —— 一切 `/api/*` 转发给本机的 uvicorn（单 worker，:8000）。
+#
+# 拓扑：浏览器 →(HTTPS)→ Caddy → uvicorn + FastAPI → SQLite（WAL）。浏览器因此始终同源
+# （前端与 /api 同域），HttpOnly 会话 Cookie 的行为与开发期经 Vite 代理时一致（README §登录）。
+#
+# 部署时把 example.com 换成 Lightsail 实例绑定的域名；无域名做演示时可用 `:80`（无 TLS，仅
+# 内网/临时）或 Caddy 的 `tls internal`（自签，浏览器会告警）。凭证不出现在本文件——Bedrock
+# 网关地址与密钥只经 systemd unit 的 EnvironmentFile 注入 uvicorn 进程（R23.11）。
+
+example.com {
+	encode gzip zstd
+
+	# /api/* → 后端。uvicorn 单 worker（SQLite 写并发受限 + R12.7 乐观并发在单进程下更稳）。
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8000 {
+			# 30s 与 Bedrock 单次调用超时（R27.12）同量级；给确定性计划生成（≤60s）留足余量。
+			transport http {
+				read_timeout 120s
+				write_timeout 120s
+			}
+		}
+	}
+
+	# 其余路径 → 前端静态产物。SPA：找不到文件时回退 index.html 交给前端路由。
+	handle {
+		root * /srv/planning-agent/frontend/dist
+		try_files {path} /index.html
+		file_server
+	}
+
+	# 安全响应头（纵深防御；真正的边界是应用层的 Session_Auth 与 Guardrail_Layer）。
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Caddy 会为静态资源自动设长缓存；HTML 不缓存以便前端更新即时可见。
+		-Server
+	}
+
+	log {
+		output file /var/log/caddy/planning-agent.log
+		format json
+	}
+}

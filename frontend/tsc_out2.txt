@@ -1,2 +1,0 @@
-﻿src/test/Approval.test.tsx(26,3): error TS6133: 'rejectPlan' is declared but its value is never read.
-EXIT=2
