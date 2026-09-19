@@ -29,12 +29,13 @@ design.md Components §3.1 把这个组件的定位写成一句话：**唯一有
 （`OPERATION_PRECEDENCE_VIOLATION`）由主循环在同一订单内某道工序失败、后续工序连带回滚时
 标注——它不是「后续工序自身」的失败，而是「前序没排上所以它也排不上」。
 
-## `preference_delta` 先留桩返回 0（任务 11.2 接入）
+## `preference_delta` 已接入（任务 11.2）
 
-偏好是软目标，进候选打分的 `W_PREF` 项（design.md §3.1.2）。任务 11.2 才定义
-`PreferenceRule.structured_form` 的判别联合并算出「把这个作业放这台机器/这个工人上会新增多少
-分钟等价惩罚」。在那之前 `preference_delta` 恒返回 `0`，因此 `W_PREF` 项此刻不改变任何排产
-结果——但它已经在 `cost` 表达式里就位，接入时只需把桩换成真实实现，主循环一行不动。
+偏好是软目标，进候选打分的 `W_PREF` 项（design.md §3.1.2）。任务 11.2 把匹配与分钟等价惩罚
+落在 `core.preference` 里，本模块的 `preference_delta` 委托给它：对每条命中当前「作业 × 机器 ×
+工人」放置的 penalty 类规则累加 `weight_delta × PREF_UNIT`。它恒 `>= 0`，因此偏好只改变**选谁**、
+绝不把不可行变可行——可行性仍由 `earliest_feasible_slot` 独立判定，与偏好无关。空规则集恒返回 0，
+无偏好时排产结果与接入前逐字段相同。`cost` 表达式一行未动。
 
 ## `freeze` / `locked` / `exclude_machine_ids`：为任务 7.1 的重排预留
 
@@ -58,6 +59,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.core.preference import preference_delta as _preference_delta
 from app.core.scheduling import Timeline, earliest_feasible_slot, processing_minutes
 from app.core.snapshot import (
     DomainSnapshot,
@@ -283,11 +285,15 @@ def preference_delta(
 ) -> Decimal:
     """把作业放在 `machine` / `worker` 上会新增多少偏好惩罚（分钟等价，design.md §3.1.2）。
 
-    **任务 2.4 的桩：恒返回 0。** 偏好规则的 `structured_form` 判别联合在任务 11.2 定义，
-    在那之前本函数不解释任何规则，因此 `W_PREF` 项此刻不改变任何排产结果。它已在 `cost`
-    表达式里就位（见 `_score_candidate`），接入时只需替换本函数体。
+    **任务 11.2 已接入**：委托给 `core.preference.preference_delta`，对每条命中当前放置的
+    penalty 类规则累加 `weight_delta × PREF_UNIT`。返回值恒 `>= 0`——偏好只能让候选更不划算、
+    改变**选谁**，绝不把不可行槽位变可行（可行性由 `earliest_feasible_slot` 独立判定，与偏好
+    无关）。空规则集恒返回 0，因此无偏好时排产结果与接入前逐字段相同。
+
+    这里保留一层薄封装（而非在 `_best_candidate` 直接调 `core.preference`），是为了让主循环
+    的 `cost` 表达式一行不动，也让 `preference_delta` 这个被测契约名保持稳定。
     """
-    return Decimal("0")
+    return _preference_delta(job, machine, worker, rules)
 
 
 # --------------------------------------------------------------------------

@@ -283,17 +283,24 @@ def test_fcfs_ignores_preference_rules() -> None:
         workers=(_worker(),),
         changeover_rules=(),
         preference_rules=(
+            # 一条**合法且会命中**的 4 类规则（任务 11.2 已让它在正式排产里生效）：
+            # 避免把 ORD-01 排在 CNC-01 上。基线必须继续忽略它——即便它会改变优化计划的选型。
             PreferenceRule(
                 rule_id="PR-01",
-                human_text="尽量避免用 CNC-01",
-                structured_form={"type": "AVOID_MACHINE", "machine_id": "CNC-01"},
+                human_text="ORD-01 不要排 CNC-01",
+                structured_form={
+                    "kind": "AVOID_MACHINE_FOR_ORDER",
+                    "order_id": "ORD-01",
+                    "machine_id": "CNC-01",
+                    "weight_delta": 10,
+                },
             ),
         ),
     )
     without_pref = with_pref.model_copy(update={"preference_rules": ()})
 
     assert fcfs(with_pref).plan.scheduled_jobs == fcfs(without_pref).plan.scheduled_jobs
-    # 基线仍取 ID 最小的 CNC-01，偏好"避免 CNC-01"未生效。
+    # 基线仍取 ID 最小的 CNC-01，偏好"避免 CNC-01"未生效（基线不打分、不接偏好）。
     assert fcfs(with_pref).plan.scheduled_jobs[0].machine_id == "CNC-01"
 
 

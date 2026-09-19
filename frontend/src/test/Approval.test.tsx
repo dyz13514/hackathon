@@ -57,7 +57,15 @@ const PLAN: PlanDetail = {
     ],
     total_score: 43,
     preference_contributions: [],
-    weight_overrides_applied: ['rule-1'],
+    weight_overrides_applied: [
+      {
+        rule_id: 'rule-1',
+        component: 'total_tardiness_minutes',
+        multiplier: 1.5,
+        original_weight: 1,
+        new_weight: 1.5,
+      },
+    ],
   },
   baseline_comparison: null,
 };

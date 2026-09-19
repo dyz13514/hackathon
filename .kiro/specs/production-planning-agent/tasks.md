@@ -603,7 +603,7 @@
 
 - [ ] 11. P0-H 偏好记忆、价值台账与降级模式（**不依赖 LLM**：规则由规划员手写）
 
-  - [~] 11.1 实现 `Preference_Store` 与手写规则创建入口
+  - [x] 11.1 实现 `Preference_Store` 与手写规则创建入口
     - `PreferenceForm` 为**封闭判别联合**，只有 `AvoidMachineForOrder` / `AvoidMachineForProduct` / `PreferWorkerForSkill` / `AdjustObjectiveWeight` 四个成员，无自由谓词、无表达式字段
     - `weight_delta: Field(gt=0, le=10)`（惩罚只能为正，规则只能让某选择更不划算，不能让不可行变可行）；`AdjustObjectiveWeight.multiplier: Field(ge=0.5, le=2.0)`，`component` 限定为 6 个**软目标**分量的字面量联合
     - **`POST /api/preferences` 是 P0 唯一的建规则入口**：规划员手写 `human_text` + 四类 `structured_form` 之一的参数。`create_rule()` 默认 `enabled=False`，需一次显式启用动作（确认闸门对手写规则同样适用）
@@ -615,7 +615,7 @@
     - _Requirements: R18.3, R18.4, R18.5, R18.6, R18.8, R18.9, R18.10, R18.11, R18.12_
     - _Design: Components §4.3、ADR-008、Testing Strategy §1_
 
-  - [~] 11.2 把偏好规则接入排产打分与目标评分两处
+  - [x] 11.2 把偏好规则接入排产打分与目标评分两处
     - `PREF_UNIT = 60.0`（分钟等价基数：违反 1 条规则 ≈ 晚完工 60 分钟的代价），使惩罚与「晚完工」同量纲、规划员能理解「这条规则值多少分钟」
     - `preference_penalty(plan, rules)` 逐规则求和，每项带 `rule_id`、`human_text`、`violating_job_ids`（≤10）、`raw_value`、`weighted_contribution`；`AdjustObjectiveWeight` 不进 penalty，走 `weight_overrides_applied`
     - **同一函数在两处使用，两处都是 P0，这是「规则真的生效」的关键**：①排产时替换任务 2.4 的桩函数，`preference_delta(job, machine, worker, rules)` 直接加进候选 `cost`，因此规则**改变排产结果**（EVAL-011 第一断言）；②评分时对成型计划算总惩罚并输出 `contributions`，UI 标注「`JOB-012` 受 `PR-003` 影响」（EVAL-011 第二断言）
@@ -624,7 +624,7 @@
     - _Requirements: R7.6, R18.7, R18.9_
     - _Design: Components §4.3、§3.1.2、§3.3_
 
-  - [~] 11.3 为偏好规则的安全不变量编写属性测试
+  - [x] 11.3 为偏好规则的安全不变量编写属性测试
     - **Property 10: 偏好规则的安全不变量**
     - **Validates: Requirements 18.4, 18.8, 18.9, 18.10, 18.11**
     - `max_examples=100`。对任意规则集合（含任意权重取值）断言：(a) 该规则集下的计划仍零违反；(b) 全部规则 `enabled=false` 后的计划逐字段等于空规则集下的计划；(c) 不存在任何调用序列能使规则在无显式人工确认时变为 `enabled=true`，启用数恒 ≤ 20，`source_decision_ids` < 2 的候选恒被标 `LOW_EVIDENCE`
@@ -633,7 +633,7 @@
     - _Properties: 10_
     - _Design: Correctness Properties「Property 10」_
 
-  - [~] 11.4 实现 `Value_Ledger` 与台账界面
+  - [x] 11.4 实现 `Value_Ledger` 与台账界面
     - `ValueMetrics` 全字段度量与持久化（含 `plan_generation_seconds`、`disruption_response_seconds`、`on_time_rate` 与基线值、`total_tardiness_minutes` 与基线值、`churn_ratio`、`manual_steps_eliminated`、`auto_handled_count`、`escalated_count`、`llm_tokens_used`、`estimated_usd_cost`、`real_run_count`），全部确定性计算
     - `manual_steps_eliminated` 按 design.md §4.4 的口径表计数（每个 `ImportBatch` 计 1 步，无论 20 行还是 2,000 行，不夸大），UI 原样展示该口径表
     - 标签：人工基线时间标 `ESTIMATED` 并注明「来源：访谈估计」；系统指标标 `MEASURED`；K-17 / K-18 标 `PROJECTED` 并与实测累计**并排显示**。**两列而非三列**（实测累计 / 预测 ≈USD 30 = LLM ≈USD 21 + Lightsail USD 5–10）——requirements 现在只有一个预测口径
@@ -643,7 +643,7 @@
     - _Requirements: R19.1, R19.4–R19.8, R25.12, R25.13, R13.13_
     - _Design: Components §4.4、成本章节 §2_
 
-  - [~] 11.5 为基线同输入同口径编写属性测试
+  - [x] 11.5 为基线同输入同口径编写属性测试
     - **Property 37: 基线同输入同口径**
     - **Validates: Requirements 19.2, 19.3, 5.4**
     - `max_examples=100`。断言基线计划的 `snapshot_version` 等于正式计划的；`Baseline_Scheduler` 两次运行结果相同；对任意仅置换订单 `priority` 的输入变换基线结果不变（证明基线确实忽略优先级）
@@ -652,7 +652,7 @@
     - _Properties: 37_
     - _Design: Correctness Properties「Property 37」_
 
-  - [~] 11.6 实现 `DETERMINISTIC_ONLY` 降级模式的全覆盖
+  - [x] 11.6 实现 `DETERMINISTIC_ONLY` 降级模式的全覆盖
     - 进入条件三者任一：Bedrock 连续 3 次失败或不可重试错误、手动 `POST /api/settings/mode`、`PROJECT_USD_CEILING` 达 90%；退出为手动关闭 + 一次成功探针
     - 旁路点只有一个（`BedrockAdapter.mode = DISABLED`）；**所有 LLM 调用点必须实现 `except LlmDisabledError` 的模板回退**，由 `tests/unit/test_degraded_mode.py` 遍历全部调用点断言（**非可选**，承接原属性 31）
     - 保留能力：计划生成（解释走 `TemplateExplanationRenderer`）、校验与审批与重校验与陈旧检测、扰动重排（走任务 7.4 的确定性流水线）、风险扫描（叙述在 P0 本来就是模板）、结构化表单 What-if（P0 本来就只有这个入口）、价值台账、导出、Trace 查看、偏好规则 CRUD 与手写创建

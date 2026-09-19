@@ -113,6 +113,24 @@ class ErrorCode(StrEnum):
     #: `POST /imports/{batch_id}/revert` 的批次不存在。
     IMPORT_BATCH_NOT_FOUND = "IMPORT_BATCH_NOT_FOUND"
 
+    # DETERMINISTIC_ONLY 降级模式（R25.10，任务 11.6）。降级下 P0 只拒绝一条 LLM 能力
+    # ——电子表格列映射——并把规划员导向手工列映射界面（下拉选目标字段）。
+    #: 降级模式下请求 LLM 列映射（`GET /imports/{upload_id}/proposal`）→ 提示改用手工列映射。
+    LLM_UNAVAILABLE_USE_MANUAL_MAPPING = "LLM_UNAVAILABLE_USE_MANUAL_MAPPING"
+    #: 降级模式下请求自然语言 What-if 翻译（P1 路径，P0 无此输入入口）。错误码此刻定义供 P1
+    #: 使用（design.md §2.6 明确要求「一并定义供 P1 使用」）；P0 的结构化场景表单不受影响。
+    LLM_UNAVAILABLE_USE_STRUCTURED_FORM = "LLM_UNAVAILABLE_USE_STRUCTURED_FORM"
+
+    # 偏好规则（R18，任务 11.1）。四道结构性保障之一在 API 边界（design.md §4.3、EVAL-206）：
+    #: `structured_form` 指向硬约束开关或非软目标 `component`（如 `allow_shift_overflow`）。
+    #: Pydantic 的判别联合先拦一层（返回 422 校验错误），本码是服务层再判一道的显式出口——
+    #: 偏好规则**永远不能**放宽硬约束，越界即拒（R18.8）。
+    PREFERENCE_RULE_OUT_OF_SCOPE = "PREFERENCE_RULE_OUT_OF_SCOPE"
+    #: 启用状态的 `PreferenceRule` 已达 20 条上限（R18.11）。要求先停用既有规则再启用。
+    PREFERENCE_RULE_LIMIT_REACHED = "PREFERENCE_RULE_LIMIT_REACHED"
+    #: `GET/PATCH/DELETE /api/preferences/{rule_id}` 的规则不存在。
+    PREFERENCE_RULE_NOT_FOUND = "PREFERENCE_RULE_NOT_FOUND"
+
 
 class NextAction(BaseModel):
     """一个可执行的下一步。`href` 为空表示动作在当前界面内完成。"""

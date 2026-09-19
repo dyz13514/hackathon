@@ -41,6 +41,99 @@ const LEDGER: ValueLedgerData = {
   baseline_on_time_rate: 0.6,
   total_tardiness_minutes: 47,
   baseline_total_tardiness_minutes: 210,
+  metrics: {
+    plan_id: 'PLAN-active',
+    measured_at: '2026-03-02T08:00:00',
+    plan_generation_seconds: null,
+    disruption_response_seconds: null,
+    on_time_rate: 0.9,
+    total_tardiness_minutes: 47,
+    churn_ratio: null,
+    manual_steps_eliminated: 5,
+    auto_handled_count: 3,
+    escalated_count: 1,
+    llm_tokens_used: 1234,
+    estimated_usd_cost: 0.0123,
+    real_run_count: 2,
+    project_real_run_cap: 150,
+    real_run_remaining: 148,
+    baseline_plan_generation_seconds: 2700,
+    baseline_disruption_response_seconds: 1800,
+    baseline_on_time_rate: 0.6,
+    baseline_total_tardiness_minutes: 210,
+    projected_hero_demo_usd: 0.14,
+    projected_build_total_usd: 30,
+    labels: {
+      manual_steps_eliminated: 'MEASURED',
+      baseline_plan_generation_seconds: 'ESTIMATED',
+      projected_hero_demo_usd: 'PROJECTED',
+    },
+  },
+  manual_steps: [
+    { action: 'spreadsheet_import', label: '电子表格导入', rule: '每个导入批次计 1 步', count: 1 },
+    { action: 'plan_generation', label: '计划生成', rule: '每次成功生成计 1 步', count: 1 },
+  ],
+  kpis: [
+    {
+      kpi_id: 'K-01',
+      metric_name: '计划生成时间（秒）',
+      current_value: '',
+      baseline_value: '2700',
+      delta: '',
+      target_value: '≤ 60',
+      label: 'ESTIMATED',
+      measured_at: '2026-03-02T08:00:00',
+    },
+    {
+      kpi_id: 'K-17',
+      metric_name: '一次完整演示 LLM 成本（USD，预测）',
+      current_value: '0.14',
+      baseline_value: '',
+      delta: '',
+      target_value: '≈ 0.14',
+      label: 'PROJECTED',
+      measured_at: '2026-03-02T08:00:00',
+    },
+  ],
+};
+
+const EMPTY_LEDGER: ValueLedgerData = {
+  auto_handled_count: 0,
+  escalated_count: 0,
+  total_decisions: 0,
+  auto_handled_ratio: 0,
+  decisions: [],
+  active_plan_id: null,
+  on_time_rate: null,
+  baseline_on_time_rate: null,
+  total_tardiness_minutes: null,
+  baseline_total_tardiness_minutes: null,
+  metrics: {
+    plan_id: null,
+    measured_at: '2026-03-02T08:00:00',
+    plan_generation_seconds: null,
+    disruption_response_seconds: null,
+    on_time_rate: null,
+    total_tardiness_minutes: null,
+    churn_ratio: null,
+    manual_steps_eliminated: 0,
+    auto_handled_count: 0,
+    escalated_count: 0,
+    llm_tokens_used: 0,
+    estimated_usd_cost: 0,
+    real_run_count: 0,
+    project_real_run_cap: 150,
+    real_run_remaining: 150,
+    baseline_plan_generation_seconds: 2700,
+    baseline_disruption_response_seconds: 1800,
+    baseline_on_time_rate: null,
+    baseline_total_tardiness_minutes: null,
+    projected_hero_demo_usd: 0.14,
+    projected_build_total_usd: 30,
+    labels: {},
+  },
+  manual_steps: [],
+  kpis: [],
 };
 
 afterEach(() => {
@@ -76,20 +169,46 @@ describe('ValueLedger 视图', () => {
   });
 
   it('无裁决时显示诚实空态而不是空白', async () => {
-    vi.mocked(getValueLedger).mockResolvedValue({
-      auto_handled_count: 0,
-      escalated_count: 0,
-      total_decisions: 0,
-      auto_handled_ratio: 0,
-      decisions: [],
-      active_plan_id: null,
-      on_time_rate: null,
-      baseline_on_time_rate: null,
-      total_tardiness_minutes: null,
-      baseline_total_tardiness_minutes: null,
-    });
+    vi.mocked(getValueLedger).mockResolvedValue(EMPTY_LEDGER);
     render(<ValueLedger />);
     expect(await screen.findByText(/尚无影响分级裁决/)).toBeInTheDocument();
+  });
+
+  it('渲染 KPI 表并带 MEASURED/ESTIMATED/PROJECTED 标签（不仅靠颜色，R19.4/R27.9）', async () => {
+    vi.mocked(getValueLedger).mockResolvedValue(LEDGER);
+    render(<ValueLedger />);
+    await screen.findByRole('heading', { name: /KPI（K-01 至 K-18）/ });
+    // KPI 行可见
+    expect(screen.getByRole('rowheader', { name: 'K-01' })).toBeInTheDocument();
+    expect(screen.getByRole('rowheader', { name: 'K-17' })).toBeInTheDocument();
+    // 标签用文字（不仅颜色）
+    expect(screen.getAllByText(/估计（访谈）/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/预测/).length).toBeGreaterThan(0);
+  });
+
+  it('展示实测 vs 预测两列与真实运行配额剩余（R25.12/13）', async () => {
+    vi.mocked(getValueLedger).mockResolvedValue(LEDGER);
+    render(<ValueLedger />);
+    await screen.findByRole('heading', { name: /成本：实测累计 vs 预测/ });
+    expect(screen.getByText('1234')).toBeInTheDocument(); // 累计 token
+    // 配额剩余（148）可见
+    const quota = screen.getByText(/真实运行配额/);
+    expect(quota.textContent).toMatch(/148/);
+  });
+
+  it('展示 manual_steps 口径表（R19.5）', async () => {
+    vi.mocked(getValueLedger).mockResolvedValue(LEDGER);
+    render(<ValueLedger />);
+    await screen.findByRole('heading', { name: /消除的人工步骤/ });
+    expect(screen.getByRole('rowheader', { name: '电子表格导入' })).toBeInTheDocument();
+    expect(screen.getByRole('rowheader', { name: '计划生成' })).toBeInTheDocument();
+  });
+
+  it('提供 CSV 导出链接（R19.8）', async () => {
+    vi.mocked(getValueLedger).mockResolvedValue(LEDGER);
+    render(<ValueLedger />);
+    const link = await screen.findByRole('link', { name: '导出价值台账为 CSV' });
+    expect(link).toHaveAttribute('href', '/api/value-ledger/export.csv');
   });
 
   it('后端不可用时显示错误而不是空白', async () => {

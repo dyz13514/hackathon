@@ -12,7 +12,7 @@ design.md §5 的表落地，落地任务如下（本任务只建骨架，不含
 - `approvals.py`（`/plans/{id}/approve|reject|modify`）── 任务 3.1、3.2
 - `traces.py`（`/traces`、`/audit-log`）── 任务 5.12
 - `disruptions.py` ── 任务 7.x；`risks.py` ── 任务 8.x；`scenarios.py` ── 任务 9.x
-- `imports.py` ── 任务 10.x；`preferences.py` ── 任务 11.x
+- `imports.py` ── 任务 10.x；`preferences.py` ── 任务 11.1 ✔
 - `value_ledger.py` ── 任务 11.x；`autonomy.py` ── 任务 13.x（P1）
 
 写端点一律经 `Session_Auth` 校验（R23.12）。校验的主体是 `api/deps.py` 的
@@ -30,6 +30,7 @@ from app.api import (
     disruptions,
     imports,
     plans,
+    preferences,
     risks,
     scenarios,
     state,
@@ -49,6 +50,7 @@ api_router.include_router(value_ledger.router)
 api_router.include_router(risks.router)
 api_router.include_router(scenarios.router)
 api_router.include_router(imports.router)
+api_router.include_router(preferences.router)
 
 #: `/health` 同时挂在根路径上（`app.main` 装配，`include_in_schema=False`）：systemd 与
 #: Lightsail 的探针打的是本机 uvicorn，不经反向代理，因此不该被 `/api` 前缀绑住。

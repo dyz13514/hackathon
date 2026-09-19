@@ -37,13 +37,16 @@ R7.1 逐字列出 7 个分量：`late_order_count`、`total_tardiness_minutes`�
 （分母为 0）时利用率取 0.0，避免除零。这个比率落在 `[0, 1]` 附近（多机器并行时分子可能
 逼近分母），负权重让它把总分往下拉。
 
-## `preference_penalty` 先留空，任务 11.2 接入（design.md §3.3 / §偏好记忆）
+## `preference_penalty` 已接入（任务 11.2，design.md §3.3 / §4.3）
 
-本任务只交付前 6 个分量的真实计算。`preference_penalty` 的 `raw_value` 恒为 0.0，
-`preference_contributions` 恒为空列表——偏好规则的 `structured_form` 判别联合与逐 `rule_id`
-归因在任务 11.2 定义（design.md 偏好记忆一节的 `preference_penalty()` 函数）。分量本身此刻
-已在 `_COMPONENT_ORDER` 里就位（保证「恰好 7 条」从第一天成立），接入时只需把这里的 0 换成
-真实惩罚、把空列表换成 `contributions`，`score()` 的其余部分一行不动。
+`preference_penalty` 分量的 `raw_value` 由 `core.preference.preference_penalty(plan, rules,
+snapshot)` 算出——成型计划上每条命中规则的 `命中数 × weight_delta × PREF_UNIT` 之和（分钟
+等价），逐 `rule_id` 的归因写进 `ObjectiveBreakdown.preference_contributions`（R18.7）。
+`ADJUST_OBJECTIVE_WEIGHT` 不进 penalty，而是以有界 `multiplier` 缩放 6 个软目标分量的权重
+（`apply_weight_overrides`），生效覆盖记入 `weight_overrides_applied`。空规则集或无命中时该
+分量原始值为 0.0、归因为空——评分逐字段等于偏好接入前（属性 10b）。**偏好只影响软评分与
+候选排序，绝不改变可行性**：`score()` 不判硬约束，`validate()` 在排产后无条件执行且签名不含
+偏好规则（EVAL-206）。
 
 ## 权重变更写 `Audit_Log`（R7.4）——审计的接缝在服务/API 层，不在本模块
 
@@ -60,9 +63,15 @@ R7.4：规划员改权重时，下一次排产用新权重，并在 `Audit_Log` 
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
+from app.core.preference import (
+    PreferenceContribution,
+    apply_weight_overrides,
+    preference_penalty,
+)
 from app.core.scheduler import PlanCandidate
 from app.core.snapshot import DomainSnapshot, Order
 
@@ -123,16 +132,19 @@ class ObjectiveBreakdown(BaseModel):
     归因（R7.6）——本任务先留空列表，任务 11.2 接入。
 
     `weight_overrides_applied` 记录 `ADJUST_OBJECTIVE_WEIGHT` 实际生效的覆盖（design.md
-    §3.3）。任务 11.x 之前无覆盖来源，恒为空列表；其元素类型（`WeightOverride`）在那时
-    定义，此刻按可空的字符串列表占位以免提前锁死一个猜出来的形状。
+    §3.3 / §4.3）。每条含 `rule_id` / `component` / `multiplier` / `original_weight` /
+    `new_weight`，供审计与 UI 展示；无 `ADJUST_OBJECTIVE_WEIGHT` 规则时为空元组。
     """
 
     model_config = ConfigDict(frozen=True)
 
     components: tuple[ComponentScore, ...]
     total_score: float
-    preference_contributions: tuple[str, ...] = ()
-    weight_overrides_applied: tuple[str, ...] = ()
+    #: 逐 `rule_id` 的偏好惩罚归因（R18.7、design.md §4.3）。无启用偏好或无命中时为空元组，
+    #: 因此此刻的评分逐字段等于偏好接入前（属性 10b）。
+    preference_contributions: tuple[PreferenceContribution, ...] = ()
+    #: 生效的 `ADJUST_OBJECTIVE_WEIGHT` 覆盖（design.md §4.3）。元素是 JSON 可序列化的 dict。
+    weight_overrides_applied: tuple[dict[str, Any], ...] = ()
 
 
 # --------------------------------------------------------------------------
@@ -319,15 +331,25 @@ def score(
     `raw_value` / `weight` / `weighted_contribution`，`total_score = Σ weighted_contribution`
     （越小越好，R7.2）。`machine_utilisation` 的负权重让利用率越高、总分越低。
 
-    `preference_penalty` 的 `raw_value` 恒为 0.0（任务 11.2 接入），`preference_contributions`
-    恒为空——本任务只交付前 6 个分量的真实计算。
+    **偏好接入（任务 11.2）**：`preference_penalty` 分量的 `raw_value` 是 `core.preference`
+    对成型计划算出的分钟等价总惩罚（`Σ 命中数 × weight_delta × PREF_UNIT`），`weight` 为
+    `weights.preference_penalty`（默认 1.0）；逐 `rule_id` 归因写入 `preference_contributions`
+    （R18.7）。`ADJUST_OBJECTIVE_WEIGHT` 不进 penalty，而是以有界 `multiplier` 缩放 6 个软目标
+    分量的权重（`apply_weight_overrides`），生效覆盖记入 `weight_overrides_applied`。
+
+    **偏好绝不改变可行性**：本函数只算软评分，规则只影响权重与惩罚。空规则集或无命中时
+    `preference_penalty.raw_value == 0.0`、`preference_contributions == ()`、
+    `weight_overrides_applied == ()`，因此评分逐字段等于偏好接入前（属性 10b）。
     """
+    rules = snapshot.preference_rules
+
     late_count, total_tardiness, urgent_lateness = _late_and_tardiness(plan, snapshot)
     utilisation = _machine_utilisation(plan, snapshot)
     changeover = _total_changeover_minutes(plan)
     churn = _churn_ratio(plan, reference_plan)
+    penalty = preference_penalty(plan, rules, snapshot)
 
-    #: 分量名 → 原始值。`preference_penalty` 先留 0.0（任务 11.2）。
+    #: 分量名 → 原始值。`preference_penalty` 的原始值是分钟等价总惩罚（含 PREF_UNIT）。
     raw_values: dict[str, float] = {
         "late_order_count": float(late_count),
         "total_tardiness_minutes": float(total_tardiness),
@@ -335,10 +357,10 @@ def score(
         "churn_ratio": churn,
         "machine_utilisation": utilisation,
         "total_changeover_minutes": float(changeover),
-        "preference_penalty": 0.0,
+        "preference_penalty": penalty.total,
     }
 
-    weight_of: dict[str, float] = {
+    base_weights: dict[str, float] = {
         "late_order_count": weights.late_order_count,
         "total_tardiness_minutes": weights.total_tardiness_minutes,
         "urgent_order_lateness": weights.urgent_order_lateness,
@@ -347,6 +369,11 @@ def score(
         "total_changeover_minutes": weights.total_changeover_minutes,
         "preference_penalty": weights.preference_penalty,
     }
+
+    # ADJUST_OBJECTIVE_WEIGHT：有界缩放 6 个软目标分量的权重（design.md §4.3）。
+    # `preference_penalty` 分量本身不是 `ADJUST_OBJECTIVE_WEIGHT` 的合法 `component`
+    # （SoftWeightKey 只有 6 个软目标），因此其权重不受覆盖影响。
+    weight_of, overrides = apply_weight_overrides(base_weights, rules)
 
     components: list[ComponentScore] = []
     total = 0.0
@@ -367,8 +394,8 @@ def score(
     return ObjectiveBreakdown(
         components=tuple(components),
         total_score=total,
-        preference_contributions=(),  # 任务 11.2 接入
-        weight_overrides_applied=(),  # 任务 11.x 接入
+        preference_contributions=penalty.contributions,
+        weight_overrides_applied=overrides,
     )
 
 
