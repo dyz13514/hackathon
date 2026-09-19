@@ -132,6 +132,30 @@ class AffectedJobsOut(BaseModel):
     job_ids: list[str]
 
 
+class DistilledCandidateOut(BaseModel):
+    """一条蒸馏出的候选规则（任务 13.3）。**恒 `enabled=false`**，待人工逐条确认后 `/enable`。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    rule_id: str
+    human_text: str
+    structured_form: dict[str, Any]
+    source_decision_ids: list[str]
+    enabled: bool
+    low_evidence: bool
+
+
+class DistilResponse(BaseModel):
+    """`POST /preferences/distil` 响应：蒸馏结果状态 + 候选清单（全部未启用）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    outcome: str = Field(description="DISTILLED / NO_EVIDENCE / LLM_UNAVAILABLE")
+    candidates: list[DistilledCandidateOut]
+    injection_suspected: bool
+    considered_decision_ids: list[str]
+
+
 # --------------------------------------------------------------------------
 # 视图 → 响应
 # --------------------------------------------------------------------------
@@ -367,3 +391,40 @@ def affected_jobs(request: Request, rule_id: str) -> AffectedJobsOut | JSONRespo
         ).scalars().first()
         job_ids = store.affected_job_ids(db, rule_id, plan_id=plan_id)
     return AffectedJobsOut(rule_id=rule_id, plan_id=plan_id, job_ids=job_ids)
+
+
+@router.post(
+    "/distil",
+    response_model=DistilResponse,
+    summary="从历史决策蒸馏候选偏好规则（ReAct ≤2 步，全部 enabled=false，任务 13.3）",
+)
+def distil_preferences(
+    request: Request, session: PlannerSession
+) -> DistilResponse:
+    """从 `planner_decisions` 蒸馏候选偏好规则（R18.3）。写端点。
+
+    候选**一律 `enabled=false`**，仍须规划员逐条 `/enable` 确认；`source_decision_ids < 2` 标
+    `LOW_EVIDENCE`。拒绝理由按不受信任输入处理（包裹 + 注入扫描）。LLM 不可用（降级/回放缺失）
+    或无可蒸馏语料时返回空候选集（`outcome` 分别为 `LLM_UNAVAILABLE` / `NO_EVIDENCE`）。
+    """
+    from app.services.preference_distil import distil_preference_rules
+
+    adapter = request.app.state.llm_adapter
+    with _factory(request)() as db:
+        result = distil_preference_rules(adapter, db, now=DEMO_ANCHOR, actor="PLANNER")
+    return DistilResponse(
+        outcome=result.outcome.value,
+        candidates=[
+            DistilledCandidateOut(
+                rule_id=c.rule_id,
+                human_text=c.human_text,
+                structured_form=c.structured_form,
+                source_decision_ids=list(c.source_decision_ids),
+                enabled=c.enabled,
+                low_evidence=c.low_evidence,
+            )
+            for c in result.candidates
+        ],
+        injection_suspected=result.injection_suspected,
+        considered_decision_ids=list(result.considered_decision_ids),
+    )

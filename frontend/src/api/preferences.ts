@@ -149,3 +149,36 @@ export function deletePreference(ruleId: string): Promise<void> {
 export function getAffectedJobs(ruleId: string): Promise<AffectedJobs> {
   return apiFetch<AffectedJobs>(`/preferences/${encodeURIComponent(ruleId)}/affected-jobs`);
 }
+
+/**
+ * 一条蒸馏出的候选规则（任务 13.3）。**恒 `enabled=false`**——落库时已创建，待人工逐条
+ * `enablePreference` 确认。`low_evidence` 为真时界面提示证据不足（R18.10）。
+ */
+export interface DistilledCandidate {
+  readonly rule_id: string;
+  readonly human_text: string;
+  readonly structured_form: PreferenceForm;
+  readonly source_decision_ids: readonly string[];
+  readonly enabled: boolean;
+  readonly low_evidence: boolean;
+}
+
+/** `POST /preferences/distil` 响应（任务 13.3）。 */
+export interface DistilResult {
+  /** DISTILLED / NO_EVIDENCE / LLM_UNAVAILABLE。 */
+  readonly outcome: string;
+  readonly candidates: readonly DistilledCandidate[];
+  readonly injection_suspected: boolean;
+  readonly considered_decision_ids: readonly string[];
+}
+
+/**
+ * 从历史决策蒸馏候选偏好规则（任务 13.3，R18.3）。候选一律 `enabled=false`，仍须逐条
+ * `enablePreference` 人工确认。写端点。
+ */
+export function distilPreferences(): Promise<DistilResult> {
+  return apiFetch<DistilResult>('/preferences/distil', {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
