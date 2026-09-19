@@ -21,8 +21,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.db.models import ProductionPlan, Trace
 from app.orchestrator.pipelines import plan_generation
-
-from .conftest import EVAL_NOW, EVAL_PRODUCTION_DATE
+from tests.eval.conftest import EVAL_NOW, EVAL_PRODUCTION_DATE
 
 
 def test_eval_suite_runs_in_replay_mode() -> None:
