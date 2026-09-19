@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session
 
 from app.db import models as orm
 from app.services.snapshot_loader import load_snapshot
+from app.services.value_ledger import autonomy_summary
 from app.tools import models as m
 from app.tools.registry import ToolContext
 
@@ -353,6 +354,10 @@ def get_value_metrics(args: m.GetValueMetricsIn, ctx: ToolContext) -> m.ValueMet
         ).scalars().first()
         plan_id = active.plan_id if active is not None else None
 
+    # K-14：自主 vs 上报计数从 `impact_assessments` 聚合（R13.13），与本计划的 KPI 无关，
+    # 是项目级累计——因此不受 plan_id 是否有基线对比影响，两种返回路径都带上它。
+    summary = autonomy_summary(session)
+
     bc = session.get(orm.BaselineComparison, plan_id) if plan_id is not None else None
     if bc is None:
         return m.ValueMetricsOut(
@@ -361,6 +366,8 @@ def get_value_metrics(args: m.GetValueMetricsIn, ctx: ToolContext) -> m.ValueMet
             baseline_on_time_rate=0.0,
             total_tardiness_minutes=0,
             baseline_total_tardiness_minutes=0,
+            auto_handled_count=summary.auto_handled_count,
+            escalated_count=summary.escalated_count,
         )
     return m.ValueMetricsOut(
         plan_id=plan_id,
@@ -368,4 +375,6 @@ def get_value_metrics(args: m.GetValueMetricsIn, ctx: ToolContext) -> m.ValueMet
         baseline_on_time_rate=float(bc.baseline_on_time_rate),
         total_tardiness_minutes=bc.total_tardiness_minutes,
         baseline_total_tardiness_minutes=bc.baseline_total_tardiness_minutes,
+        auto_handled_count=summary.auto_handled_count,
+        escalated_count=summary.escalated_count,
     )

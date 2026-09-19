@@ -50,6 +50,7 @@ from app.orchestrator.pipelines.replan_deterministic import (
     run_replan,
 )
 from app.seed.dataset import DEMO_ANCHOR
+from app.services.feature_flags import read_feature_flags
 from app.services.replanning import (
     DisruptionInput,
     DisruptionNotFoundError,
@@ -141,6 +142,9 @@ class ImpactAnalysisOut(BaseModel):
     churn_ratio: float
     impact_class: str
     autonomy_level: str
+    #: 执行路径（R13.3/R13.4）：`PROPOSED`（L3 自主提案）或 `ESCALATED`（L5 上报人工）。
+    #: P0 取值域 `{PROPOSED, ESCALATED}`——`AUTO_APPLIED`（L4）属 P1，运行期不出现。
+    execution_path: str
     decisive_predicates: list[str]
     frozen_job_ids: list[str]
     substitute_unavailable_job_ids: list[str]
@@ -214,6 +218,9 @@ def post_disruption(
         active_candidate = load_plan_candidate(db, active_plan_id)
         kernel_disruption = to_kernel_disruption(payload)
         locked = locked_job_ids(db, active_plan_id)
+        # 运行期特性开关（R13.8）从 `settings` 表读；缺行即 P0 默认（False）。这是把持久化
+        # 开关注入确定性判定的接缝——`decide_autonomy` 仍是纯函数，flags 由此传入。
+        flags = read_feature_flags(db)
         result = run_replan(
             db,
             disruption_id=disruption_id,
@@ -224,6 +231,7 @@ def post_disruption(
             locked_job_ids=locked,
             now=DEMO_ANCHOR,
             session_id=f"session-{session.subject}",
+            flags=flags,
         )
     except DataIntegrityError as error:
         db.rollback()
@@ -332,6 +340,7 @@ def _impact_out(impact: ImpactAnalysis) -> ImpactAnalysisOut:
         churn_ratio=impact.churn_ratio,
         impact_class=impact.impact_class,
         autonomy_level=impact.autonomy_level,
+        execution_path=impact.execution_path,
         decisive_predicates=list(impact.decisive_predicates),
         frozen_job_ids=list(impact.frozen_job_ids),
         substitute_unavailable_job_ids=list(impact.substitute_unavailable_job_ids),
@@ -382,6 +391,7 @@ def _load_impact(db: Session, disruption_id: str) -> ImpactAnalysis:
         churn_ratio=float(impact_input.get("churn_ratio", 0.0)),
         impact_class=assessment.impact_class,
         autonomy_level=assessment.autonomy_level,
+        execution_path=assessment.execution_path,
         decisive_predicates=tuple(_as_list(assessment.decisive_predicates)),
         frozen_job_ids=(),
         substitute_unavailable_job_ids=(),

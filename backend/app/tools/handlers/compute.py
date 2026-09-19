@@ -341,7 +341,6 @@ def classify_impact(args: m.ClassifyImpactIn, ctx: ToolContext) -> m.ImpactOut:
     `ImpactInput.from_delta` 组装——全程无 LLM，Agent 提供的只有经 schema 校验的 `plan_id`。
     """
     from app.core.autonomy import (
-        FeatureFlags,
         ImpactInput,
         decide_autonomy,
         decisive_predicates,
@@ -350,6 +349,7 @@ def classify_impact(args: m.ClassifyImpactIn, ctx: ToolContext) -> m.ImpactOut:
         classify_impact as kernel_classify,
     )
     from app.core.delta import compute_plan_delta
+    from app.services.feature_flags import read_feature_flags
     from app.services.replanning import (
         active_plan_row,
         cand_plan_row,
@@ -389,7 +389,9 @@ def classify_impact(args: m.ClassifyImpactIn, ctx: ToolContext) -> m.ImpactOut:
     )
     x = ImpactInput.from_delta(delta, active_row, cand_row)
     impact_class = kernel_classify(x)
-    autonomy_level = decide_autonomy(impact_class, FeatureFlags())
+    # 运行期特性开关从 `settings` 表读（R13.8）；缺行即 P0 默认（False）。IMPACT_MAJOR 的
+    # L5 判定在 decide_autonomy 内读 flags 之前就返回，开关如何设都不能覆盖（R13.5）。
+    autonomy_level = decide_autonomy(impact_class, read_feature_flags(session))
     predicates = decisive_predicates(x, impact_class)
     return m.ImpactOut(
         impact_class=impact_class.value,  # type: ignore[arg-type]

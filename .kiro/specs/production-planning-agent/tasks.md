@@ -467,7 +467,7 @@
     - _Requirements: R10.1, R10.2_
     - _Design: Components §6、§3.7_
 
-  - [~] 7.6 接线自主等级的执行路径与上报界面
+  - [x] 7.6 接线自主等级的执行路径与上报界面
     - L1 / L2 无条件自主执行；L3 自主生成 `PENDING_APPROVAL` 提案；L5 强制人工审批
     - `impact_assessments.execution_path` 在 P0 只写 `PROPOSED` / `ESCALATED`；`AUTO_APPLIED` 列存在但 P0 不可能出现
     - `PATCH /api/settings/flags`：`auto_apply_minor_enabled` 等开关，默认 `false`

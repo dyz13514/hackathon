@@ -59,6 +59,11 @@ from app.db.models import Trace
 from app.logging_config import log_event
 from app.seed import reset_demo_data
 from app.seed.loader import PRESERVED_TABLES
+from app.services.feature_flags import (
+    audit_flag_change,
+    read_feature_flags,
+    set_auto_apply_minor_enabled,
+)
 from app.settings import Settings
 
 logger = logging.getLogger(__name__)
@@ -221,3 +226,80 @@ def demo_reset(request: Request, session: PlannerSession) -> DemoResetResponse:
         preserved_tables=sorted(PRESERVED_TABLES),
         audit_id=report.audit_id,
     )
+
+
+# --------------------------------------------------------------------------
+# GET / PATCH /settings/flags（任务 7.6，R13.8）
+# --------------------------------------------------------------------------
+
+
+class FeatureFlagsOut(BaseModel):
+    """运行期特性开关的当前值（design.md §5「自主」分组，R13.8）。
+
+    P0 只有一个开关 `auto_apply_minor_enabled`，默认 `false`。取值域封闭：多一个字段即意味着
+    新开关未经审视地泄进了这个响应。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    auto_apply_minor_enabled: bool = Field(
+        description="IMPACT_MINOR 是否自动应用（L4，P1 行为）。P0 默认 false → 全走 L3 提案"
+    )
+
+
+class PatchFlagsIn(BaseModel):
+    """`PATCH /settings/flags` 的请求体。
+
+    全部字段可选：只提供要改的那个开关，未提供的保持不变（PATCH 语义）。P0 只认
+    `auto_apply_minor_enabled`；`extra="forbid"` 使拼错的键名直接 422，而不是被静默忽略。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    auto_apply_minor_enabled: bool | None = None
+
+
+@router.get(
+    "/settings/flags",
+    response_model=FeatureFlagsOut,
+    summary="读取运行期特性开关（R13.8）",
+)
+def get_settings_flags(request: Request) -> FeatureFlagsOut:
+    """读端点（无认证，与其余 GET 同口径）：从 `settings` 表读当前开关，缺行即 P0 默认。"""
+    factory: sessionmaker[Session] = request.app.state.session_factory
+    with factory() as db:
+        flags = read_feature_flags(db)
+    return FeatureFlagsOut(auto_apply_minor_enabled=flags.auto_apply_minor_enabled)
+
+
+@router.patch(
+    "/settings/flags",
+    response_model=FeatureFlagsOut,
+    summary="切换运行期特性开关（auto_apply_minor_enabled 等，R13.8）",
+)
+def patch_settings_flags(
+    request: Request, body: PatchFlagsIn, session: PlannerSession
+) -> FeatureFlagsOut:
+    """写端点（受 `Session_Auth` 保护）：持久化开关变更并留审计，返回更新后的开关集。
+
+    PATCH 语义：只有请求体里显式给出的开关才被改写，未提供的保持原值。P0 只有
+    `auto_apply_minor_enabled`；把它翻成 `true` 会让后续 `IMPACT_MINOR` 变更走 L4 自动应用
+    （P1 行为），但 `IMPACT_MAJOR` 的 L5 上报判定在任何配置下都不可覆盖（R13.5，由
+    `decide_autonomy` 的控制流保证）。
+
+    `session.subject` 进审计记录的 `actor`，因此「谁改了这个开关」在日志里有答案。
+    """
+    now = datetime.now()  # noqa: DTZ005 — 全库 naive 本地时间口径
+    factory: sessionmaker[Session] = request.app.state.session_factory
+    with factory() as db:
+        if body.auto_apply_minor_enabled is not None:
+            enabled = body.auto_apply_minor_enabled
+            flags = set_auto_apply_minor_enabled(db, enabled=enabled, now=now)
+            # 先提交业务写（释放 SQLite 写锁），再补审计——审计走独立连接，若在写锁未释放时
+            # 追加会撞锁（见 feature_flags.set_auto_apply_minor_enabled 的说明）。
+            db.commit()
+            audit_flag_change(enabled=enabled, actor=session.subject.upper(), now=now)
+        else:
+            # 请求体没有任何可改的开关：不写、不审计，直接回读当前值（幂等空 PATCH）。
+            flags = read_feature_flags(db)
+    return FeatureFlagsOut(auto_apply_minor_enabled=flags.auto_apply_minor_enabled)

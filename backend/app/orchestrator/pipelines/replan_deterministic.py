@@ -116,6 +116,10 @@ class ImpactAnalysis:
     decisive_predicates: tuple[str, ...]
     frozen_job_ids: tuple[str, ...]
     substitute_unavailable_job_ids: tuple[str, ...]
+    #: P0 取值域 `{PROPOSED, ESCALATED}`（design.md §3.6）。L3 → PROPOSED（自主生成
+    #: PENDING_APPROVAL 提案，R13.4）；L5 → ESCALATED（强制人工审批，R13.5）。与
+    #: `impact_assessments.execution_path` 同源，供 UI 展示「这次是自主提案还是上报人工」。
+    execution_path: str = "PROPOSED"
 
 
 @dataclass(frozen=True)
@@ -217,6 +221,7 @@ def run_replan(
     impact_class: ImpactClass = classify_impact(impact_input)
     autonomy_level = decide_autonomy(impact_class, resolved_flags)
     predicates = decisive_predicates(impact_input, impact_class)
+    execution_path = _execution_path_for(autonomy_level.value)
 
     affected_orders = tuple(
         sorted({job_id.rsplit("-OP", 1)[0] for job_id in replan_result.affected_job_ids})
@@ -234,6 +239,7 @@ def run_replan(
         decisive_predicates=tuple(predicates),
         frozen_job_ids=replan_result.frozen_job_ids,
         substitute_unavailable_job_ids=replan_result.substitute_unavailable_job_ids,
+        execution_path=execution_path,
     )
 
     # ---- 落库（修订计划五表 + 基线 + impact_assessments，一个事务） ----
@@ -310,6 +316,26 @@ def run_replan(
         trace_id=trace_id,
         occurred_at=now,
     )
+    # 影响分级的独立审计（R13.12）：记录 impact_class、触发该等级的具体判据、最终执行路径。
+    # 与上面的 DISRUPTION_REGISTERED 分开写——后者记「扰动触发了一次重排」，本条记「这次
+    # 变更被判为何等级、依据是什么、走了哪条执行路径」，两者读者不同（审计筛选按类别）。
+    audit.append(
+        event_category="IMPACT_CLASSIFICATION",
+        event_type="REPLAN_CLASSIFIED",
+        actor="SYSTEM",
+        payload={
+            "assessment_id": assessment_id,
+            "candidate_plan_id": plan_id,
+            "impact_class": impact.impact_class,
+            "autonomy_level": impact.autonomy_level,
+            "execution_path": impact.execution_path,
+            "decisive_predicates": list(impact.decisive_predicates),
+        },
+        subject_type="ImpactAssessment",
+        subject_id=assessment_id,
+        trace_id=trace_id,
+        occurred_at=now,
+    )
     return ReplanPipelineResult(plan=result, impact=impact, assessment_id=assessment_id)
 
 
@@ -328,6 +354,7 @@ def _with_plan_id(impact: ImpactAnalysis, plan_id: str) -> ImpactAnalysis:
         decisive_predicates=impact.decisive_predicates,
         frozen_job_ids=impact.frozen_job_ids,
         substitute_unavailable_job_ids=impact.substitute_unavailable_job_ids,
+        execution_path=impact.execution_path,
     )
 
 
@@ -409,7 +436,7 @@ def _persist_revision(
             autonomy_level=impact.autonomy_level,
             decisive_predicates=list(impact.decisive_predicates),
             impact_input=_impact_input_json(impact_input),
-            execution_path=_execution_path_for(impact.autonomy_level),
+            execution_path=impact.execution_path,
             created_at=now,
         )
     )
