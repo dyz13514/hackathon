@@ -543,7 +543,7 @@
 
 - [ ] 10. P0-G 电子表格摄取（P0 LLM 路线之三：列映射）
 
-  - [~] 10.1 实现 `Spreadsheet_Parser` 的确定性安全闸门与解析
+  - [x] 10.1 实现 `Spreadsheet_Parser` 的确定性安全闸门与解析
     - 拒绝 `.xlsm` 与含 `vbaProject.bin` → `MACRO_NOT_ALLOWED`；>5 MB → `FILE_TOO_LARGE`；>2,000 行 → `TOO_MANY_ROWS`；扩展名与魔数不匹配 → `UNSUPPORTED_FILE_TYPE`
     - 安全解析：`openpyxl(data_only=True)` 取公式计算值并在 `ingestion_report` 记录哪些列使用了计算值；CSV 用 sniffer；单元格截断 500 字符
     - `POST /api/imports/upload`（multipart 返回 `upload_id`），暂存目录 24h TTL
@@ -558,7 +558,7 @@
     - _Requirements: R2.2, R25.6, R23.1, R23.2_
     - _Design: Components §4.2「预览预算」、Testing Strategy §2_
 
-  - [~] 10.3 实现日期与单位归一化
+  - [x] 10.3 实现日期与单位归一化
     - 日期：`DD/MM/YYYY`、`MM-DD-YY`、`YYYY年M月D日`、Excel 序列号归一到 ISO 8601（`MM-DD-YY` 的世纪按固定规则解释），建议中给出原始与转换后样例
     - 单位：`pcs`、`units`、`件`、`箱` 归一，**显式给出 `conversion_factor`**
     - **表驱动单元测试（非可选，承接原属性 34）**：4 种日期形式 × 边界年份 + 各支持单位 × `conversion_factor`。表驱动在这里比随机生成更可控
@@ -584,7 +584,7 @@
     - _Requirements: R3.1, R3.5, R3.6_
     - _Design: Components §4.2、§6_
 
-  - [~] 10.6 实现 `commit_batch` 落库闸门与来源追溯
+  - [x] 10.6 实现 `commit_batch` 落库闸门与来源追溯
     - `commit_batch` 入参为 `AcceptedMapping`，构造函数断言无 `NEEDS_CONFIRMATION`、无 `MISSING_REQUIRED_FIELD`、`unparsed_cells` 已逐条处置；断言失败抛异常，不写库
     - **确定性组件，只消费 `accepted_mapping`，不再读 LLM 原始文本**
     - 生成 `ImportBatch` 记录；每条落库记录写 `import_row_provenance`（`batch_id` + `source_row_number` + `raw_row` + `overwritten_payload`）
@@ -594,7 +594,7 @@
     - _Requirements: R2.9, R3.2, R3.3, R3.7_
     - _Design: Components §4.2_
 
-  - [~] 10.7 实现导入批次整批回滚
+  - [x] 10.7 实现导入批次整批回滚
     - `POST /api/imports/{batch_id}/revert`：该批次记录置 `record_status = REVERTED`（软删除），从 `overwritten_payload` 还原被覆盖的旧值
     - `REVERTED` 被 `load_snapshot` 排除，不参与任何排产；回滚后 `input_snapshot_version += 1`
     - **回滚往返示例测试（非可选，承接原属性 36）**：导入 → 回滚 → `DomainSnapshot` 逐字段比对，含 `MANUAL_ENTRY` 原值还原分支

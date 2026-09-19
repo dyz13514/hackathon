@@ -101,6 +101,18 @@ class ErrorCode(StrEnum):
     #: `POST /scenarios/{id}/adopt` 的场景不存在或已过期（进程内暂存失效，R16.9）。
     SCENARIO_NOT_FOUND = "SCENARIO_NOT_FOUND"
 
+    # 电子表格摄取（R2/R3，任务 10）。安全闸门四类（R23.7）：
+    MACRO_NOT_ALLOWED = "MACRO_NOT_ALLOWED"
+    FILE_TOO_LARGE = "FILE_TOO_LARGE"
+    TOO_MANY_ROWS = "TOO_MANY_ROWS"
+    UNSUPPORTED_FILE_TYPE = "UNSUPPORTED_FILE_TYPE"
+    #: `GET /imports/{upload_id}/*` 的上传不存在或已过期。
+    UPLOAD_NOT_FOUND = "UPLOAD_NOT_FOUND"
+    #: `POST /imports/{upload_id}/confirm` 的映射未满足落库前置（低置信/缺必填/未处置，R2.9）。
+    IMPORT_MAPPING_INCOMPLETE = "IMPORT_MAPPING_INCOMPLETE"
+    #: `POST /imports/{batch_id}/revert` 的批次不存在。
+    IMPORT_BATCH_NOT_FOUND = "IMPORT_BATCH_NOT_FOUND"
+
 
 class NextAction(BaseModel):
     """一个可执行的下一步。`href` 为空表示动作在当前界面内完成。"""
