@@ -38,7 +38,7 @@ from enum import StrEnum
 from sqlalchemy.orm import Session
 
 from app.core.explain import NoTradeoff, Tradeoff
-from app.core.sandbox import apply_mutations
+from app.core.sandbox import ScenarioMutationError, apply_mutations
 from app.core.scheduler import PlanCandidate, generate_schedule
 from app.core.scoring import ObjectiveBreakdown, ObjectiveWeights, score
 from app.core.snapshot import DomainSnapshot, Machine
@@ -86,6 +86,7 @@ class SandboxPurpose(StrEnum):
 
 __all__ = [
     "CapacitySandboxResult",
+    "PromiseDateResult",
     "SandboxPurpose",
     "ScenarioNotFoundError",
     "ScenarioStore",
@@ -93,6 +94,7 @@ __all__ = [
     "adopt_scenario",
     "build_counterfactual",
     "run_capacity_sandbox",
+    "run_promise_date_sandbox",
     "run_sandbox",
 ]
 
@@ -301,6 +303,150 @@ def run_capacity_sandbox(
         total_tardiness_delta_minutes=scen_tardiness - active_tardiness,
         feasibility=candidate.feasibility,
     )
+
+
+@dataclass(frozen=True)
+class PromiseDateResult:
+    """可承诺交期报价的沙箱推演结果（任务 13.6，R17.1–R17.3）。
+
+    - `feasible`：这笔询价能否被排进当前计划（新订单的全部作业都排上了）。
+    - `earliest_completion`：新订单最早可承诺完工时刻（其全部作业的最晚 end_time）；不可行为 None。
+    - `desired_date_met`：`earliest_completion <= desired_due_date`（可行时才有意义）。
+    - `deferred_order_ids`：因插入这笔询价而变得迟交的**既有**订单（相对 ACTIVE 新增的迟交）。
+    - `total_tardiness_delta_minutes`：全局总拖期相对 ACTIVE 的变化（正=变差）。
+    - `constraint_reason`：不可行 / 无法满足期望交期时的具体约束原因（供报价话术）。
+    """
+
+    feasible: bool
+    earliest_completion: datetime | None
+    desired_due_date: datetime
+    desired_date_met: bool
+    deferred_order_ids: tuple[str, ...]
+    total_tardiness_minutes: int
+    active_total_tardiness_minutes: int
+    total_tardiness_delta_minutes: int
+    constraint_reason: str | None = None
+
+
+def run_promise_date_sandbox(
+    session: Session,
+    *,
+    product_id: str,
+    quantity: float,
+    desired_due_date: datetime,
+    now: datetime,
+    purpose: SandboxPurpose = SandboxPurpose.PROMISE_DATE,
+) -> PromiseDateResult:
+    """把一笔假想询价（product + quantity + 期望交期）插入沙箱，实算最早可承诺完工日（任务 13.6）。
+
+    **只读生产数据、无 LLM、不改动 ACTIVE 计划或 `input_snapshot_version`（R17.4）。** 无 ACTIVE
+    计划 → 抛。
+
+    做法：在 `sandbox_guard` 语境内读冻结快照，`apply_mutations` 追加一个 `ADD_OR_CHANGE_ORDER`
+    新订单（`order_id=None` → 内核生成 `SANDBOX-ORD-N`，期望交期作为其 `due_date`），跑确定性
+    `generate_schedule`。新订单的全部已排产作业的最晚 `end_time` 即**最早可承诺完工时刻**；若其任一
+    作业进了 `unschedulable_jobs`，则该询价不可行，给出约束原因。deferred 与总拖期变化相对 ACTIVE
+    计算，供「这笔单会推迟哪些既有订单」的报价话术（R17.2）。
+    """
+    active_plan = require_any_active_plan(session)
+    active_candidate = load_plan_candidate(session, active_plan.plan_id)
+    scenario_id = f"SCN-{purpose.value}-{uuid.uuid4().hex[:10]}"
+
+    # 构造「新增订单」变更：用一个轻量对象承载 apply_mutations 需要的 getattr 字段（内核按 kind
+    # 结构化分派，不 isinstance 到具体类型，因此这里不必 import 工具契约）。
+    quote_mutation = _QuoteOrderMutation(
+        product_id=product_id,
+        quantity=quantity,
+        due_date=desired_due_date.date(),
+    )
+
+    with sandbox_guard(scenario_id):
+        base_snapshot = load_sandbox_snapshot(
+            session, now=now, production_date=active_plan.production_date
+        )
+        # 询价的产品必须存在——否则排产器展开工序时会 KeyError。提前校验并抛
+        # `ScenarioMutationError`（API 翻译成 SCENARIO_INVALID_MUTATION / 422），而不是让一个
+        # 指向不存在产品的报价以 500 冒出去。
+        if product_id not in base_snapshot.products_by_id():
+            raise ScenarioMutationError(f"产品 {product_id} 不存在，无法报价。")
+        # 追加订单前记下既有订单数，据此推出内核将分配的新订单 id（SANDBOX-ORD-{n+1}）。
+        new_order_id = f"SANDBOX-ORD-{len(base_snapshot.orders) + 1}"
+        variant = apply_mutations(base_snapshot, [quote_mutation])
+        candidate = generate_schedule(variant)
+        validate(candidate, variant)
+
+    # 新订单的作业完工时刻（最晚 end_time）——最早可承诺完工日。
+    quote_job_ends = [
+        sj.end_time for sj in candidate.scheduled_jobs if sj.order_id == new_order_id
+    ]
+    quote_unschedulable = [
+        uj for uj in candidate.unschedulable_jobs if uj.order_id == new_order_id
+    ]
+    feasible = bool(quote_job_ends) and not quote_unschedulable
+    earliest_completion = max(quote_job_ends) if quote_job_ends else None
+
+    _, active_tardiness, _ = _plan_kpis(active_candidate, base_snapshot)
+    _, scen_tardiness, _ = _plan_kpis(candidate, variant)
+
+    # 被推迟的既有订单：场景下迟交、而 ACTIVE 下不迟交的订单（不含这笔新询价本身）。
+    active_late = set(_delayed_order_ids(active_candidate, base_snapshot))
+    scen_late = set(_delayed_order_ids(candidate, variant))
+    deferred = tuple(sorted((scen_late - active_late) - {new_order_id}))
+
+    desired_met = feasible and earliest_completion is not None and (
+        earliest_completion <= desired_due_date
+    )
+    reason: str | None = None
+    if not feasible:
+        reason = (
+            f"这笔询价（产品 {product_id}，数量 {quantity}）在当前产能下无法排入："
+            f"其 {len(quote_unschedulable)} 道工序找不到可行的机器/工人/时间槽。"
+        )
+    elif not desired_met and earliest_completion is not None:
+        reason = (
+            f"期望交期 {desired_due_date.date().isoformat()} 无法满足；"
+            f"在不违反硬约束的前提下，最早可承诺完工时刻为 "
+            f"{earliest_completion.isoformat()}。"
+        )
+
+    log_event(
+        logger,
+        "PROMISE_DATE_SANDBOX_RUN",
+        purpose=purpose.value,
+        product_id=product_id,
+        feasible=feasible,
+        desired_met=desired_met,
+        deferred_count=len(deferred),
+        tardiness_delta=scen_tardiness - active_tardiness,
+    )
+    return PromiseDateResult(
+        feasible=feasible,
+        earliest_completion=earliest_completion,
+        desired_due_date=desired_due_date,
+        desired_date_met=desired_met,
+        deferred_order_ids=deferred,
+        total_tardiness_minutes=scen_tardiness,
+        active_total_tardiness_minutes=active_tardiness,
+        total_tardiness_delta_minutes=scen_tardiness - active_tardiness,
+        constraint_reason=reason,
+    )
+
+
+@dataclass(frozen=True)
+class _QuoteOrderMutation:
+    """`apply_mutations` 用的「新增订单」变更载体（kind=ADD_OR_CHANGE_ORDER，order_id=None）。
+
+    内核 `apply_mutations` 按 `kind` 字段结构化分派并用 `getattr` 取字段，因此这里用一个轻量
+    frozen dataclass 承载即可，不必 import `app.tools.models`（服务层可 import，但没有必要为
+    一次内部构造引入契约依赖）。`order_id=None` 触发内核的「新增订单」分支。
+    """
+
+    product_id: str
+    quantity: float
+    due_date: date
+    kind: str = "ADD_OR_CHANGE_ORDER"
+    order_id: str | None = None
+    priority: str | None = None
 
 
 def _with_scaled_machine_hours(

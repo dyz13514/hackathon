@@ -8,6 +8,7 @@ import { NotFound } from './routes/NotFound';
 import { TopBar } from './components/TopBar';
 import { PlanCompare } from './routes/PlanCompare';
 import { Preferences } from './routes/Preferences';
+import { Quote } from './routes/Quote';
 import { Risks } from './routes/Risks';
 import { ROUTES } from './routes/routes';
 import { Schedule } from './routes/Schedule';
@@ -62,6 +63,7 @@ export function App() {
           <Route path="/preferences" element={<Preferences />} />
           <Route path="/value" element={<ValueLedger />} />
           <Route path="/insights" element={<Insights />} />
+          <Route path="/quote" element={<Quote />} />
           <Route path="/plans/:a/compare/:b" element={<PlanCompare />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
