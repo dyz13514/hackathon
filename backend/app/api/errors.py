@@ -113,6 +113,16 @@ class ErrorCode(StrEnum):
     #: `POST /imports/{batch_id}/revert` 的批次不存在。
     IMPORT_BATCH_NOT_FOUND = "IMPORT_BATCH_NOT_FOUND"
 
+    # 偏好规则（R18，任务 11.1）。四道结构性保障之一在 API 边界（design.md §4.3、EVAL-206）：
+    #: `structured_form` 指向硬约束开关或非软目标 `component`（如 `allow_shift_overflow`）。
+    #: Pydantic 的判别联合先拦一层（返回 422 校验错误），本码是服务层再判一道的显式出口——
+    #: 偏好规则**永远不能**放宽硬约束，越界即拒（R18.8）。
+    PREFERENCE_RULE_OUT_OF_SCOPE = "PREFERENCE_RULE_OUT_OF_SCOPE"
+    #: 启用状态的 `PreferenceRule` 已达 20 条上限（R18.11）。要求先停用既有规则再启用。
+    PREFERENCE_RULE_LIMIT_REACHED = "PREFERENCE_RULE_LIMIT_REACHED"
+    #: `GET/PATCH/DELETE /api/preferences/{rule_id}` 的规则不存在。
+    PREFERENCE_RULE_NOT_FOUND = "PREFERENCE_RULE_NOT_FOUND"
+
 
 class NextAction(BaseModel):
     """一个可执行的下一步。`href` 为空表示动作在当前界面内完成。"""

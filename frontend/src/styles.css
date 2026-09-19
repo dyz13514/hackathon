@@ -491,3 +491,84 @@ body {
 .trace-outcome-TOOL_NOT_PERMITTED {
   color: #b42318;
 }
+
+
+/* --- 偏好规则管理（/preferences，任务 11.1，R18）--- */
+
+.preferences-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.preferences-limit {
+  margin: 0.5rem 0;
+  color: var(--muted);
+}
+
+.preferences-limit.is-at-limit {
+  color: #b42318;
+  font-weight: 600;
+}
+
+.preferences-error {
+  color: #b42318;
+}
+
+.preferences-notice {
+  color: #027a48;
+}
+
+.preferences-form .field {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0.75rem;
+  max-width: 32rem;
+}
+
+.preferences-form label {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.preferences-form .field-hint {
+  margin: 0.25rem 0 0;
+  font-size: 0.85em;
+  color: var(--muted);
+}
+
+/* LOW_EVIDENCE 徽章：图标 + 文字，不仅靠颜色区分（R27.9、R18.10）。 */
+.badge-low-evidence {
+  margin-left: 0.5rem;
+  background: #fff4e5;
+  border-color: #b26a00;
+  color: #b26a00;
+}
+
+/* 启用状态：文字（已启用/未启用）为主，颜色为辅（R27.9）。 */
+.status-on {
+  color: #027a48;
+  font-weight: 600;
+}
+
+.status-off {
+  color: var(--muted);
+}
+
+.rule-actions button {
+  margin-right: 0.4rem;
+  margin-bottom: 0.4rem;
+}
+
+.affected-jobs {
+  margin-top: 0.4rem;
+  font-size: 0.9em;
+  color: var(--muted);
+}
+
+.source-list,
+.predicate-list {
+  margin: 0;
+  padding-left: 1.1rem;
+}

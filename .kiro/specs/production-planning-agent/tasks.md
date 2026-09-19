@@ -603,7 +603,7 @@
 
 - [ ] 11. P0-H 偏好记忆、价值台账与降级模式（**不依赖 LLM**：规则由规划员手写）
 
-  - [~] 11.1 实现 `Preference_Store` 与手写规则创建入口
+  - [x] 11.1 实现 `Preference_Store` 与手写规则创建入口
     - `PreferenceForm` 为**封闭判别联合**，只有 `AvoidMachineForOrder` / `AvoidMachineForProduct` / `PreferWorkerForSkill` / `AdjustObjectiveWeight` 四个成员，无自由谓词、无表达式字段
     - `weight_delta: Field(gt=0, le=10)`（惩罚只能为正，规则只能让某选择更不划算，不能让不可行变可行）；`AdjustObjectiveWeight.multiplier: Field(ge=0.5, le=2.0)`，`component` 限定为 6 个**软目标**分量的字面量联合
     - **`POST /api/preferences` 是 P0 唯一的建规则入口**：规划员手写 `human_text` + 四类 `structured_form` 之一的参数。`create_rule()` 默认 `enabled=False`，需一次显式启用动作（确认闸门对手写规则同样适用）
