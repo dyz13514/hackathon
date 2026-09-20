@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useState } from 'react';
 import { NavLink, Route, Routes } from 'react-router-dom';
 
 import { Approval } from './routes/Approval';
@@ -6,6 +7,7 @@ import { Import } from './routes/Import';
 import { Insights } from './routes/Insights';
 import { NotFound } from './routes/NotFound';
 import { TopBar } from './components/TopBar';
+import { LoginModal } from './components/LoginModal';
 import { PlanCompare } from './routes/PlanCompare';
 import { Preferences } from './routes/Preferences';
 import { Quote } from './routes/Quote';
@@ -24,10 +26,29 @@ import { WhatIf } from './routes/WhatIf';
  *
  * 可访问性（R27.9）：导航是 `<nav>` + 链接列表，可键盘到达；当前项除样式外用
  * `aria-current="page"` 传达，不只依赖颜色。
+ *
+ * 全局认证：监听 `login-required` 事件弹出登录框，登录成功后派发 `login-succeeded`
+ * 通知 client.ts 的 waitForLogin 继续重试原始请求（R23.12）。
  */
 export function App() {
+  const [loginOpen, setLoginOpen] = useState(false);
+
+  // 监听 client.ts 触发的 login-required 事件
+  useEffect(() => {
+    const handler = () => setLoginOpen(true);
+    window.addEventListener('login-required', handler);
+    return () => window.removeEventListener('login-required', handler);
+  }, []);
+
+  const handleLoginSuccess = useCallback(() => {
+    setLoginOpen(false);
+    // 通知 client.ts 的 waitForLogin 继续重试
+    window.dispatchEvent(new CustomEvent('login-succeeded'));
+  }, []);
+
   return (
     <div className="app-shell">
+      <LoginModal open={loginOpen} onSuccess={handleLoginSuccess} />
       <header className="app-header">
         <h1>AI 生产排产助手</h1>
       </header>

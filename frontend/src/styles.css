@@ -701,3 +701,87 @@ body {
 .banner-auto-applied button {
   margin-left: auto;
 }
+
+/* --- 登录弹窗（R23.12） --- */
+
+.login-modal {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+  max-width: 360px;
+  padding: 1.75rem;
+  width: 90vw;
+}
+
+.login-modal::backdrop {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.login-modal h2 {
+  font-size: 1.1rem;
+  margin: 0 0 0.5rem;
+}
+
+.login-modal-desc {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 0 0 1rem;
+}
+
+.login-modal-error {
+  background: #fff3f3;
+  border: 1px solid #f5c6c6;
+  border-radius: 4px;
+  color: #b91c1c;
+  font-size: 0.875rem;
+  margin: 0 0 1rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.login-modal-label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin-bottom: 0.35rem;
+}
+
+.login-modal-input {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  display: block;
+  font-size: 1rem;
+  padding: 0.5rem 0.75rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.login-modal-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.login-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 1.25rem;
+}
+
+.login-modal-btn-primary {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0.45rem 1.1rem;
+}
+
+.login-modal-btn-primary:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.login-modal-btn-primary:focus-visible {
+  outline: 2px solid var(--fg);
+  outline-offset: 2px;
+}
