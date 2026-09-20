@@ -502,9 +502,16 @@ def test_locked_but_unfrozen_job_makes_order_unschedulable() -> None:
 # --------------------------------------------------------------------------
 
 
-def _job(
+def _pref_job(
     *, order_id: str = "O", product_id: str = "P", skill: str = "CNC_OP"
 ) -> ProductionJob:
+    """preference_delta 用例的作业构造器。
+
+    **改名自 `_job`**：本模块第 7 节（diagnose_blocking，任务 2.6）另有一个同名 `_job`，签名不同
+    （无 `product_id` 形参、`order_id` 默认 `"ORD-01"`）。Python 模块作用域里后定义的名字会遮蔽
+    先定义的，因此 `preference_delta` 用例里 `_job(product_id="P")` 实际命中了第二个 `_job` 并抛
+    `TypeError`。二者本是不同意图的两个构造器，改名消除遮蔽，各自保留原语义。
+    """
     return ProductionJob(
         job_id=f"{order_id}-OP1",
         order_id=order_id,
@@ -526,7 +533,7 @@ def _pref(rule_id: str, structured_form: dict[str, object]) -> PreferenceRule:
 
 def test_preference_delta_zero_for_empty_rules() -> None:
     """空规则集 → 0（无偏好时排产与接入前逐字段相同）。"""
-    assert preference_delta(_job(), _machine(), _worker(), ()) == Decimal("0")
+    assert preference_delta(_pref_job(), _machine(), _worker(), ()) == Decimal("0")
 
 
 def test_preference_delta_positive_on_matching_avoid_order() -> None:
@@ -540,7 +547,7 @@ def test_preference_delta_positive_on_matching_avoid_order() -> None:
             "weight_delta": 2,
         },
     )
-    delta = preference_delta(_job(order_id="O"), _machine("CNC-01"), _worker(), (rule,))
+    delta = preference_delta(_pref_job(order_id="O"), _machine("CNC-01"), _worker(), (rule,))
     assert delta == Decimal("120.0")  # 2 × 60
 
 
@@ -555,7 +562,7 @@ def test_preference_delta_zero_when_machine_differs() -> None:
             "weight_delta": 2,
         },
     )
-    off = preference_delta(_job(order_id="O"), _machine("CNC-02"), _worker(), (rule,))
+    off = preference_delta(_pref_job(order_id="O"), _machine("CNC-02"), _worker(), (rule,))
     assert off == Decimal("0")
 
 
@@ -571,7 +578,7 @@ def test_preference_delta_never_negative() -> None:
             {"kind": "AVOID_MACHINE_FOR_PRODUCT", "product_id": "P", "machine_id": "CNC-01"},
         ),
     )
-    job = _job(order_id="O", product_id="P")
+    job = _pref_job(order_id="O", product_id="P")
     delta = preference_delta(job, _machine("CNC-01"), _worker(), rules)
     assert delta >= Decimal("0")
     assert delta == Decimal("120.0")  # 两条各 1 × 60

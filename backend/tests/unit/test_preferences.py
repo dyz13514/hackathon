@@ -29,9 +29,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.db import models as orm
 from app.db.audit import set_audit_engine
 from app.db.models import AuditLog, Base
 from app.main import create_app
+from app.seed.dataset import DEMO_ANCHOR
 from app.services import preferences as store
 from app.services.preferences import (
     PreferenceRuleLimitError,
@@ -98,6 +100,57 @@ def _audit_rows(application: object, event_type: str) -> list[AuditLog]:
         )
 
 
+def _seed_decisions(factory: sessionmaker[Session], count: int) -> list[str]:
+    """落 `count` 条真实 `PlannerDecision` 行并返回其 `decision_id`。
+
+    `preference_rule_sources.decision_id` 有指向 `planner_decisions.decision_id` 的外键，
+    因此 `source_decision_ids` 必须是**真实存在**的决策 id（SQLite 已开 `foreign_keys=ON`）。
+    为满足整条外键链，先落一个 `input_snapshots` 行（`production_plans.input_snapshot_version`
+    的 FK 目标）→ 一个 `production_plans` 行（`planner_decisions.plan_id` 的 FK 目标）→
+    `count` 条 `planner_decisions`。这些是 `reject()` 在真实审批流里产生的同类语料，此处直接
+    构造以让单元测试聚焦「证据条数 → low_evidence」这一被测语义，而不必跑完整生成/审批流程。
+    """
+    with factory() as db:
+        db.add(
+            orm.InputSnapshot(
+                snapshot_version=1,
+                created_at=DEMO_ANCHOR,
+                trigger="SEED",
+                fingerprint="seed-fingerprint",
+            )
+        )
+        db.add(
+            orm.ProductionPlan(
+                plan_id="PLAN-seed",
+                production_date=DEMO_ANCHOR.date(),
+                status="REJECTED",
+                feasibility="FEASIBLE",
+                plan_version=1,
+                version=1,
+                input_snapshot_version=1,
+                origin="PLAN_GENERATION",
+                created_at=DEMO_ANCHOR,
+            )
+        )
+        db.flush()
+        ids: list[str] = []
+        for i in range(count):
+            decision_id = f"DEC-seed-{i}"
+            db.add(
+                orm.PlannerDecision(
+                    decision_id=decision_id,
+                    plan_id="PLAN-seed",
+                    action="REJECT",
+                    rejection_reason="ORD-007 不要排 CNC-03",
+                    objective_breakdown_snapshot={},
+                    created_at=DEMO_ANCHOR,
+                )
+            )
+            ids.append(decision_id)
+        db.commit()
+        return ids
+
+
 # --------------------------------------------------------------------------
 # 服务层
 # --------------------------------------------------------------------------
@@ -113,20 +166,22 @@ def test_create_rule_defaults_to_disabled(factory: sessionmaker[Session]) -> Non
 
 def test_create_marks_low_evidence_when_sources_below_two(factory: sessionmaker[Session]) -> None:
     """source_decision_ids < 2 → low_evidence=True（R18.10）；≥2 → False。"""
+    # 先落两条真实决策——source_decision_ids 是指向 planner_decisions 的外键，必须真实存在。
+    dec_ids = _seed_decisions(factory, 2)
     with factory() as db:
         one = store.create_rule(
-            db, human_text="一条来源", structured_form=AVOID_ORDER, source_decision_ids=["DEC-1"]
+            db, human_text="一条来源", structured_form=AVOID_ORDER, source_decision_ids=[dec_ids[0]]
         )
         two = store.create_rule(
             db,
             human_text="两条来源",
             structured_form=AVOID_ORDER,
-            source_decision_ids=["DEC-1", "DEC-2"],
+            source_decision_ids=[dec_ids[0], dec_ids[1]],
         )
         db.commit()
         assert one.low_evidence is True
         assert two.low_evidence is False
-        assert two.source_decision_ids == ("DEC-1", "DEC-2")
+        assert two.source_decision_ids == (dec_ids[0], dec_ids[1])
 
 
 def test_update_rule_cannot_change_enabled(factory: sessionmaker[Session]) -> None:
