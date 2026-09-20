@@ -183,3 +183,81 @@ $env:DATABASE_URL="sqlite:///./var/planning.db"
 
 **Q：前端 `npm install` 很慢**
 可以配置 npm 镜像：`npm config set registry https://registry.npmmirror.com`
+
+---
+
+## 附录：接入 AWS Bedrock LLM（可选）
+
+默认情况下系统以 `LLM_MODE=STUB` 运行，核心排产功能完全可用。如需启用以下 LLM 功能，须配置 AWS Bedrock：
+
+- **计划解释**：生成自然语言版的排产决策说明
+- **智能重排（ReAct）**：Planning Agent 通过多轮工具调用优化计划
+- **What-if 场景翻译**：将自然语言假设转化为结构化场景（P1 功能）
+
+### 前提条件
+
+1. 拥有 AWS 账户，且已在目标区域开通 Bedrock 服务
+2. 在 Bedrock 控制台申请 **Anthropic Claude** 模型访问权限（Model Access）
+3. 准备一个 Bedrock Gateway 地址（`BEDROCK_GATEWAY_URL`）和对应的 API Key
+
+> **关于 Bedrock Gateway**：项目通过一个 HTTP 代理网关访问 Bedrock，而不是直接使用 AWS SDK。网关负责签名和转发请求。你可以使用团队内部部署的网关，或自行搭建（参考 AWS 官方的 Bedrock API Gateway 方案）。
+
+### 配置步骤
+
+**第一步**：编辑 `.env` 文件，修改以下三项：
+
+```
+LLM_MODE=LIVE
+BEDROCK_GATEWAY_URL=https://你的网关地址
+BEDROCK_API_KEY=你的API密钥
+```
+
+**第二步**：验证配置是否生效，启动后端后访问健康检查接口：
+
+```
+http://127.0.0.1:8000/health
+```
+
+返回示例：
+
+```json
+{
+  "status": "ok",
+  "llm_mode": "LIVE",
+  "project_usd_spent": 0.0,
+  "real_run_count": 0
+}
+```
+
+`llm_mode` 为 `LIVE` 即表示 LLM 接入成功。
+
+### LLM 模式说明
+
+| 模式 | 说明 | 适用场景 |
+|------|------|----------|
+| `STUB` | 所有 LLM 调用返回桩数据，不联网 | 本地开发、功能演示 |
+| `REPLAY` | 从本地 cassette 文件回放录制好的响应，零成本 | CI 测试、离线验证 |
+| `LIVE` | 真实调用 Bedrock，产生费用 | 生产环境、完整功能验证 |
+| `DISABLED` | LLM 路径完全关闭，自动走确定性模板回退 | 降级保护 |
+
+### 成本限制
+
+项目内置了以下成本保护机制，无需额外配置：
+
+- **单次计划生成**：上限 4,000 token / $0.02
+- **重排（ReAct）**：上限 14,000 token / $0.06
+- **每日总额**：默认 $5.00，达 80% 显示告警
+- **项目总额**：$35.00，达 90% 自动切换为 `DETERMINISTIC_ONLY` 降级模式
+- **真实调用次数上限**：150 次（`PROJECT_REAL_RUN_CAP`），超出后拒绝以 `LIVE` 模式启动
+
+当前用量可在 `/health` 接口的 `project_usd_spent` 和 `real_run_count` 字段查看。
+
+### 降级行为
+
+网关连续失败 3 次后，系统自动切入 `DETERMINISTIC_ONLY` 模式：
+
+- 计划解释回退为**确定性模板**（不依赖 LLM）
+- 重排回退为**确定性流水线**（仍能生成计划，只是没有 Agent 优化）
+- 降级事件写入审计日志（`DEGRADED_MODE_SWITCH`）
+
+因此即使 Bedrock 不可用，核心排产功能也不受影响。
