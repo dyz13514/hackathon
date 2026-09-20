@@ -78,7 +78,6 @@ def factory(engine: Engine) -> Iterator[sessionmaker[Session]]:
     测试模块的会话，让那些测试的行为取决于执行顺序。
     """
     session_factory = create_session_factory(engine)
-    register_input_snapshot_hooks(session_factory)
     yield session_factory
     unregister_input_snapshot_hooks(session_factory)
 
