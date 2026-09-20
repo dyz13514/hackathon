@@ -132,7 +132,7 @@ def _invoke_sites() -> set[str]:
     root = _backend_root() / "app"
     sites: set[str] = set()
     for path in root.rglob("*.py"):
-        tree = ast.parse(path.read_text())
+        tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             if (
                 isinstance(node, ast.Call)
@@ -140,7 +140,7 @@ def _invoke_sites() -> set[str]:
                 and node.func.attr == "invoke"
                 and "adapter" in _receiver_name(node.func.value).lower()
             ):
-                sites.add(str(path.relative_to(_backend_root())))
+                sites.add(str(path.relative_to(_backend_root())).replace("\\", "/"))
     return sites
 
 
