@@ -124,17 +124,16 @@ COVERAGE_TESTS := \
 	tests/properties/test_property_4_job_partition.py \
 	tests/properties/test_property_10_preference_safety.py
 
-# test_scheduler_core.py::test_preference_delta_never_negative 是一处**与本任务无关的既有**
-# 测试缺陷（该文件里 `_job` 被定义两次，后一个定义遮蔽前一个且不接受 `product_id` 形参，
-# 而该用例以 `product_id=` 调用它 → TypeError）。它不影响任何被测模块的分支覆盖，为不扩大
-# 修改范围，在门禁里显式排除并记录在案；覆盖仍达 100%。
+# 任务 14：此前门禁 deselect 了 test_scheduler_core.py::test_preference_delta_never_negative
+# （该文件里 `_job` 被定义两次、后者遮蔽前者且不接受 `product_id` 形参，用例以 `product_id=`
+# 调用 → TypeError）。该缺陷已在任务 14 修复（前一个 `_job` 改名为 `_pref_job`），故移除
+# deselect——门禁现在跑完整用例集，不再靠排除任何用例来达标；覆盖仍为 100%。
 coverage-gate: venv
 	cd $(BACKEND) && LLM_MODE=STUB \
 	  DATABASE_URL=sqlite:///:memory: \
 	  SESSION_SHARED_PASSWORD=test-shared-password \
 	  SESSION_SECRET_KEY=test-secret-key-that-is-long-enough-32 \
 	  $(PYTEST) $(COVERAGE_TESTS) $(COVERAGE_MODULES) \
-	    --deselect tests/unit/test_scheduler_core.py::test_preference_delta_never_negative \
 	    --cov-branch --cov-report=term-missing --cov-fail-under=100
 
 # --- 质量与部署 ---

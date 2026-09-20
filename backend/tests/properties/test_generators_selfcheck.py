@@ -12,10 +12,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from decimal import Decimal
 
 import pytest
-from hypothesis import HealthCheck, given, settings
+from hypothesis import HealthCheck, find, given, settings
 from hypothesis import strategies as st
 
 from app.core.snapshot import (
@@ -194,50 +195,57 @@ def test_request_sequences_are_well_formed(sequence: object) -> None:
             assert req.tool_name is None
 
 
-#: 跨调用累积「已见到的攻击类别」。用模块级字典而非可变默认参数——新版 Hypothesis
-#: 拒绝对带默认值的函数施加 `@given`，故累加器改由此处承载。
-_ATTACK_CLASSES_SEEN: dict[str, bool] = {}
+def _has_patch_attack(sequence: tuple[ApprovalRequest, ...]) -> bool:
+    """序列含「直接 PATCH status=ACTIVE」攻击（EVAL-207）。"""
+    return any(req.kind == "PATCH_STATUS_ACTIVE" for req in sequence)
 
 
-@settings(max_examples=400, deadline=None, suppress_health_check=[HealthCheck.too_slow])
-@given(approval_request_sequences())
-def test_request_sequences_can_surface_each_attack_class(sequence: object) -> None:
-    """跨多次抽样，三类攻击（直接 PATCH、越权工具、并发 approve）都应出现过。
+def _has_unauthorized_tool_attack(sequence: tuple[ApprovalRequest, ...]) -> bool:
+    """序列含「越权写工具调用」攻击（非 PLANNER_API 调用方调写工具，EVAL-210）。"""
+    write_tools = {"save_proposed_plan", "register_disruption", "save_import_batch"}
+    return any(
+        req.kind == "TOOL_CALL"
+        and req.tool_name in write_tools
+        and req.caller in {"INGESTION_AGENT", "RISK_MONITOR_AGENT"}
+        for req in sequence
+    )
 
-    单条序列不必同时含三类；但在足够多的 example 里，每一类都必须被生成器覆盖到——否则
-    属性 15 会对着一个从不含该攻击的输入空间「通过」，护栏其实没被测。用模块级字典
-    `_ATTACK_CLASSES_SEEN` 跨调用累积已见到的类别，最后一次断言三类齐全。
-    """
-    for req in tuple(sequence):  # type: ignore[arg-type]
-        if req.kind == "PATCH_STATUS_ACTIVE":
-            _ATTACK_CLASSES_SEEN["patch"] = True
-        if req.kind == "TOOL_CALL" and req.tool_name in {
-            "save_proposed_plan",
-            "register_disruption",
-            "save_import_batch",
-        }:
-            # 越权只在非 PLANNER_API 调用方 + 写工具时成立；这里记录「写工具被非 API 调用」。
-            if req.caller in {"INGESTION_AGENT", "RISK_MONITOR_AGENT"}:
-                _ATTACK_CLASSES_SEEN["unauthorized_tool"] = True
-    # 并发：同组、指向同一计划、相同 expected_version 的两条 APPROVE。
+
+def _has_concurrent_approve_attack(sequence: tuple[ApprovalRequest, ...]) -> bool:
+    """序列含「并发 approve」攻击：同组、同计划、同 expected_version 的两条 APPROVE。"""
     approves: dict[tuple[str, int, int], int] = {}
-    for req in tuple(sequence):  # type: ignore[arg-type]
+    for req in sequence:
         if req.kind == "APPROVE" and req.concurrent_group is not None:
             key = (req.plan_id, req.expected_version, req.concurrent_group)
             approves[key] = approves.get(key, 0) + 1
             if approves[key] >= 2:
-                _ATTACK_CLASSES_SEEN["concurrent_approve"] = True
+                return True
+    return False
 
 
-def test_all_three_attack_classes_were_generated() -> None:
-    """紧随上一测试运行：断言三类攻击在那 400 次抽样里都出现过。
+@pytest.mark.parametrize(
+    ("name", "predicate"),
+    [
+        ("直接 PATCH status=ACTIVE", _has_patch_attack),
+        ("越权工具调用", _has_unauthorized_tool_attack),
+        ("并发 approve", _has_concurrent_approve_attack),
+    ],
+)
+def test_generator_can_surface_each_attack_class(
+    name: str,
+    predicate: Callable[[tuple[ApprovalRequest, ...]], bool],
+) -> None:
+    """`approval_request_sequences` **可以**产出三类攻击的每一类（design.md Testing Strategy §2）。
 
-    依赖同一进程内模块级 `_ATTACK_CLASSES_SEEN` 的累积。测试收集顺序按定义顺序，因此
-    本测试排在抽样测试之后即可读到结果。若某一类从未出现，说明生成器的加权或取值域漏掉了它。
+    用 Hypothesis 的 `find(strategy, predicate)` —— 它在生成器的取值空间里**确定性地搜索**一个
+    满足 `predicate` 的样例，找不到则抛 `NoSuchExample`。这直接证明「生成器能产出该攻击类」这一
+    断言意图，且**不依赖**一次 `@given` 随机跑的抽样预算或用例执行顺序：此前用模块级累加器跨
+    400 次随机抽样凑齐三类的写法，对稀有的「并发 approve」类在完整套件里排到上千个用例之后时
+    会偶发漏采而 flaky——本写法把它变成确定性的存在性证明，断言强度不减反增（每类都必须真的
+    被生成器命中，否则立即失败）。若哪一类的取值域或加权被误改掉，`find` 会立刻抛错。
     """
-    assert _ATTACK_CLASSES_SEEN.get("patch"), "从未生成直接 PATCH status=ACTIVE 的请求"
-    assert _ATTACK_CLASSES_SEEN.get("unauthorized_tool"), "从未生成越权工具调用"
-    assert _ATTACK_CLASSES_SEEN.get("concurrent_approve"), "从未生成并发 approve"
+    found = find(approval_request_sequences(), predicate)
+    assert predicate(found), f"生成器未能产出攻击类：{name}"
 
 
 # --------------------------------------------------------------------------

@@ -128,6 +128,7 @@ def test_manual_steps_import_batch_counts_one_regardless_of_rows(
                 row_count=2000,  # 2000 行仍只计 1 步
                 status="COMMITTED",
                 proposed_mapping={},
+                created_at=FIXED_NOW,  # created_at 为 NOT NULL（无默认），须显式给值
             )
         )
         db.commit()
