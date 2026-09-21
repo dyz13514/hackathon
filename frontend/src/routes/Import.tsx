@@ -181,9 +181,9 @@ export function Import() {
                 {fields.map((f) => (
                   <tr key={f.target_field} data-status={f.status}>
                     <td>{f.target_field}</td>
-                    <td>{f.source_column ?? '—'}</td>
+                    <td>{f.source_column ?? '-'}</td>
                     <td>{(f.confidence * 100).toFixed(0)}%</td>
-                    <td>{f.sample_values.join(', ') || '—'}</td>
+                    <td>{f.sample_values.join(', ') || '-'}</td>
                     <td>
                       <span className={`badge status-${f.status}`}>{STATUS_LABEL[f.status]}</span>
                     </td>
@@ -230,7 +230,7 @@ export function Import() {
                   <li key={n.source_column}>
                     {n.source_column} ({n.kind}
                     {n.conversion_factor != null ? `, conversion factor ${n.conversion_factor}` : ''}):{' '}
-                    {n.sample_before.join(', ')} → {n.sample_after.join(', ')}
+                    {n.sample_before.join(', ')} -&gt; {n.sample_after.join(', ')}
                   </li>
                 ))}
               </ul>

@@ -90,7 +90,7 @@ export function Insights() {
                     <th scope="col">Jobs</th>
                     <th scope="col">Order-value share</th>
                     <th scope="col">Critical</th>
-                    <th scope="col">+20% hours → tardiness change</th>
+                    <th scope="col">+20% hours -&gt; tardiness change</th>
                   </tr>
                 </thead>
                 <tbody>

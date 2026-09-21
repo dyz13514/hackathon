@@ -134,9 +134,9 @@ export function ValueLedger() {
                   <tr key={row.kpi_id} data-label={row.label}>
                     <th scope="row">{row.kpi_id}</th>
                     <td>{row.metric_name}</td>
-                    <td>{row.current_value || '—'}</td>
-                    <td>{row.baseline_value || '—'}</td>
-                    <td>{row.delta || '—'}</td>
+                    <td>{row.current_value || '-'}</td>
+                    <td>{row.baseline_value || '-'}</td>
+                    <td>{row.delta || '-'}</td>
                     <td>{row.target_value}</td>
                     <td>
                       <LabelBadge label={row.label} />
@@ -166,13 +166,13 @@ export function ValueLedger() {
                 <tr>
                   <th scope="row">Cumulative LLM tokens</th>
                   <td>{data.metrics.llm_tokens_used}</td>
-                  <td>—</td>
+                  <td>-</td>
                 </tr>
                 <tr>
                   <th scope="row">Estimated cost (USD)</th>
                   <td>{data.metrics.estimated_usd_cost.toFixed(4)}</td>
                   <td>
-                    One demo ≈ {data.metrics.projected_hero_demo_usd} (K-17); build + rehearsal ≈{' '}
+                    One demo ~ {data.metrics.projected_hero_demo_usd} (K-17); build + rehearsal ~{' '}
                     {data.metrics.projected_build_total_usd} (K-18)
                   </td>
                 </tr>
@@ -228,7 +228,7 @@ export function ValueLedger() {
               </li>
             </ul>
             {data.total_decisions === 0 && (
-              <p className="autonomy-empty">No impact-classification decisions yet — records appear here after a disruption is registered.</p>
+              <p className="autonomy-empty">No impact-classification decisions yet - records appear here after a disruption is registered.</p>
             )}
           </section>
 
@@ -294,13 +294,13 @@ export function ValueLedger() {
                     <td>
                       {data.baseline_on_time_rate != null
                         ? formatRate(data.baseline_on_time_rate)
-                        : '—'}
+                        : '-'}
                     </td>
                   </tr>
                   <tr>
                     <th scope="row">Tardiness (min)</th>
-                    <td>{data.total_tardiness_minutes ?? '—'}</td>
-                    <td>{data.baseline_total_tardiness_minutes ?? '—'}</td>
+                    <td>{data.total_tardiness_minutes ?? '-'}</td>
+                    <td>{data.baseline_total_tardiness_minutes ?? '-'}</td>
                   </tr>
                 </tbody>
               </table>

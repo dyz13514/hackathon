@@ -86,7 +86,7 @@ export function toGanttJobs(
 
 function formatClock(iso: string | null): string {
   if (iso == null) {
-    return '—';
+    return '-';
   }
   const date = new Date(iso);
   const hh = String(date.getHours()).padStart(2, '0');
@@ -97,10 +97,10 @@ function formatClock(iso: string | null): string {
 /** 「机器 / 工人 @ 起-止」的紧凑单元格文本；某侧缺资源时显示破折号。 */
 function sideCell(machineId: string | null, workerId: string | null, start: string | null, end: string | null): string {
   if (machineId == null && start == null) {
-    return '—';
+    return '-';
   }
-  const res = `${machineId ?? '—'} · ${workerId ?? '—'}`;
-  return `${res} @ ${formatClock(start)}–${formatClock(end)}`;
+  const res = `${machineId ?? '-'} / ${workerId ?? '-'}`;
+  return `${res} @ ${formatClock(start)}-${formatClock(end)}`;
 }
 
 export interface PlanCompareProps {
@@ -152,7 +152,7 @@ export function PlanCompare({ planIdA, planIdB }: PlanCompareProps = {}) {
       <div className="compare-header">
         <h2 id="compare-heading">Plan comparison</h2>
         <p className="compare-ids">
-          A: {idA || '—'} ↔ B: {idB || '—'}
+          A: {idA || 'N/A'} &lt;-&gt; B: {idB || 'N/A'}
         </p>
       </div>
 
