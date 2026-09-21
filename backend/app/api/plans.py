@@ -371,8 +371,9 @@ def generate_plan(
                 status_code=409,
                 code=ErrorCode.PENDING_PLAN_EXISTS,
                 message=(
-                    f"生产日 {body.production_date} 已有一个待审批计划（{existing_pending.plan_id}）。"
-                    "请先审批或拒绝现有计划，再生成新计划。"
+                    f"Production date {body.production_date} already has a pending-approval plan "
+                    f"({existing_pending.plan_id}). Please approve or reject the existing plan "
+                    "before generating a new one."
                 ),
                 next_actions=[
                     NextAction(action="view_pending", href="/plans/pending"),

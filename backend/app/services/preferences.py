@@ -136,9 +136,10 @@ def _validate_form(structured_form: dict[str, Any]) -> dict[str, Any]:
         model = _FORM_ADAPTER.validate_python(structured_form)
     except ValidationError as error:
         raise PreferenceRuleOutOfScopeError(
-            "偏好规则的 structured_form 超出允许范围：只支持 AVOID_MACHINE_FOR_ORDER / "
-            "AVOID_MACHINE_FOR_PRODUCT / PREFER_WORKER_FOR_SKILL / ADJUST_OBJECTIVE_WEIGHT，"
-            "且 ADJUST_OBJECTIVE_WEIGHT 只能作用于 6 个软目标分量。偏好规则不能放宽任何硬约束。"
+            "The preference rule's structured_form is out of the allowed scope: only "
+            "AVOID_MACHINE_FOR_ORDER / AVOID_MACHINE_FOR_PRODUCT / PREFER_WORKER_FOR_SKILL / "
+            "ADJUST_OBJECTIVE_WEIGHT are supported, and ADJUST_OBJECTIVE_WEIGHT may only act on "
+            "the 6 soft-objective components. Preference rules cannot relax any hard constraint."
         ) from error
     # `mode="json"` 让 datetime 等类型落成可 JSON 序列化的形态；这里都是标量与字面量，稳定。
     return model.model_dump(mode="json")
@@ -345,7 +346,8 @@ def set_enabled(
     rule = _get_or_raise(session, rule_id)
     if enabled and not rule.enabled and enabled_rule_count(session) >= MAX_ENABLED_RULES:
         raise PreferenceRuleLimitError(
-            f"启用状态的偏好规则已达上限 {MAX_ENABLED_RULES} 条，请先停用一条既有规则再启用。"
+            f"The number of enabled preference rules has reached the limit of {MAX_ENABLED_RULES}; "
+            "please disable an existing rule before enabling another."
         )
     rule.enabled = enabled
     rule.updated_at = now if now is not None else datetime.now()  # noqa: DTZ005

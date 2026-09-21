@@ -306,7 +306,7 @@ def _unsupported(injection_suspected: bool, query: str) -> TranslationResult:
         injection_suspected=injection_suspected,
         source_query_echo=query,
         reason=(
-            "无法把该提问映射到任何受支持的场景类型。受支持的类型："
-            + "、".join(SUPPORTED_SCENARIO_KINDS)
+            "Could not map this question to any supported scenario type. "
+            "Supported types: " + ", ".join(SUPPORTED_SCENARIO_KINDS)
         ),
     )

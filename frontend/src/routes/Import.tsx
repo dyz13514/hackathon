@@ -215,7 +215,7 @@ export function Import() {
               <ul>
                 {proposal.proposal.missing_required_fields.map((m) => (
                   <li key={m.target_field}>
-                    {m.target_field}：{m.reason}
+                    {m.target_field}: {m.reason}
                   </li>
                 ))}
               </ul>

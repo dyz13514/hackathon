@@ -281,7 +281,7 @@ def translate_scenario_endpoint(
             status_code=422,
             code=ErrorCode.UNSUPPORTED_SCENARIO,
             message=result.reason
-            or "无法把该提问映射到任何受支持的场景类型。",
+            or "Could not map this question to any supported scenario type.",
             next_actions=[NextAction(action="use_structured_form", href="/whatif")],
             details={
                 "supported_kinds": list(result.supported_kinds),
