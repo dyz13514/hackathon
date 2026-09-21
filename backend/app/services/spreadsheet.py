@@ -78,21 +78,21 @@ def parse_spreadsheet(*, filename: str, content: bytes) -> ParsedFile:
     数行），其余在读内容前。
     """
     if len(content) > MAX_FILE_BYTES:
-        raise SpreadsheetError("FILE_TOO_LARGE", f"文件超过 {MAX_FILE_BYTES} 字节上限。")
+        raise SpreadsheetError("FILE_TOO_LARGE", f"File exceeds the {MAX_FILE_BYTES}-byte limit.")
 
     lower = filename.lower()
     if lower.endswith(".xlsm"):
-        raise SpreadsheetError("MACRO_NOT_ALLOWED", "不接受启用宏的 .xlsm 文件。")
+        raise SpreadsheetError("MACRO_NOT_ALLOWED", "Macro-enabled .xlsm files are not accepted.")
 
     if lower.endswith(".csv"):
         parsed = _parse_csv(content)
     elif lower.endswith(".xlsx"):
         parsed = _parse_xlsx(content)
     else:
-        raise SpreadsheetError("UNSUPPORTED_FILE_TYPE", "仅支持 .csv 与 .xlsx。")
+        raise SpreadsheetError("UNSUPPORTED_FILE_TYPE", "Only .csv and .xlsx are supported.")
 
     if parsed.row_count > MAX_ROWS:
-        raise SpreadsheetError("TOO_MANY_ROWS", f"数据行超过 {MAX_ROWS} 行上限。")
+        raise SpreadsheetError("TOO_MANY_ROWS", f"Data rows exceed the {MAX_ROWS}-row limit.")
     return parsed
 
 
@@ -100,11 +100,11 @@ def _parse_csv(content: bytes) -> ParsedFile:
     """CSV：魔数校验（不得是 ZIP）+ sniffer 猜方言 + 截断单元格。"""
     if content[:2] == b"PK":
         # ZIP 魔数：扩展名说 csv 但内容是 xlsx/zip → 不匹配。
-        raise SpreadsheetError("UNSUPPORTED_FILE_TYPE", "扩展名 .csv 但内容不是文本表格。")
+        raise SpreadsheetError("UNSUPPORTED_FILE_TYPE", "The .csv extension does not match the content, which is not a text table.")
     try:
         text = content.decode("utf-8-sig")
     except UnicodeDecodeError as error:
-        raise SpreadsheetError("UNSUPPORTED_FILE_TYPE", "CSV 不是有效 UTF-8。") from error
+        raise SpreadsheetError("UNSUPPORTED_FILE_TYPE", "The CSV file is not valid UTF-8.") from error
     sample = text[:4096]
     try:
         dialect: type[csv.Dialect] | csv.Dialect = csv.Sniffer().sniff(sample)
@@ -113,22 +113,22 @@ def _parse_csv(content: bytes) -> ParsedFile:
     reader = csv.reader(io.StringIO(text), dialect)
     all_rows = [[_truncate(cell) for cell in row] for row in reader if any(c.strip() for c in row)]
     if not all_rows:
-        raise SpreadsheetError("UNSUPPORTED_FILE_TYPE", "CSV 为空。")
+        raise SpreadsheetError("UNSUPPORTED_FILE_TYPE", "The CSV file is empty.")
     return ParsedFile(header=all_rows[0], rows=all_rows[1:])
 
 
 def _parse_xlsx(content: bytes) -> ParsedFile:
     """XLSX：魔数（ZIP）+ 宏检测（vbaProject.bin）+ openpyxl data_only 取缓存值（R2.10）。"""
     if content[:2] != b"PK":
-        raise SpreadsheetError("UNSUPPORTED_FILE_TYPE", "扩展名 .xlsx 但内容不是 XLSX。")
+        raise SpreadsheetError("UNSUPPORTED_FILE_TYPE", "The .xlsx extension does not match the content, which is not an XLSX file.")
     # 宏检测：xlsx 是 zip；含 vbaProject.bin 即带宏（R23.7）。
     try:
         with zipfile.ZipFile(io.BytesIO(content)) as zf:
             names = zf.namelist()
     except zipfile.BadZipFile as error:
-        raise SpreadsheetError("UNSUPPORTED_FILE_TYPE", "XLSX 不是有效 ZIP 容器。") from error
+        raise SpreadsheetError("UNSUPPORTED_FILE_TYPE", "The XLSX file is not a valid ZIP container.") from error
     if any("vbaProject.bin" in n for n in names):
-        raise SpreadsheetError("MACRO_NOT_ALLOWED", "文件含 VBA 宏，拒绝解析。")
+        raise SpreadsheetError("MACRO_NOT_ALLOWED", "The file contains a VBA macro and was rejected.")
 
     import openpyxl  # 局部 import：仅摄取路径需要，避免全局依赖
 
@@ -142,7 +142,7 @@ def _parse_xlsx(content: bytes) -> ParsedFile:
             matrix.append(cells)
     wb.close()
     if not matrix:
-        raise SpreadsheetError("UNSUPPORTED_FILE_TYPE", "XLSX 为空。")
+        raise SpreadsheetError("UNSUPPORTED_FILE_TYPE", "The XLSX file is empty.")
     header = matrix[0]
     # data_only 已把公式替换为缓存值；这里不重算，仅在报告里保留（当前实现无法逐列区分公式
     # 与常量，故 formula_columns 保守留空——真正的公式列标注依赖单元格级 data_type，read_only
