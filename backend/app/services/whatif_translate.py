@@ -46,6 +46,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from app.api.scenarios import ScenarioMutationBody
 from app.llm.adapter import BedrockAdapter, LlmDisabledError, LlmRequest
+from app.llm.cassette import CassetteMiss
 
 __all__ = [
     "MAX_TRANSLATE_STEPS",
@@ -258,12 +259,12 @@ def translate_whatif_query(
         request = _build_request(system, _user_block(wrapped, error_feedback))
         try:
             response = adapter.invoke(request)
-        except LlmDisabledError:
+        except (LlmDisabledError, CassetteMiss):
             return TranslationResult(
                 outcome=TranslationOutcome.LLM_UNAVAILABLE,
                 injection_suspected=verdict.suspected,
                 source_query_echo=query,
-                reason="LLM 已禁用（降级模式）；请使用结构化场景表单。",
+                reason="LLM 不可用（降级模式或缺少录制）；请使用结构化场景表单。",
             )
 
         final = _extract_final(response.content)
