@@ -32,11 +32,11 @@ import {
 } from '../api/plans';
 
 const MODIFICATION_KINDS = [
-  { value: 'REASSIGN_MACHINE', label: '改派机器' },
-  { value: 'REASSIGN_WORKER', label: '改派工人' },
-  { value: 'MOVE_TIME', label: '移动时间' },
-  { value: 'REMOVE_FROM_PLAN', label: '移出本计划' },
-  { value: 'LOCK_JOB', label: '锁定作业' },
+  { value: 'REASSIGN_MACHINE', label: 'Reassign machine' },
+  { value: 'REASSIGN_WORKER', label: 'Reassign worker' },
+  { value: 'MOVE_TIME', label: 'Move time' },
+  { value: 'REMOVE_FROM_PLAN', label: 'Remove from plan' },
+  { value: 'LOCK_JOB', label: 'Lock job' },
 ] as const;
 
 type ModificationKind = (typeof MODIFICATION_KINDS)[number]['value'];
@@ -99,7 +99,7 @@ export function Approval() {
     } catch (err) {
       setPlan(null);
       setError(
-        err instanceof ApiError ? `加载计划失败（${err.code}）：${err.message}` : '加载计划失败。',
+        err instanceof ApiError ? `Failed to load plan (${err.code}): ${err.message}` : 'Failed to load plan.',
       );
     }
   }, []);
@@ -118,8 +118,8 @@ export function Approval() {
     } catch (err) {
       setError(
         err instanceof ApiError
-          ? `加载待审批清单失败（${err.code}）：${err.message}`
-          : '加载待审批清单失败：后端不可用。',
+          ? `Failed to load pending list (${err.code}): ${err.message}`
+          : 'Failed to load pending list: backend unavailable.',
       );
     } finally {
       setLoading(false);
@@ -143,7 +143,7 @@ export function Approval() {
     resetActionState();
     try {
       const result = await approvePlan(plan.plan_id, plan.plan_version);
-      setNotice(`✔ 计划 ${result.plan_id} 已激活（${result.status}）。`);
+      setNotice(`✔ Plan ${result.plan_id} activated (${result.status}).`);
       await loadPending();
     } catch (err) {
       if (err instanceof ApiError && err.code === 'STALE_PROPOSAL') {
@@ -154,7 +154,7 @@ export function Approval() {
         return;
       }
       setError(
-        err instanceof ApiError ? `审批失败（${err.code}）：${err.message}` : '审批失败。',
+        err instanceof ApiError ? `Approval failed (${err.code}): ${err.message}` : 'Approval failed.',
       );
     }
   }, [plan, resetActionState, loadPending]);
@@ -166,12 +166,12 @@ export function Approval() {
     resetActionState();
     try {
       const result = await rejectPlan(plan.plan_id, rejectionReason);
-      setNotice(`✔ 计划 ${result.plan_id} 已拒绝（${result.status}）。`);
+      setNotice(`✔ Plan ${result.plan_id} rejected (${result.status}).`);
       setRejectionReason('');
       await loadPending();
     } catch (err) {
       setError(
-        err instanceof ApiError ? `拒绝失败（${err.code}）：${err.message}` : '拒绝失败。',
+        err instanceof ApiError ? `Rejection failed (${err.code}): ${err.message}` : 'Rejection failed.',
       );
     }
   }, [plan, rejectionReason, resetActionState, loadPending]);
@@ -183,20 +183,20 @@ export function Approval() {
     resetActionState();
     const modification = buildModification(modKind, modJobId, modTarget);
     if (!modification) {
-      setError('请填写作业编号与该修改类型所需的目标值。');
+      setError('Please enter the job id and the target value required for this modification type.');
       return;
     }
     try {
       const result = await modifyPlan(plan.plan_id, [modification]);
       setNotice(
-        `✔ 已生成新的待审批版本 ${result.new_plan_id}（源计划 ${result.source_plan_id}）。`,
+        `✔ Created new pending version ${result.new_plan_id} (from plan ${result.source_plan_id}).`,
       );
       setModJobId('');
       setModTarget('');
       await loadPending();
     } catch (err) {
       setError(
-        err instanceof ApiError ? `修改失败（${err.code}）：${err.message}` : '修改失败。',
+        err instanceof ApiError ? `Modification failed (${err.code}): ${err.message}` : 'Modification failed.',
       );
     }
   }, [plan, modKind, modJobId, modTarget, resetActionState, loadPending]);
@@ -205,25 +205,25 @@ export function Approval() {
   const affected = plan ? affectedOrderIds(plan) : [];
   const targetLabel =
     modKind === 'REASSIGN_MACHINE'
-      ? '目标机器编号'
+      ? 'Target machine id'
       : modKind === 'REASSIGN_WORKER'
-        ? '目标工人编号'
+        ? 'Target worker id'
         : modKind === 'MOVE_TIME'
-          ? '目标起始时间（ISO 8601）'
+          ? 'Target start time (ISO 8601)'
           : '';
 
   return (
     <section aria-labelledby="approval-heading" className="approval">
       <div className="approval-header">
-        <h2 id="approval-heading">审批</h2>
+        <h2 id="approval-heading">Approval</h2>
         <button
           type="button"
           onClick={() => void loadPending()}
           disabled={loading}
           aria-busy={loading}
-          aria-label="刷新待审批清单"
+          aria-label="Refresh pending list"
         >
-          {loading ? '加载中…' : '刷新'}
+          {loading ? 'Loading…' : 'Refresh'}
         </button>
       </div>
 
@@ -244,32 +244,32 @@ export function Approval() {
         <div role="alert" className="approval-stale">
           <p>
             <span aria-hidden="true">⚠ </span>
-            该提案所依赖的输入数据已在提案生成之后发生变化。
+            The input data this proposal relies on has changed since the proposal was generated.
           </p>
           <p className="approval-stale-versions">
-            提案版本：{stale.proposalVersion ?? '未知'} · 当前数据版本：
-            {stale.currentVersion ?? '未知'}
+            Proposal version: {stale.proposalVersion ?? 'unknown'} · current data version:{' '}
+            {stale.currentVersion ?? 'unknown'}
           </p>
-          <a className="approval-regenerate" href="/schedule" aria-label="基于最新数据重新生成">
-            基于最新数据重新生成
+          <a className="approval-regenerate" href="/schedule" aria-label="Regenerate from latest data">
+            Regenerate from latest data
           </a>
         </div>
       )}
 
       {!loading && pending.length === 0 && !error && (
-        <p className="approval-empty">当前没有待审批的计划。</p>
+        <p className="approval-empty">There are no plans pending approval.</p>
       )}
 
       {plan && (
         <div className="approval-body">
           <section aria-labelledby="summary-heading" className="approval-summary">
-            <h3 id="summary-heading">计划摘要</h3>
+            <h3 id="summary-heading">Plan summary</h3>
             <p>
-              <strong>{plan.plan_id}</strong> · 状态 {plan.status} · 可行性{' '}
+              <strong>{plan.plan_id}</strong> · status {plan.status} · feasibility{' '}
               <span className={`feasibility feasibility-${plan.feasibility}`}>
                 {plan.feasibility}
               </span>{' '}
-              · 输入数据版本 {plan.input_snapshot_version} · v{plan.plan_version}
+              · input data version {plan.input_snapshot_version} · v{plan.plan_version}
             </p>
           </section>
 
@@ -283,29 +283,29 @@ export function Approval() {
           >
             <h3 id="unschedulable-heading">
               <span aria-hidden="true">{plan.unschedulable_jobs.length > 0 ? '⚠ ' : '✔ '}</span>
-              不可排产作业：{plan.unschedulable_jobs.length}
+              Unschedulable jobs: {plan.unschedulable_jobs.length}
             </h3>
             {affected.length > 0 ? (
-              <p className="approval-affected">受影响订单（{affected.length}）：{affected.join('、')}</p>
+              <p className="approval-affected">Affected orders ({affected.length}): {affected.join(', ')}</p>
             ) : (
-              <p>全部作业均已排产，无受影响订单。</p>
+              <p>All jobs scheduled; no affected orders.</p>
             )}
           </section>
 
           <section aria-labelledby="breakdown-heading" className="approval-breakdown">
-            <h3 id="breakdown-heading">目标评分拆解</h3>
+            <h3 id="breakdown-heading">Objective score breakdown</h3>
             {breakdown ? (
               <>
                 <table>
                   <caption className="table-caption">
-                    逐分量原始值、权重与加权贡献（R7.3）
+                    Per-component raw value, weight and weighted contribution (R7.3)
                   </caption>
                   <thead>
                     <tr>
-                      <th scope="col">分量</th>
-                      <th scope="col">原始值</th>
-                      <th scope="col">权重</th>
-                      <th scope="col">加权贡献</th>
+                      <th scope="col">Component</th>
+                      <th scope="col">Raw value</th>
+                      <th scope="col">Weight</th>
+                      <th scope="col">Weighted contribution</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -321,7 +321,7 @@ export function Approval() {
                   <tfoot>
                     <tr>
                       <th scope="row" colSpan={3}>
-                        总分
+                        Total score
                       </th>
                       <td>{breakdown.total_score}</td>
                     </tr>
@@ -329,21 +329,21 @@ export function Approval() {
                 </table>
                 {breakdown.weight_overrides_applied.length > 0 && (
                   <p className="approval-overrides">
-                    已应用权重覆盖：
+                    Weight overrides applied:{' '}
                     {breakdown.weight_overrides_applied
-                      .map((o) => `${o.component} ×${o.multiplier}（${o.rule_id}）`)
-                      .join('、')}
+                      .map((o) => `${o.component} ×${o.multiplier} (${o.rule_id})`)
+                      .join(', ')}
                   </p>
                 )}
                 {breakdown.preference_contributions.length > 0 && (
                   <div className="approval-preferences">
-                    <h4>偏好规则影响（R18.7）</h4>
+                    <h4>Preference rule impact (R18.7)</h4>
                     <ul>
                       {breakdown.preference_contributions.map((c) => (
                         <li key={c.rule_id}>
-                          <span className="pref-rule-text">{c.human_text}</span>（{c.rule_id}）：
-                          影响作业 {c.violating_job_ids.join('、') || '—'}，惩罚{' '}
-                          {c.weighted_contribution} 分钟等价
+                          <span className="pref-rule-text">{c.human_text}</span> ({c.rule_id}):{' '}
+                          affected jobs {c.violating_job_ids.join(', ') || '—'}, penalty{' '}
+                          {c.weighted_contribution} min-equivalent
                         </li>
                       ))}
                     </ul>
@@ -351,50 +351,50 @@ export function Approval() {
                 )}
               </>
             ) : (
-              <p>该计划无目标评分拆解。</p>
+              <p>This plan has no objective score breakdown.</p>
             )}
           </section>
 
           <section aria-labelledby="actions-heading" className="approval-actions">
-            <h3 id="actions-heading">审批动作</h3>
+            <h3 id="actions-heading">Approval actions</h3>
 
             <div className="approval-action">
               <button
                 type="button"
                 onClick={() => void onApprove()}
-                aria-label={`批准计划 ${plan.plan_id}`}
+                aria-label={`Approve plan ${plan.plan_id}`}
               >
-                批准（APPROVE）
+                Approve
               </button>
             </div>
 
             <div className="approval-action">
-              <label htmlFor="rejection-reason">拒绝理由（必填，至少 5 个字符）</label>
+              <label htmlFor="rejection-reason">Rejection reason (required, at least 5 characters)</label>
               <textarea
                 id="rejection-reason"
                 value={rejectionReason}
                 onChange={(event) => setRejectionReason(event.target.value)}
-                aria-label="拒绝理由"
+                aria-label="Rejection reason"
                 rows={2}
               />
               <button
                 type="button"
                 onClick={() => void onReject()}
                 disabled={rejectionReason.trim().length < 5}
-                aria-label={`拒绝计划 ${plan.plan_id}`}
+                aria-label={`Reject plan ${plan.plan_id}`}
               >
-                拒绝（REJECT）
+                Reject
               </button>
             </div>
 
             <div className="approval-action approval-modify">
-              <h4>修改（MODIFY）</h4>
-              <label htmlFor="mod-kind">修改类型</label>
+              <h4>Modify</h4>
+              <label htmlFor="mod-kind">Modification type</label>
               <select
                 id="mod-kind"
                 value={modKind}
                 onChange={(event) => setModKind(event.target.value as ModificationKind)}
-                aria-label="修改类型"
+                aria-label="Modification type"
               >
                 {MODIFICATION_KINDS.map((kind) => (
                   <option key={kind.value} value={kind.value}>
@@ -403,13 +403,13 @@ export function Approval() {
                 ))}
               </select>
 
-              <label htmlFor="mod-job">作业编号</label>
+              <label htmlFor="mod-job">Job id</label>
               <input
                 id="mod-job"
                 type="text"
                 value={modJobId}
                 onChange={(event) => setModJobId(event.target.value)}
-                aria-label="作业编号"
+                aria-label="Job id"
               />
 
               {targetLabel && (
@@ -428,9 +428,9 @@ export function Approval() {
               <button
                 type="button"
                 onClick={() => void onModify()}
-                aria-label={`提交对计划 ${plan.plan_id} 的修改`}
+                aria-label={`Submit modification for plan ${plan.plan_id}`}
               >
-                提交修改
+                Submit modification
               </button>
             </div>
           </section>

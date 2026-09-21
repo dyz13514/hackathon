@@ -35,11 +35,11 @@ import { Gantt } from '../components/Gantt';
 
 /** 变更标签的中文文案（除颜色外用文字传达，R27.9）。 */
 const CHANGE_LABEL: Record<PlanChangeKind, string> = {
-  ADDED: '新增',
-  REMOVED: '移除',
-  MOVED: '改期',
-  REASSIGNED: '改派',
-  UNCHANGED: '不变',
+  ADDED: 'Added',
+  REMOVED: 'Removed',
+  MOVED: 'Rescheduled',
+  REASSIGNED: 'Reassigned',
+  UNCHANGED: 'Unchanged',
 };
 
 /** 从 job_id 尾部的 `-OPn` 推工序号；推不出则回退 0。纯展示用，不参与权威计算。 */
@@ -120,7 +120,7 @@ export function PlanCompare({ planIdA, planIdB }: PlanCompareProps = {}) {
 
   const load = useCallback(async () => {
     if (!idA || !idB) {
-      setError('缺少要对比的两个计划 id。');
+      setError('Missing the two plan ids to compare.');
       setLoading(false);
       return;
     }
@@ -133,9 +133,9 @@ export function PlanCompare({ planIdA, planIdB }: PlanCompareProps = {}) {
       const message =
         err instanceof ApiError
           ? err.code === 'PLAN_NOT_FOUND'
-            ? `计划不存在（${err.code}）：${err.message}`
-            : `对比失败（${err.code}）：${err.message}`
-          : '对比失败：网络或服务不可用。';
+            ? `Plan not found (${err.code}): ${err.message}`
+            : `Comparison failed (${err.code}): ${err.message}`
+          : 'Comparison failed: network or service unavailable.';
       setError(message);
       setData(null);
     } finally {
@@ -150,13 +150,13 @@ export function PlanCompare({ planIdA, planIdB }: PlanCompareProps = {}) {
   return (
     <section aria-labelledby="compare-heading" className="plan-compare">
       <div className="compare-header">
-        <h2 id="compare-heading">方案对比</h2>
+        <h2 id="compare-heading">Plan comparison</h2>
         <p className="compare-ids">
-          A：{idA || '—'} ↔ B：{idB || '—'}
+          A: {idA || '—'} ↔ B: {idB || '—'}
         </p>
       </div>
 
-      {loading && <p className="compare-loading">对比中…</p>}
+      {loading && <p className="compare-loading">Comparing…</p>}
 
       {error && !loading && (
         <p role="alert" className="compare-error">
@@ -166,37 +166,37 @@ export function PlanCompare({ planIdA, planIdB }: PlanCompareProps = {}) {
 
       {data && !loading && !error && (
         <div className="compare-body">
-          <ul className="compare-summary" aria-label="变更摘要">
+          <ul className="compare-summary" aria-label="Change summary">
             <li>
-              变动比例（churn）：<strong>{(data.churn_ratio * 100).toFixed(1)}%</strong>
+              Churn ratio: <strong>{(data.churn_ratio * 100).toFixed(1)}%</strong>
             </li>
-            <li>新增：<strong>{data.added_count}</strong></li>
-            <li>移除：<strong>{data.removed_count}</strong></li>
-            <li>改期：<strong>{data.moved_count}</strong></li>
-            <li>改派：<strong>{data.reassigned_count}</strong></li>
-            <li>不变：<strong>{data.unchanged_count}</strong></li>
+            <li>Added: <strong>{data.added_count}</strong></li>
+            <li>Removed: <strong>{data.removed_count}</strong></li>
+            <li>Rescheduled: <strong>{data.moved_count}</strong></li>
+            <li>Reassigned: <strong>{data.reassigned_count}</strong></li>
+            <li>Unchanged: <strong>{data.unchanged_count}</strong></li>
           </ul>
 
           <div className="compare-gantts">
             <figure aria-labelledby="compare-gantt-a">
-              <figcaption id="compare-gantt-a">计划 A（对照）</figcaption>
+              <figcaption id="compare-gantt-a">Plan A (baseline)</figcaption>
               <Gantt jobs={toGanttJobs(data.changes, 'a')} />
             </figure>
             <figure aria-labelledby="compare-gantt-b">
-              <figcaption id="compare-gantt-b">计划 B（建议）</figcaption>
+              <figcaption id="compare-gantt-b">Plan B (proposed)</figcaption>
               <Gantt jobs={toGanttJobs(data.changes, 'b')} />
             </figure>
           </div>
 
           <section aria-labelledby="compare-changes-heading" className="compare-changes">
-            <h3 id="compare-changes-heading">逐作业变更（{data.changes.length}）</h3>
+            <h3 id="compare-changes-heading">Per-job changes ({data.changes.length})</h3>
             <table>
               <thead>
                 <tr>
-                  <th scope="col">作业</th>
-                  <th scope="col">变更</th>
-                  <th scope="col">A（对照）</th>
-                  <th scope="col">B（建议）</th>
+                  <th scope="col">Job</th>
+                  <th scope="col">Change</th>
+                  <th scope="col">A (baseline)</th>
+                  <th scope="col">B (proposed)</th>
                 </tr>
               </thead>
               <tbody>
@@ -220,21 +220,21 @@ export function PlanCompare({ planIdA, planIdB }: PlanCompareProps = {}) {
 
           <section aria-labelledby="compare-evidence-heading" className="compare-evidence">
             <h3 id="compare-evidence-heading">
-              决策证据（{data.decision_evidence.length}）
+              Decision evidence ({data.decision_evidence.length})
             </h3>
             {data.decision_evidence.length === 0 ? (
               <p className="compare-evidence-empty">
-                无 MOVED / REASSIGNED 作业，故无决策证据。
+                No MOVED / REASSIGNED jobs, so there is no decision evidence.
               </p>
             ) : (
               <ul>
                 {data.decision_evidence.map((ev: DecisionEvidence) => (
                   <li key={ev.job_id} className="evidence-item">
                     <p className="evidence-job">{ev.job_id}</p>
-                    <p className="evidence-trigger">触发：{ev.trigger}</p>
-                    <p className="evidence-constraint">约束：{ev.constraint}</p>
+                    <p className="evidence-trigger">Trigger: {ev.trigger}</p>
+                    <p className="evidence-constraint">Constraint: {ev.constraint}</p>
                     <p className="evidence-resources">
-                      涉及资源：{ev.resources.length > 0 ? ev.resources.join('，') : '（无）'}
+                      Resources involved: {ev.resources.length > 0 ? ev.resources.join(', ') : '(none)'}
                     </p>
                   </li>
                 ))}

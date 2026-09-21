@@ -27,7 +27,7 @@ const RISKS: RiskList = {
       metric_value: 0,
       threshold_value: 120,
       affected_order_ids: ['ORD-1'],
-      narrative: '订单零余量，需立即处理。',
+      narrative: 'Order has zero slack; needs immediate attention.',
       narrative_source: 'TEMPLATE',
       first_seen_at: '2026-01-01T00:00:00Z',
       last_seen_at: '2026-01-01T00:00:00Z',
@@ -42,7 +42,7 @@ const RISKS: RiskList = {
       metric_value: 30,
       threshold_value: 24,
       affected_order_ids: ['ORD-2'],
-      narrative: '物料将耗尽。',
+      narrative: 'Material is forecast to run out.',
       narrative_source: 'TEMPLATE',
       first_seen_at: '2026-01-01T00:00:00Z',
       last_seen_at: '2026-01-01T00:00:00Z',
@@ -57,7 +57,7 @@ const RISKS: RiskList = {
       metric_value: 0.91,
       threshold_value: 0.9,
       affected_order_ids: [],
-      narrative: '资源利用率偏高。',
+      narrative: 'Resource utilisation is high.',
       narrative_source: 'TEMPLATE',
       first_seen_at: '2026-01-01T00:00:00Z',
       last_seen_at: '2026-01-01T00:00:00Z',
@@ -75,30 +75,30 @@ describe('Risks 视图', () => {
     vi.mocked(getRisks).mockResolvedValue(RISKS);
     render(<Risks />);
 
-    const summary = await screen.findByLabelText('风险计数');
+    const summary = await screen.findByLabelText('Risk counts');
     // 三档计数各为 1（severity/warning/info），因此顶栏应有恰好三个 <strong>1</strong>。
     // 用 getAllByText 精确断言三项，避免 getByText 命中多元素而抛「found multiple」。
     expect(within(summary).getAllByText('1', { selector: 'strong' })).toHaveLength(3);
-    expect(screen.getByRole('heading', { name: /严重（1）/ })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /警告（1）/ })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /提示（1）/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Critical \(1\)/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Warning \(1\)/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Info \(1\)/ })).toBeInTheDocument();
   });
 
   it('CRITICAL 显示缓解提案入口，INFO/WARNING 无入口（R14.6–7）', async () => {
     vi.mocked(getRisks).mockResolvedValue(RISKS);
     render(<Risks />);
-    await screen.findByRole('heading', { name: /严重（1）/ });
+    await screen.findByRole('heading', { name: /Critical \(1\)/ });
 
-    const link = screen.getByRole('link', { name: /查看缓解提案/ });
+    const link = screen.getByRole('link', { name: /View mitigation proposal/ });
     expect(link).toHaveAttribute('href', '/plans/PLAN-mit');
     // 只有一个缓解入口（CRITICAL 那条），WARNING/INFO 不生成
-    expect(screen.getAllByRole('link', { name: /查看缓解提案/ })).toHaveLength(1);
+    expect(screen.getAllByRole('link', { name: /View mitigation proposal/ })).toHaveLength(1);
   });
 
   it('渲染叙述来源徽章（TEMPLATE）以区分 P0 模板与 P1 LLM（R14.11）', async () => {
     vi.mocked(getRisks).mockResolvedValue(RISKS);
     render(<Risks />);
-    await screen.findByRole('heading', { name: /严重（1）/ });
+    await screen.findByRole('heading', { name: /Critical \(1\)/ });
 
     expect(screen.getAllByText('TEMPLATE').length).toBeGreaterThanOrEqual(1);
   });
@@ -109,19 +109,19 @@ describe('Risks 视图', () => {
     const withLlm: RiskList = {
       ...RISKS,
       findings: [
-        { ...crit!, narrative_source: 'LLM', narrative: '[LLM] CNC-01 归因叙述。' },
+        { ...crit!, narrative_source: 'LLM', narrative: '[LLM] Attribution narrative for CNC-01.' },
         warn!,
       ],
     };
     vi.mocked(getRisks).mockResolvedValue(withLlm);
     render(<Risks />);
-    await screen.findByRole('heading', { name: /严重（1）/ });
+    await screen.findByRole('heading', { name: /Critical \(1\)/ });
 
     const llmBadge = screen.getByText('LLM');
     expect(llmBadge).toHaveClass('source-LLM');
     expect(screen.getByText('TEMPLATE')).toHaveClass('source-TEMPLATE');
     // 叙述来源可访问标注区分两类。
-    expect(screen.getByLabelText('叙述来源：LLM')).toBeInTheDocument();
+    expect(screen.getByLabelText('Narrative source: LLM')).toBeInTheDocument();
   });
 
   it('「重新扫描」触发 POST 后回读（R14.1）', async () => {
@@ -133,9 +133,9 @@ describe('Risks 视图', () => {
       findings: [],
     });
     render(<Risks />);
-    await screen.findByRole('heading', { name: /严重（1）/ });
+    await screen.findByRole('heading', { name: /Critical \(1\)/ });
 
-    fireEvent.click(screen.getByRole('button', { name: /重新扫描风险/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Rescan risks/ }));
     await waitFor(() => expect(scanRisks).toHaveBeenCalledTimes(1));
     // 扫描后回读一次 getRisks（初始 1 次 + 扫描后 1 次）
     await waitFor(() => expect(getRisks).toHaveBeenCalledTimes(2));
@@ -149,7 +149,7 @@ describe('Risks 视图', () => {
       info_count: 0,
     });
     render(<Risks />);
-    expect(await screen.findByText(/当前无风险发现/)).toBeInTheDocument();
+    expect(await screen.findByText(/No risk findings/)).toBeInTheDocument();
   });
 
   it('后端不可用时显示错误而不是空白', async () => {
@@ -161,7 +161,7 @@ describe('Risks 视图', () => {
   it('无严重可访问性违规（axe-core）', async () => {
     vi.mocked(getRisks).mockResolvedValue(RISKS);
     const { container } = render(<Risks />);
-    await screen.findByRole('heading', { name: /严重（1）/ });
+    await screen.findByRole('heading', { name: /Critical \(1\)/ });
 
     const results = await axe.run(container, {
       rules: {

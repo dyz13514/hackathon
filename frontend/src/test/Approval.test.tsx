@@ -84,8 +84,8 @@ describe('Approval 视图', () => {
     mockLoaded();
     render(<Approval />);
 
-    expect(await screen.findByRole('heading', { name: '计划摘要' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '目标评分拆解' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Plan summary' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Objective score breakdown' })).toBeInTheDocument();
     // 全分量逐行
     expect(screen.getByRole('rowheader', { name: 'total_tardiness' })).toBeInTheDocument();
     expect(screen.getByRole('rowheader', { name: 'on_time_rate' })).toBeInTheDocument();
@@ -96,7 +96,7 @@ describe('Approval 视图', () => {
   it('醒目标注不可排产作业数与受影响订单（R8.6）', async () => {
     mockLoaded();
     render(<Approval />);
-    expect(await screen.findByRole('heading', { name: /不可排产作业：1/ })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /Unschedulable jobs: 1/ })).toBeInTheDocument();
     expect(screen.getByText(/ORD-009/)).toBeInTheDocument();
   });
 
@@ -105,18 +105,18 @@ describe('Approval 视图', () => {
     vi.mocked(approvePlan).mockResolvedValue({ plan_id: 'PLAN-abc', status: 'ACTIVE' });
     render(<Approval />);
 
-    fireEvent.click(await screen.findByRole('button', { name: '批准计划 PLAN-abc' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve plan PLAN-abc' }));
     await waitFor(() => expect(approvePlan).toHaveBeenCalledWith('PLAN-abc', 2));
-    expect(await screen.findByRole('status')).toHaveTextContent('已激活');
+    expect(await screen.findByRole('status')).toHaveTextContent('activated');
   });
 
   it('REJECT 按钮在理由少于 5 字符时禁用（R11.4）', async () => {
     mockLoaded();
     render(<Approval />);
-    const rejectBtn = await screen.findByRole('button', { name: '拒绝计划 PLAN-abc' });
+    const rejectBtn = await screen.findByRole('button', { name: 'Reject plan PLAN-abc' });
     expect(rejectBtn).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText('拒绝理由'), { target: { value: '物料不足需推迟' } });
+    fireEvent.change(screen.getByLabelText('Rejection reason'), { target: { value: 'Insufficient material, needs to be deferred' } });
     expect(rejectBtn).toBeEnabled();
   });
 
@@ -129,10 +129,10 @@ describe('Approval 视图', () => {
     });
     render(<Approval />);
 
-    await screen.findByRole('heading', { name: '审批动作' });
-    fireEvent.change(screen.getByLabelText('修改类型'), { target: { value: 'LOCK_JOB' } });
-    fireEvent.change(screen.getByLabelText('作业编号'), { target: { value: 'ORD-001-OP1' } });
-    fireEvent.click(screen.getByRole('button', { name: '提交对计划 PLAN-abc 的修改' }));
+    await screen.findByRole('heading', { name: 'Approval actions' });
+    fireEvent.change(screen.getByLabelText('Modification type'), { target: { value: 'LOCK_JOB' } });
+    fireEvent.change(screen.getByLabelText('Job id'), { target: { value: 'ORD-001-OP1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Submit modification for plan PLAN-abc' }));
 
     await waitFor(() =>
       expect(modifyPlan).toHaveBeenCalledWith('PLAN-abc', [
@@ -145,34 +145,34 @@ describe('Approval 视图', () => {
   it('STALE_PROPOSAL 显示变化提示、两个版本号与重新生成入口（R12.4）', async () => {
     mockLoaded();
     vi.mocked(approvePlan).mockRejectedValue(
-      new ApiError(409, 'STALE_PROPOSAL', '已变化', {
+      new ApiError(409, 'STALE_PROPOSAL', 'Changed', {
         proposal_version: 3,
         current_version: 5,
       }),
     );
     render(<Approval />);
 
-    fireEvent.click(await screen.findByRole('button', { name: '批准计划 PLAN-abc' }));
-    const alert = await screen.findByText(/该提案所依赖的输入数据已在提案生成之后发生变化/);
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve plan PLAN-abc' }));
+    const alert = await screen.findByText(/The input data this proposal relies on has changed/);
     expect(alert).toBeInTheDocument();
     // 两个版本号
     const stale = alert.closest('.approval-stale') as HTMLElement;
-    expect(stale).toHaveTextContent('提案版本：3');
-    expect(stale).toHaveTextContent('当前数据版本：5');
+    expect(stale).toHaveTextContent('Proposal version: 3');
+    expect(stale).toHaveTextContent('current data version: 5');
     // 重新生成入口
-    expect(screen.getByRole('link', { name: '基于最新数据重新生成' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Regenerate from latest data' })).toBeInTheDocument();
   });
 
   it('没有待审批计划时给出空态', async () => {
     vi.mocked(listPending).mockResolvedValue([]);
     render(<Approval />);
-    expect(await screen.findByText('当前没有待审批的计划。')).toBeInTheDocument();
+    expect(await screen.findByText('There are no plans pending approval.')).toBeInTheDocument();
   });
 
   it('无严重可访问性违规（axe-core）', async () => {
     mockLoaded();
     const { container } = render(<Approval />);
-    await screen.findByRole('heading', { name: '审批动作' });
+    await screen.findByRole('heading', { name: 'Approval actions' });
 
     const results = await axe.run(container, {
       rules: { 'color-contrast': { enabled: false } },

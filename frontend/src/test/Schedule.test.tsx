@@ -103,16 +103,16 @@ describe('Schedule 视图', () => {
     vi.mocked(generatePlan).mockResolvedValue(PLAN);
     render(<Schedule />);
 
-    fireEvent.click(screen.getByRole('button', { name: '生成今日计划' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Generate today’s plan' }));
 
     // 甘特图（role=img）
-    expect(await screen.findByRole('img', { name: '排产甘特图' })).toBeInTheDocument();
+    expect(await screen.findByRole('img', { name: 'Schedule Gantt chart' })).toBeInTheDocument();
     // 基线对比区显示按期率与拖期
-    expect(screen.getByRole('heading', { name: '基线对比（相对 FCFS）' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Baseline comparison (vs. FCFS)' })).toBeInTheDocument();
     expect(screen.getByText('90.0%')).toBeInTheDocument();
     expect(screen.getByText('60.0%')).toBeInTheDocument();
     // 不可排产抽屉列出作业与量化解锁条件（R8.6）
-    expect(screen.getByRole('heading', { name: /不可排产作业/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Unschedulable jobs/ })).toBeInTheDocument();
     expect(screen.getByText(/MATERIAL_INSUFFICIENT/)).toBeInTheDocument();
     expect(screen.getByText(/shortfall_quantity=40/)).toBeInTheDocument();
   });
@@ -120,15 +120,15 @@ describe('Schedule 视图', () => {
   it('生成失败时显示错误而不是空白', async () => {
     vi.mocked(generatePlan).mockRejectedValue(new Error('boom'));
     render(<Schedule />);
-    fireEvent.click(screen.getByRole('button', { name: '生成今日计划' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Generate today’s plan' }));
     expect(await screen.findByRole('alert')).toBeInTheDocument();
   });
 
   it('无严重可访问性违规（axe-core）', async () => {
     vi.mocked(generatePlan).mockResolvedValue(PLAN);
     const { container } = render(<Schedule />);
-    fireEvent.click(screen.getByRole('button', { name: '生成今日计划' }));
-    await screen.findByRole('img', { name: '排产甘特图' });
+    fireEvent.click(screen.getByRole('button', { name: 'Generate today’s plan' }));
+    await screen.findByRole('img', { name: 'Schedule Gantt chart' });
 
     const results = await axe.run(container, {
       rules: {

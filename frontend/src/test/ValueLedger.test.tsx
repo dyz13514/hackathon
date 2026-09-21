@@ -70,13 +70,13 @@ const LEDGER: ValueLedgerData = {
     },
   },
   manual_steps: [
-    { action: 'spreadsheet_import', label: '电子表格导入', rule: '每个导入批次计 1 步', count: 1 },
-    { action: 'plan_generation', label: '计划生成', rule: '每次成功生成计 1 步', count: 1 },
+    { action: 'spreadsheet_import', label: 'Spreadsheet import', rule: 'Counted as 1 step per import batch', count: 1 },
+    { action: 'plan_generation', label: 'Plan generation', rule: 'Counted as 1 step per successful generation', count: 1 },
   ],
   kpis: [
     {
       kpi_id: 'K-01',
-      metric_name: '计划生成时间（秒）',
+      metric_name: 'Plan generation time (seconds)',
       current_value: '',
       baseline_value: '2700',
       delta: '',
@@ -86,7 +86,7 @@ const LEDGER: ValueLedgerData = {
     },
     {
       kpi_id: 'K-17',
-      metric_name: '一次完整演示 LLM 成本（USD，预测）',
+      metric_name: 'Full-demo LLM cost (USD, projected)',
       current_value: '0.14',
       baseline_value: '',
       delta: '',
@@ -145,7 +145,7 @@ describe('ValueLedger 视图', () => {
     vi.mocked(getValueLedger).mockResolvedValue(LEDGER);
     render(<ValueLedger />);
 
-    const ratioSection = (await screen.findByRole('heading', { name: /自主处理 vs 上报人工/ }))
+    const ratioSection = (await screen.findByRole('heading', { name: /Auto-handled vs\. escalated/ }))
       .closest('section') as HTMLElement;
     expect(within(ratioSection).getByText('3')).toBeInTheDocument(); // auto_handled
     expect(within(ratioSection).getByText('1')).toBeInTheDocument(); // escalated
@@ -155,11 +155,11 @@ describe('ValueLedger 视图', () => {
   it('逐行列出每次判定的决定性判据（R13.12），含执行路径中文标签', async () => {
     vi.mocked(getValueLedger).mockResolvedValue(LEDGER);
     render(<ValueLedger />);
-    await screen.findByRole('heading', { name: /每次判定的决定性判据/ });
+    await screen.findByRole('heading', { name: /Decisive predicates per decision/ });
 
     // 执行路径标签除颜色外带文字
-    expect(screen.getByText('自主提案')).toBeInTheDocument();
-    expect(screen.getByText('上报人工')).toBeInTheDocument();
+    expect(screen.getByText('Proposed')).toBeInTheDocument();
+    expect(screen.getByText('Escalated')).toBeInTheDocument();
     // 判据逐条可见
     expect(screen.getByText('changed_job_count=1 <= 2')).toBeInTheDocument();
     expect(screen.getByText('touches_high_priority=true')).toBeInTheDocument();
@@ -171,43 +171,43 @@ describe('ValueLedger 视图', () => {
   it('无裁决时显示诚实空态而不是空白', async () => {
     vi.mocked(getValueLedger).mockResolvedValue(EMPTY_LEDGER);
     render(<ValueLedger />);
-    expect(await screen.findByText(/尚无影响分级裁决/)).toBeInTheDocument();
+    expect(await screen.findByText(/No impact-classification decisions yet/)).toBeInTheDocument();
   });
 
   it('渲染 KPI 表并带 MEASURED/ESTIMATED/PROJECTED 标签（不仅靠颜色，R19.4/R27.9）', async () => {
     vi.mocked(getValueLedger).mockResolvedValue(LEDGER);
     render(<ValueLedger />);
-    await screen.findByRole('heading', { name: /KPI（K-01 至 K-18）/ });
+    await screen.findByRole('heading', { name: /KPIs \(K-01 to K-18\)/ });
     // KPI 行可见
     expect(screen.getByRole('rowheader', { name: 'K-01' })).toBeInTheDocument();
     expect(screen.getByRole('rowheader', { name: 'K-17' })).toBeInTheDocument();
     // 标签用文字（不仅颜色）
-    expect(screen.getAllByText(/估计（访谈）/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/预测/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Estimated \(interview\)/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Projected/).length).toBeGreaterThan(0);
   });
 
   it('展示实测 vs 预测两列与真实运行配额剩余（R25.12/13）', async () => {
     vi.mocked(getValueLedger).mockResolvedValue(LEDGER);
     render(<ValueLedger />);
-    await screen.findByRole('heading', { name: /成本：实测累计 vs 预测/ });
+    await screen.findByRole('heading', { name: /Cost: measured cumulative vs\. projected/ });
     expect(screen.getByText('1234')).toBeInTheDocument(); // 累计 token
     // 配额剩余（148）可见
-    const quota = screen.getByText(/真实运行配额/);
+    const quota = screen.getByText(/Real-run quota/);
     expect(quota.textContent).toMatch(/148/);
   });
 
   it('展示 manual_steps 口径表（R19.5）', async () => {
     vi.mocked(getValueLedger).mockResolvedValue(LEDGER);
     render(<ValueLedger />);
-    await screen.findByRole('heading', { name: /消除的人工步骤/ });
-    expect(screen.getByRole('rowheader', { name: '电子表格导入' })).toBeInTheDocument();
-    expect(screen.getByRole('rowheader', { name: '计划生成' })).toBeInTheDocument();
+    await screen.findByRole('heading', { name: /Manual steps eliminated/ });
+    expect(screen.getByRole('rowheader', { name: 'Spreadsheet import' })).toBeInTheDocument();
+    expect(screen.getByRole('rowheader', { name: 'Plan generation' })).toBeInTheDocument();
   });
 
   it('提供 CSV 导出链接（R19.8）', async () => {
     vi.mocked(getValueLedger).mockResolvedValue(LEDGER);
     render(<ValueLedger />);
-    const link = await screen.findByRole('link', { name: '导出价值台账为 CSV' });
+    const link = await screen.findByRole('link', { name: 'Export value ledger as CSV' });
     expect(link).toHaveAttribute('href', '/api/value-ledger/export.csv');
   });
 
@@ -220,7 +220,7 @@ describe('ValueLedger 视图', () => {
   it('无严重可访问性违规（axe-core）', async () => {
     vi.mocked(getValueLedger).mockResolvedValue(LEDGER);
     const { container } = render(<ValueLedger />);
-    await screen.findByRole('heading', { name: /每次判定的决定性判据/ });
+    await screen.findByRole('heading', { name: /Decisive predicates per decision/ });
 
     const results = await axe.run(container, {
       rules: {

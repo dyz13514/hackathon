@@ -32,7 +32,7 @@ function formatTimestamp(iso: string | null): string {
 /** `source` 徽章：文字即含义，不依赖颜色（R27.9）。 */
 function SourceBadge({ source }: { source: string }) {
   return (
-    <span className="badge badge-source" aria-label={`来源：${source}`}>
+    <span className="badge badge-source" aria-label={`Source: ${source}`}>
       {source}
     </span>
   );
@@ -58,8 +58,8 @@ export function Dashboard() {
     } catch (err) {
       const message =
         err instanceof ApiError
-          ? `DATA_UNAVAILABLE（${err.code}）：${err.message}`
-          : 'DATA_UNAVAILABLE：后端数据服务不可用。';
+          ? `DATA_UNAVAILABLE (${err.code}): ${err.message}`
+          : 'DATA_UNAVAILABLE: backend data service unavailable.';
       setError(message);
     } finally {
       setLoading(false);
@@ -73,15 +73,15 @@ export function Dashboard() {
   return (
     <section aria-labelledby="dashboard-heading" className="dashboard">
       <div className="dashboard-header">
-        <h2 id="dashboard-heading">状态看板</h2>
+        <h2 id="dashboard-heading">Dashboard</h2>
         <button
           type="button"
           onClick={() => void load()}
           disabled={loading}
           aria-busy={loading}
-          aria-label="刷新状态看板"
+          aria-label="Refresh dashboard"
         >
-          {loading ? '加载中…' : '刷新'}
+          {loading ? 'Loading…' : 'Refresh'}
         </button>
       </div>
 
@@ -91,7 +91,7 @@ export function Dashboard() {
           {error}
           <br />
           <span className="dashboard-last-success">
-            上次成功加载：{lastSuccess ? formatTimestamp(lastSuccess.toISOString()) : '尚无'}
+            Last successful load: {lastSuccess ? formatTimestamp(lastSuccess.toISOString()) : 'none yet'}
           </span>
         </p>
       )}
@@ -99,32 +99,32 @@ export function Dashboard() {
       {data && (
         <div className="dashboard-cards">
           <section aria-labelledby="orders-heading" className="dashboard-card">
-            <h3 id="orders-heading">订单（{data.orders.length}）</h3>
+            <h3 id="orders-heading">Orders ({data.orders.length})</h3>
             <ul>
               {data.orders.map((order) => (
                 <li key={order.order_id} className="entity-row">
                   <p className="entity-line">
-                    <strong>{order.order_id}</strong> · {order.product_id} · 数量{' '}
-                    {order.quantity} · 优先级 {order.priority}
+                    <strong>{order.order_id}</strong> · {order.product_id} · qty{' '}
+                    {order.quantity} · priority {order.priority}
                   </p>
                   {order.notes && (
                     <p className="entity-notes">
-                      <span className="badge badge-untrusted" aria-label="不受信任内容">
+                      <span className="badge badge-untrusted" aria-label="Untrusted content">
                         <span aria-hidden="true">🛈 </span>untrusted
                       </span>
                       {order.injection_suspected && (
                         <span
                           className="badge badge-injection"
-                          aria-label="疑似提示注入"
+                          aria-label="Suspected prompt injection"
                         >
-                          <span aria-hidden="true">⚠ </span>疑似注入
+                          <span aria-hidden="true">⚠ </span>suspected injection
                         </span>
                       )}{' '}
                       <span className="entity-notes-text">{order.notes}</span>
                     </p>
                   )}
                   <p className="entity-meta">
-                    <SourceBadge source={order.source} /> · 更新于{' '}
+                    <SourceBadge source={order.source} /> · updated{' '}
                     {formatTimestamp(order.last_updated_at)}
                   </p>
                 </li>
@@ -133,17 +133,17 @@ export function Dashboard() {
           </section>
 
           <section aria-labelledby="materials-heading" className="dashboard-card">
-            <h3 id="materials-heading">物料（{data.materials.length}）</h3>
+            <h3 id="materials-heading">Materials ({data.materials.length})</h3>
             <ul>
               {data.materials.map((material) => (
                 <li key={material.material_id} className="entity-row">
                   <p className="entity-line">
-                    <strong>{material.material_id}</strong> · {material.name} · 可用{' '}
-                    {material.quantity_available} {material.unit}（已预留{' '}
-                    {material.reserved_quantity}）
+                    <strong>{material.material_id}</strong> · {material.name} · available{' '}
+                    {material.quantity_available} {material.unit} (reserved{' '}
+                    {material.reserved_quantity})
                   </p>
                   <p className="entity-meta">
-                    <SourceBadge source={material.source} /> · 更新于{' '}
+                    <SourceBadge source={material.source} /> · updated{' '}
                     {formatTimestamp(material.last_updated_at)}
                   </p>
                 </li>
@@ -152,18 +152,18 @@ export function Dashboard() {
           </section>
 
           <section aria-labelledby="machines-heading" className="dashboard-card">
-            <h3 id="machines-heading">机器（{data.machines.length}）</h3>
+            <h3 id="machines-heading">Machines ({data.machines.length})</h3>
             <ul>
               {data.machines.map((machine) => (
                 <li key={machine.machine_id} className="entity-row">
                   <p className="entity-line">
-                    <strong>{machine.machine_id}</strong> · {machine.machine_type} · 状态{' '}
+                    <strong>{machine.machine_id}</strong> · {machine.machine_type} · status{' '}
                     <span className={`machine-status machine-status-${machine.status}`}>
                       {machine.status}
                     </span>
                   </p>
                   <p className="entity-meta">
-                    <SourceBadge source={machine.source} /> · 更新于{' '}
+                    <SourceBadge source={machine.source} /> · updated{' '}
                     {formatTimestamp(machine.last_updated_at)}
                   </p>
                 </li>
@@ -172,7 +172,7 @@ export function Dashboard() {
           </section>
 
           <section aria-labelledby="workers-heading" className="dashboard-card">
-            <h3 id="workers-heading">工人（{data.workers.length}）</h3>
+            <h3 id="workers-heading">Workers ({data.workers.length})</h3>
             <ul>
               {data.workers.map((worker) => (
                 <li key={worker.worker_id} className="entity-row">
@@ -180,7 +180,7 @@ export function Dashboard() {
                     <strong>{worker.worker_id}</strong> · {worker.name}
                   </p>
                   <p className="entity-meta">
-                    <SourceBadge source={worker.source} /> · 更新于{' '}
+                    <SourceBadge source={worker.source} /> · updated{' '}
                     {formatTimestamp(worker.last_updated_at)}
                   </p>
                 </li>
@@ -189,19 +189,19 @@ export function Dashboard() {
           </section>
 
           <section aria-labelledby="plans-heading" className="dashboard-card">
-            <h3 id="plans-heading">计划（{data.plans.length}）</h3>
+            <h3 id="plans-heading">Plans ({data.plans.length})</h3>
             {data.plans.length === 0 ? (
-              <p>尚无计划。前往「排产甘特图」生成今日计划。</p>
+              <p>No plans yet. Go to “Schedule” to generate today’s plan.</p>
             ) : (
               <ul>
                 {data.plans.map((plan) => (
                   <li key={plan.plan_id} className="entity-row">
                     <p className="entity-line">
-                      <strong>{plan.plan_id}</strong> · 状态 {plan.status} · 可行性{' '}
+                      <strong>{plan.plan_id}</strong> · status {plan.status} · feasibility{' '}
                       {plan.feasibility} · v{plan.plan_version}
                     </p>
                     <p className="entity-meta">
-                      <SourceBadge source={plan.source} /> · 创建于{' '}
+                      <SourceBadge source={plan.source} /> · created{' '}
                       {formatTimestamp(plan.last_updated_at)}
                     </p>
                   </li>

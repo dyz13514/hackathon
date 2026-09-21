@@ -72,15 +72,15 @@ describe('TopBar 全局横幅', () => {
     vi.mocked(getHealth).mockResolvedValue(DEGRADED);
     render(<TopBar />);
     const banner = await screen.findByRole('alert');
-    expect(banner.textContent).toMatch(/降级模式/);
-    expect(banner.textContent).toMatch(/手工列映射/);
+    expect(banner.textContent).toMatch(/Degraded mode/);
+    expect(banner.textContent).toMatch(/manual column mapping/);
   });
 
   it('累计成本达 80% 上限时显示预算告警（R25.4）', async () => {
     vi.mocked(getHealth).mockResolvedValue(BUDGET_WARN);
     render(<TopBar />);
     const status = await screen.findByRole('status');
-    expect(status.textContent).toMatch(/预算告警/);
+    expect(status.textContent).toMatch(/Budget warning/);
   });
 
   it('health 不可达时静默（不渲染吓人的错误横幅）', async () => {
@@ -109,7 +109,7 @@ describe('TopBar 全局横幅', () => {
     vi.mocked(getHealth).mockResolvedValue(NORMAL);
     vi.mocked(listAutoAppliedChanges).mockResolvedValue(ONE_CHANGE);
     render(<TopBar />);
-    const btn = await screen.findByRole('button', { name: /一键回滚自动应用变更 AAC-1/ });
+    const btn = await screen.findByRole('button', { name: /Roll back auto-applied change AAC-1/ });
     expect(btn).toBeInTheDocument();
     // 通知横幅含变更前后计划句柄。
     expect(screen.getByText(/PLAN-before/)).toBeInTheDocument();
@@ -128,7 +128,7 @@ describe('TopBar 全局横幅', () => {
       status: 'OK',
     });
     render(<TopBar />);
-    const btn = await screen.findByRole('button', { name: /一键回滚自动应用变更 AAC-1/ });
+    const btn = await screen.findByRole('button', { name: /Roll back auto-applied change AAC-1/ });
     btn.click();
     await waitFor(() => expect(revertAutoAppliedChange).toHaveBeenCalledWith('AAC-1'));
   });

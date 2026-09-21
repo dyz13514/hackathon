@@ -19,9 +19,9 @@ function pct(x: number): string {
 }
 
 function deltaLabel(delta: number): string {
-  if (delta < 0) return `${delta}（改善）`;
-  if (delta > 0) return `+${delta}（变差）`;
-  return '0（不变）';
+  if (delta < 0) return `${delta} (better)`;
+  if (delta > 0) return `+${delta} (worse)`;
+  return '0 (unchanged)';
 }
 
 export function Insights() {
@@ -36,12 +36,12 @@ export function Insights() {
       setData(await getBottlenecks());
     } catch (err) {
       if (err instanceof ApiError && err.code === 'NO_ACTIVE_PLAN') {
-        setError('当前没有 ACTIVE 计划。请先生成并批准一个计划后再查看瓶颈洞察。');
+        setError('There is no ACTIVE plan. Generate and approve a plan before viewing bottleneck insights.');
       } else {
         setError(
           err instanceof ApiError
-            ? `瓶颈洞察不可用（${err.code}）：${err.message}`
-            : '瓶颈洞察不可用：后端服务不可用。',
+            ? `Insights unavailable (${err.code}): ${err.message}`
+            : 'Insights unavailable: backend service unavailable.',
         );
       }
       setData(null);
@@ -57,15 +57,15 @@ export function Insights() {
   return (
     <section aria-labelledby="insights-heading" className="insights">
       <div className="insights-header">
-        <h2 id="insights-heading">瓶颈与产能洞察</h2>
+        <h2 id="insights-heading">Bottleneck &amp; capacity insights</h2>
         <button
           type="button"
           onClick={() => void load()}
           disabled={loading}
           aria-busy={loading}
-          aria-label="刷新瓶颈洞察"
+          aria-label="Refresh insights"
         >
-          {loading ? '加载中…' : '刷新'}
+          {loading ? 'Loading…' : 'Refresh'}
         </button>
       </div>
 
@@ -79,19 +79,19 @@ export function Insights() {
       {data && (
         <>
           <section aria-labelledby="machines-heading" className="insights-machines">
-            <h3 id="machines-heading">机器产能（当前 ACTIVE 计划）</h3>
+            <h3 id="machines-heading">Machine capacity (current ACTIVE plan)</h3>
             {data.machines.length === 0 ? (
-              <p>当前 ACTIVE 计划没有承担作业的机器。</p>
+              <p>No machines carry jobs in the current ACTIVE plan.</p>
             ) : (
               <table>
                 <thead>
                   <tr>
-                    <th scope="col">机器</th>
-                    <th scope="col">利用率</th>
-                    <th scope="col">作业数</th>
-                    <th scope="col">订单价值占比</th>
-                    <th scope="col">关键</th>
-                    <th scope="col">+20% 工时→总拖期变化</th>
+                    <th scope="col">Machine</th>
+                    <th scope="col">Utilisation</th>
+                    <th scope="col">Jobs</th>
+                    <th scope="col">Order-value share</th>
+                    <th scope="col">Critical</th>
+                    <th scope="col">+20% hours → tardiness change</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -106,11 +106,11 @@ export function Insights() {
                       <td>{pct(m.order_value_share)}</td>
                       <td>
                         {m.is_critical ? (
-                          <span className="badge badge-critical" title="无相同能力替代机器">
-                            <span aria-hidden="true">⛔ </span>关键
+                          <span className="badge badge-critical" title="No substitute machine with the same capability">
+                            <span aria-hidden="true">⛔ </span>Critical
                           </span>
                         ) : (
-                          <span className="machine-noncritical">有替代</span>
+                          <span className="machine-noncritical">Has substitute</span>
                         )}
                       </td>
                       <td>{deltaLabel(m.tardiness_delta_if_plus_20pct)}</td>
@@ -122,17 +122,17 @@ export function Insights() {
           </section>
 
           <section aria-labelledby="skills-heading" className="insights-skills">
-            <h3 id="skills-heading">技能缺口（按所需工人技能聚合）</h3>
+            <h3 id="skills-heading">Skill gaps (aggregated by required worker skill)</h3>
             {data.skill_gaps.length === 0 ? (
-              <p>当前计划无技能需求缺口数据。</p>
+              <p>No skill-demand gap data for the current plan.</p>
             ) : (
               <table>
                 <thead>
                   <tr>
-                    <th scope="col">技能</th>
-                    <th scope="col">所需工时（分钟）</th>
-                    <th scope="col">可用工时（分钟）</th>
-                    <th scope="col">缺口</th>
+                    <th scope="col">Skill</th>
+                    <th scope="col">Required minutes</th>
+                    <th scope="col">Available minutes</th>
+                    <th scope="col">Gap</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -144,10 +144,10 @@ export function Insights() {
                       <td>
                         {g.gap_minutes > 0 ? (
                           <span className="skill-gap-short">
-                            <span aria-hidden="true">⚠ </span>缺 {g.gap_minutes}
+                            <span aria-hidden="true">⚠ </span>short {g.gap_minutes}
                           </span>
                         ) : (
-                          <span className="skill-gap-ok">富余 {-g.gap_minutes}</span>
+                          <span className="skill-gap-ok">surplus {-g.gap_minutes}</span>
                         )}
                       </td>
                     </tr>

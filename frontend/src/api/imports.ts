@@ -108,7 +108,7 @@ export async function uploadImport(file: File): Promise<UploadResult> {
   });
   if (!response.ok) {
     let code = 'UNKNOWN';
-    let message = '上传失败';
+    let message = 'Upload failed';
     try {
       const body = (await response.json()) as { error?: { code?: string; message?: string } };
       code = body.error?.code ?? code;

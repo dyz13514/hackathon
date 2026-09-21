@@ -32,7 +32,7 @@ import { Preferences } from '../routes/Preferences';
 
 const RULE_LOW_EVIDENCE: PreferenceRule = {
   rule_id: 'PR-001',
-  human_text: 'ORD-007 不要排 CNC-03',
+  human_text: 'Don’t schedule ORD-007 on CNC-03',
   structured_form: {
     kind: 'AVOID_MACHINE_FOR_ORDER',
     order_id: 'ORD-007',
@@ -50,7 +50,7 @@ const RULE_LOW_EVIDENCE: PreferenceRule = {
 
 const RULE_ENABLED: PreferenceRule = {
   rule_id: 'PR-002',
-  human_text: '技能 welding 优先 W-01',
+  human_text: 'Prefer W-01 for welding skill',
   structured_form: { kind: 'PREFER_WORKER_FOR_SKILL', skill: 'welding', worker_id: 'W-01', weight_delta: 1 },
   kind: 'PREFER_WORKER_FOR_SKILL',
   enabled: true,
@@ -74,36 +74,36 @@ describe('Preferences 视图', () => {
     vi.mocked(listPreferences).mockResolvedValue(listWith([RULE_LOW_EVIDENCE, RULE_ENABLED], 1));
     render(<Preferences />);
 
-    expect(await screen.findByText('ORD-007 不要排 CNC-03')).toBeInTheDocument();
-    expect(screen.getByText('技能 welding 优先 W-01')).toBeInTheDocument();
+    expect(await screen.findByText('Don’t schedule ORD-007 on CNC-03')).toBeInTheDocument();
+    expect(screen.getByText('Prefer W-01 for welding skill')).toBeInTheDocument();
     // 来源决策链接（两条规则都引用了 DEC-1，因此用 getAllByText）
     expect(screen.getAllByText('DEC-1').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('DEC-2')).toBeInTheDocument();
     // 启用状态用文字（不仅颜色）
-    expect(screen.getByText('已启用')).toBeInTheDocument();
-    expect(screen.getByText('未启用')).toBeInTheDocument();
+    expect(screen.getByText('Enabled')).toBeInTheDocument();
+    expect(screen.getByText('Disabled')).toBeInTheDocument();
   });
 
   it('LOW_EVIDENCE 用图标 + 文字提示，不仅靠颜色（R18.10、R27.9）', async () => {
     vi.mocked(listPreferences).mockResolvedValue(listWith([RULE_LOW_EVIDENCE]));
     render(<Preferences />);
-    expect(await screen.findByText(/证据不足/)).toBeInTheDocument();
+    expect(await screen.findByText(/Low evidence/)).toBeInTheDocument();
   });
 
   it('展示已启用 N / 20 上限提示（R18.11）', async () => {
     vi.mocked(listPreferences).mockResolvedValue(listWith([RULE_ENABLED], 20));
     render(<Preferences />);
-    const status = await screen.findByText(/已启用 20 \/ 20/);
+    const status = await screen.findByText(/20 \/ 20 enabled/);
     expect(status).toBeInTheDocument();
-    expect(status.textContent).toMatch(/已达上限/);
+    expect(status.textContent).toMatch(/limit reached/);
   });
 
   it('创建表单没有「启用」勾选框——创建即未启用（R18.4）', async () => {
     vi.mocked(listPreferences).mockResolvedValue(listWith([]));
     render(<Preferences />);
-    await screen.findByRole('heading', { name: '新建规则' });
+    await screen.findByRole('heading', { name: 'New rule' });
     // 表单里不应出现任何 name/label 含「启用」的勾选控件
-    expect(screen.queryByLabelText(/启用/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Enable/)).not.toBeInTheDocument();
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
   });
 
@@ -111,16 +111,16 @@ describe('Preferences 视图', () => {
     vi.mocked(listPreferences).mockResolvedValue(listWith([]));
     vi.mocked(createPreference).mockResolvedValue(RULE_LOW_EVIDENCE);
     render(<Preferences />);
-    await screen.findByRole('heading', { name: '新建规则' });
+    await screen.findByRole('heading', { name: 'New rule' });
 
-    fireEvent.change(screen.getByLabelText(/规则说明/), {
-      target: { value: 'ORD-007 避开 CNC-03' },
+    fireEvent.change(screen.getByLabelText(/Rule description/), {
+      target: { value: 'Avoid CNC-03 for ORD-007' },
     });
-    fireEvent.change(screen.getByLabelText('订单 ID'), { target: { value: 'ORD-007' } });
-    fireEvent.change(screen.getByLabelText('机器 ID'), { target: { value: 'CNC-03' } });
+    fireEvent.change(screen.getByLabelText('Order ID'), { target: { value: 'ORD-007' } });
+    fireEvent.change(screen.getByLabelText('Machine ID'), { target: { value: 'CNC-03' } });
     // jsdom 下点击 submit 按钮不总会触发带 required 字段的原生表单提交，
     // 直接 submit 表单本身（浏览器里点击按钮等价于此），断言真实的提交行为。
-    const submitButton = screen.getByRole('button', { name: /创建规则/ });
+    const submitButton = screen.getByRole('button', { name: /Create rule/ });
     fireEvent.submit(submitButton.closest('form') as HTMLFormElement);
 
     await waitFor(() => expect(createPreference).toHaveBeenCalledTimes(1));
@@ -134,9 +134,9 @@ describe('Preferences 视图', () => {
     vi.mocked(listPreferences).mockResolvedValue(listWith([RULE_LOW_EVIDENCE]));
     vi.mocked(enablePreference).mockResolvedValue({ ...RULE_LOW_EVIDENCE, enabled: true });
     render(<Preferences />);
-    await screen.findByText('ORD-007 不要排 CNC-03');
+    await screen.findByText('Don’t schedule ORD-007 on CNC-03');
 
-    fireEvent.click(screen.getByRole('button', { name: /启用规则 PR-001/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Enable rule PR-001/ }));
     await waitFor(() => expect(enablePreference).toHaveBeenCalledWith('PR-001'));
   });
 
@@ -144,17 +144,17 @@ describe('Preferences 视图', () => {
     vi.mocked(listPreferences).mockResolvedValue(listWith([RULE_ENABLED], 1));
     vi.mocked(disablePreference).mockResolvedValue({ ...RULE_ENABLED, enabled: false });
     render(<Preferences />);
-    await screen.findByText('技能 welding 优先 W-01');
+    await screen.findByText('Prefer W-01 for welding skill');
 
-    fireEvent.click(screen.getByRole('button', { name: /停用规则 PR-002/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Disable rule PR-002/ }));
     await waitFor(() => expect(disablePreference).toHaveBeenCalledWith('PR-002'));
   });
 
   it('达上限时未启用规则的「启用」按钮被禁用', async () => {
     vi.mocked(listPreferences).mockResolvedValue(listWith([RULE_LOW_EVIDENCE], 20));
     render(<Preferences />);
-    await screen.findByText('ORD-007 不要排 CNC-03');
-    expect(screen.getByRole('button', { name: /启用规则 PR-001/ })).toBeDisabled();
+    await screen.findByText('Don’t schedule ORD-007 on CNC-03');
+    expect(screen.getByRole('button', { name: /Enable rule PR-001/ })).toBeDisabled();
   });
 
   it('后端不可用时显示错误而不是空白', async () => {
@@ -166,7 +166,7 @@ describe('Preferences 视图', () => {
   it('无严重可访问性违规（axe-core）', async () => {
     vi.mocked(listPreferences).mockResolvedValue(listWith([RULE_LOW_EVIDENCE, RULE_ENABLED], 1));
     const { container } = render(<Preferences />);
-    await screen.findByText('ORD-007 不要排 CNC-03');
+    await screen.findByText('Don’t schedule ORD-007 on CNC-03');
 
     const results = await axe.run(container, {
       rules: { 'color-contrast': { enabled: false } },
@@ -188,7 +188,7 @@ describe('Preferences 视图', () => {
       candidates: [
         {
           rule_id: 'PR-cand',
-          human_text: 'ORD-007 避开 CNC-03',
+          human_text: 'Avoid CNC-03 for ORD-007',
           structured_form: {
             kind: 'AVOID_MACHINE_FOR_ORDER',
             order_id: 'ORD-007',
@@ -203,16 +203,16 @@ describe('Preferences 视图', () => {
     };
     vi.mocked(distilPreferences).mockResolvedValue(distilled);
     render(<Preferences />);
-    await screen.findByRole('heading', { name: /偏好规则管理/ });
+    await screen.findByRole('heading', { name: /Preferences/ });
 
-    fireEvent.click(screen.getByRole('button', { name: /从历史决策蒸馏/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Distil candidate preference rules/ }));
     await waitFor(() => expect(distilPreferences).toHaveBeenCalledTimes(1));
 
-    const group = await screen.findByRole('group', { name: '蒸馏候选确认' });
+    const group = await screen.findByRole('group', { name: 'Distilled candidates confirmation' });
     expect(group).toBeInTheDocument();
     // 候选展示为「未启用」——蒸馏不启用任何规则。
-    expect(within(group).getByText('未启用')).toBeInTheDocument();
-    expect(within(group).getByText('ORD-007 避开 CNC-03')).toBeInTheDocument();
+    expect(within(group).getByText('Disabled')).toBeInTheDocument();
+    expect(within(group).getByText('Avoid CNC-03 for ORD-007')).toBeInTheDocument();
   });
 
   it('蒸馏检测到注入时在确认区显著提示', async () => {
@@ -238,9 +238,9 @@ describe('Preferences 视图', () => {
       ],
     });
     render(<Preferences />);
-    await screen.findByRole('heading', { name: /偏好规则管理/ });
-    fireEvent.click(screen.getByRole('button', { name: /从历史决策蒸馏/ }));
-    expect(await screen.findByText(/检测到疑似提示注入/)).toBeInTheDocument();
+    await screen.findByRole('heading', { name: /Preferences/ });
+    fireEvent.click(screen.getByRole('button', { name: /Distil candidate preference rules/ }));
+    expect(await screen.findByText(/suspected prompt injection was detected/)).toBeInTheDocument();
   });
 
   it('降级模式蒸馏返回 LLM_UNAVAILABLE 时提示改用手写', async () => {
@@ -252,8 +252,8 @@ describe('Preferences 视图', () => {
       candidates: [],
     });
     render(<Preferences />);
-    await screen.findByRole('heading', { name: /偏好规则管理/ });
-    fireEvent.click(screen.getByRole('button', { name: /从历史决策蒸馏/ }));
-    expect(await screen.findByText(/降级模式/)).toBeInTheDocument();
+    await screen.findByRole('heading', { name: /Preferences/ });
+    fireEvent.click(screen.getByRole('button', { name: /Distil candidate preference rules/ }));
+    expect(await screen.findByText(/degraded mode/)).toBeInTheDocument();
   });
 });

@@ -66,9 +66,9 @@ export function LoginModal({ open, onSuccess }: LoginModalProps) {
       const message =
         err instanceof ApiError
           ? err.status === 401
-            ? '口令不正确，请重试。'
-            : `登录失败（${err.code}）：${err.message}`
-          : '网络或服务不可用，请稍后重试。';
+            ? 'Incorrect passphrase. Please try again.'
+            : `Login failed (${err.code}): ${err.message}`
+          : 'Network or service unavailable. Please try again later.';
       setError(message);
       setPassword('');
       setTimeout(() => inputRef.current?.focus(), 0);
@@ -86,9 +86,9 @@ export function LoginModal({ open, onSuccess }: LoginModalProps) {
       onCancel={(e) => e.preventDefault()}
     >
       <form method="dialog" onSubmit={handleSubmit}>
-        <h2 id="login-modal-title">需要认证</h2>
+        <h2 id="login-modal-title">Authentication required</h2>
         <p className="login-modal-desc">
-          此操作需要访问口令。请输入共享口令后继续。
+          This action requires an access passphrase. Enter the shared passphrase to continue.
         </p>
 
         {error && (
@@ -99,7 +99,7 @@ export function LoginModal({ open, onSuccess }: LoginModalProps) {
         )}
 
         <label htmlFor="login-password" className="login-modal-label">
-          访问口令
+          Access passphrase
         </label>
         <input
           ref={inputRef}
@@ -110,7 +110,7 @@ export function LoginModal({ open, onSuccess }: LoginModalProps) {
           disabled={loading}
           autoComplete="current-password"
           className="login-modal-input"
-          placeholder="输入访问口令"
+          placeholder="Enter access passphrase"
         />
 
         <div className="login-modal-actions">
@@ -120,7 +120,7 @@ export function LoginModal({ open, onSuccess }: LoginModalProps) {
             aria-busy={loading}
             className="login-modal-btn-primary"
           >
-            {loading ? '验证中…' : '确认登录'}
+            {loading ? 'Signing in…' : 'Sign in'}
           </button>
         </div>
       </form>

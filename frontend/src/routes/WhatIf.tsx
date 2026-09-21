@@ -28,19 +28,19 @@ import {
 type MutationKind = ScenarioMutation['kind'];
 
 const KIND_LABEL: Record<MutationKind, string> = {
-  ADD_OR_CHANGE_ORDER: '新增订单 / 改交期',
-  SET_MACHINE_UNAVAILABLE: '机器不可用',
-  CHANGE_MATERIAL_AVAILABILITY: '改物料可用量',
-  SET_WORKER_UNAVAILABLE: '工人不可用',
-  CHANGE_ORDER_PRIORITY: '改订单优先级',
+  ADD_OR_CHANGE_ORDER: 'Add order / change due date',
+  SET_MACHINE_UNAVAILABLE: 'Machine unavailable',
+  CHANGE_MATERIAL_AVAILABILITY: 'Change material availability',
+  SET_WORKER_UNAVAILABLE: 'Worker unavailable',
+  CHANGE_ORDER_PRIORITY: 'Change order priority',
 };
 
 const KINDS = Object.keys(KIND_LABEL) as MutationKind[];
 
 function deltaLabel(delta: number): string {
-  if (delta > 0) return `+${delta}（变差）`;
-  if (delta < 0) return `${delta}（变好）`;
-  return '0（不变）';
+  if (delta > 0) return `+${delta} (worse)`;
+  if (delta < 0) return `${delta} (better)`;
+  return '0 (unchanged)';
 }
 
 export function WhatIf() {
@@ -125,8 +125,8 @@ export function WhatIf() {
     } catch (err) {
       setError(
         err instanceof ApiError
-          ? `推演失败（${err.code}）：${err.message}`
-          : '推演失败：后端服务不可用。',
+          ? `Simulation failed (${err.code}): ${err.message}`
+          : 'Simulation failed: backend service unavailable.',
       );
     } finally {
       setBusy(false);
@@ -142,8 +142,8 @@ export function WhatIf() {
     } catch (err) {
       setError(
         err instanceof ApiError
-          ? `采纳失败（${err.code}）：${err.message}`
-          : '采纳失败：后端服务不可用。',
+          ? `Adoption failed (${err.code}): ${err.message}`
+          : 'Adoption failed: backend service unavailable.',
       );
     } finally {
       setBusy(false);
@@ -164,16 +164,16 @@ export function WhatIf() {
       if (err instanceof ApiError && err.code === 'UNSUPPORTED_SCENARIO') {
         const kinds = (err.details.supported_kinds as string[] | undefined) ?? [];
         setTranslateError(
-          `无法把该提问映射到支持的场景类型。支持的类型：${kinds.join('、')}。请改用下方结构化表单。`,
+          `Could not map this question to a supported scenario type. Supported types: ${kinds.join(', ')}. Please use the structured form below.`,
         );
       } else if (err instanceof ApiError && err.code === 'LLM_UNAVAILABLE_USE_STRUCTURED_FORM') {
         setNlEnabled(false);
-        setTranslateError('LLM 处于降级模式，自然语言翻译不可用。请使用下方结构化表单。');
+        setTranslateError('The LLM is in degraded mode, so natural-language translation is unavailable. Please use the structured form below.');
       } else {
         setTranslateError(
           err instanceof ApiError
-            ? `翻译失败（${err.code}）：${err.message}`
-            : '翻译失败：后端服务不可用。',
+            ? `Translation failed (${err.code}): ${err.message}`
+            : 'Translation failed: backend service unavailable.',
         );
       }
     } finally {
@@ -193,8 +193,8 @@ export function WhatIf() {
     } catch (err) {
       setError(
         err instanceof ApiError
-          ? `推演失败（${err.code}）：${err.message}`
-          : '推演失败：后端服务不可用。',
+          ? `Simulation failed (${err.code}): ${err.message}`
+          : 'Simulation failed: backend service unavailable.',
       );
     } finally {
       setBusy(false);
@@ -203,31 +203,31 @@ export function WhatIf() {
 
   return (
     <section aria-labelledby="whatif-heading" className="whatif">
-      <h2 id="whatif-heading">What-if 推演</h2>
+      <h2 id="whatif-heading">What-if simulation</h2>
 
       {nlEnabled && (
         <section aria-labelledby="whatif-nl-heading" className="whatif-nl">
-          <h3 id="whatif-nl-heading">用自然语言提问（可选）</h3>
+          <h3 id="whatif-nl-heading">Ask in natural language (optional)</h3>
           <p className="whatif-nl-hint">
-            例如「如果 CNC-01 明天上午停机 6 小时会怎样」。翻译结果会先展示给你确认，
-            确认后才会执行——不会直接改动任何计划。
+            For example, “What if CNC-01 goes down for 6 hours tomorrow morning?”. The translation is shown
+            for you to confirm first, and only runs after you confirm — it never changes any plan directly.
           </p>
-          <label htmlFor="whatif-nl-query">自然语言 What-if 提问</label>
+          <label htmlFor="whatif-nl-query">Natural-language what-if question</label>
           <textarea
             id="whatif-nl-query"
             className="whatif-nl-input"
             rows={2}
             value={nlQuery}
             onChange={(e) => setNlQuery(e.target.value)}
-            placeholder="用一句话描述你想推演的假设……"
+            placeholder="Describe the hypothesis you want to simulate in one sentence…"
           />
           <button
             type="button"
             onClick={() => void onTranslate()}
             disabled={busy || !nlQuery.trim()}
-            aria-label="翻译为结构化场景"
+            aria-label="Translate to structured scenario"
           >
-            {busy ? '翻译中…' : '翻译为结构化场景'}
+            {busy ? 'Translating…' : 'Translate to structured scenario'}
           </button>
 
           {translateError && (
@@ -238,16 +238,17 @@ export function WhatIf() {
           )}
 
           {translation && (
-            <div className="whatif-translation-card" role="group" aria-label="翻译结果确认卡">
-              <h4>翻译结果（请确认后执行）</h4>
+            <div className="whatif-translation-card" role="group" aria-label="Translation confirmation card">
+              <h4>Translation result (please confirm before running)</h4>
               {translation.injection_suspected && (
                 <p role="alert" className="whatif-injection-warning">
                   <span aria-hidden="true">⚠ </span>
-                  你的提问中检测到疑似提示注入模式；系统已作为普通数据处理并记入审计，翻译不受其指令影响。
+                  A suspected prompt-injection pattern was detected in your question; the system treated it as
+                  plain data and recorded it for audit — the translation is not influenced by its instructions.
                 </p>
               )}
               <p className="whatif-translation-echo">
-                原始提问（作为数据回显）：
+                Original question (echoed as data):{' '}
                 <q>{translation.source_query_echo}</q>
               </p>
               <ol className="whatif-translation-mutations">
@@ -263,17 +264,17 @@ export function WhatIf() {
                   type="button"
                   onClick={() => void onConfirmTranslation()}
                   disabled={busy || translation.mutations.length === 0}
-                  aria-label="确认并执行推演"
+                  aria-label="Confirm and run simulation"
                 >
-                  确认并推演
+                  Confirm and simulate
                 </button>
                 <button
                   type="button"
                   onClick={() => setTranslation(null)}
                   disabled={busy}
-                  aria-label="放弃翻译结果"
+                  aria-label="Discard translation result"
                 >
-                  放弃
+                  Discard
                 </button>
               </div>
             </div>
@@ -282,8 +283,8 @@ export function WhatIf() {
       )}
 
       <section aria-labelledby="whatif-form-heading" className="whatif-form">
-        <h3 id="whatif-form-heading">场景变更</h3>
-        <label htmlFor="whatif-kind">变更类型</label>
+        <h3 id="whatif-form-heading">Scenario change</h3>
+        <label htmlFor="whatif-kind">Change type</label>
         <select
           id="whatif-kind"
           value={kind}
@@ -303,24 +304,24 @@ export function WhatIf() {
           {(kind === 'SET_MACHINE_UNAVAILABLE' || kind === 'SET_WORKER_UNAVAILABLE') && (
             <>
               <FieldInput
-                label={kind === 'SET_MACHINE_UNAVAILABLE' ? '机器 ID' : '工人 ID'}
+                label={kind === 'SET_MACHINE_UNAVAILABLE' ? 'Machine ID' : 'Worker ID'}
                 name={kind === 'SET_MACHINE_UNAVAILABLE' ? 'machine_id' : 'worker_id'}
                 onChange={set}
               />
-              <FieldInput label="开始时间 (ISO)" name="start_time" onChange={set} />
-              <FieldInput label="结束时间 (ISO)" name="end_time" onChange={set} />
+              <FieldInput label="Start time (ISO)" name="start_time" onChange={set} />
+              <FieldInput label="End time (ISO)" name="end_time" onChange={set} />
             </>
           )}
           {kind === 'CHANGE_MATERIAL_AVAILABILITY' && (
             <>
-              <FieldInput label="物料 ID" name="material_id" onChange={set} />
-              <FieldInput label="可用量" name="quantity_available" type="number" onChange={set} />
+              <FieldInput label="Material ID" name="material_id" onChange={set} />
+              <FieldInput label="Available quantity" name="quantity_available" type="number" onChange={set} />
             </>
           )}
           {kind === 'CHANGE_ORDER_PRIORITY' && (
             <>
-              <FieldInput label="订单 ID" name="order_id" onChange={set} />
-              <label htmlFor="whatif-priority">优先级</label>
+              <FieldInput label="Order ID" name="order_id" onChange={set} />
+              <label htmlFor="whatif-priority">Priority</label>
               <select
                 id="whatif-priority"
                 value={fields.priority ?? 'NORMAL'}
@@ -336,16 +337,16 @@ export function WhatIf() {
           )}
           {kind === 'ADD_OR_CHANGE_ORDER' && (
             <>
-              <FieldInput label="订单 ID（留空=新增）" name="order_id" onChange={set} />
-              <FieldInput label="产品 ID（新增必填）" name="product_id" onChange={set} />
-              <FieldInput label="数量" name="quantity" type="number" onChange={set} />
-              <FieldInput label="交期 (YYYY-MM-DD)" name="due_date" onChange={set} />
+              <FieldInput label="Order ID (leave blank to add new)" name="order_id" onChange={set} />
+              <FieldInput label="Product ID (required when adding)" name="product_id" onChange={set} />
+              <FieldInput label="Quantity" name="quantity" type="number" onChange={set} />
+              <FieldInput label="Due date (YYYY-MM-DD)" name="due_date" onChange={set} />
             </>
           )}
         </div>
 
-        <button type="button" onClick={() => void onRun()} disabled={busy} aria-label="运行推演">
-          {busy ? '推演中…' : '运行推演'}
+        <button type="button" onClick={() => void onRun()} disabled={busy} aria-label="Run simulation">
+          {busy ? 'Simulating…' : 'Run simulation'}
         </button>
       </section>
 
@@ -358,36 +359,36 @@ export function WhatIf() {
 
       {result && (
         <section aria-labelledby="whatif-result-heading" className="whatif-result">
-          <h3 id="whatif-result-heading">推演结果（对比当前 ACTIVE 计划）</h3>
+          <h3 id="whatif-result-heading">Simulation result (vs. current ACTIVE plan)</h3>
           <ul>
-            <li>可行性：{result.feasibility}</li>
-            <li>迟交订单数：{result.late_order_count}（{deltaLabel(result.late_order_count_delta)}）</li>
+            <li>Feasibility: {result.feasibility}</li>
+            <li>Late orders: {result.late_order_count} ({deltaLabel(result.late_order_count_delta)})</li>
             <li>
-              总拖期分钟：{result.total_tardiness_minutes}（
-              {deltaLabel(result.total_tardiness_delta_minutes)}）
+              Total tardiness (min): {result.total_tardiness_minutes} (
+              {deltaLabel(result.total_tardiness_delta_minutes)})
             </li>
             <li>
-              新增不可排产作业：
+              New unschedulable jobs:{' '}
               {result.new_unschedulable_jobs.length === 0
-                ? '无'
-                : result.new_unschedulable_jobs.join('、')}
+                ? 'none'
+                : result.new_unschedulable_jobs.join(', ')}
             </li>
             <li>
-              迟交订单：
-              {result.delayed_order_ids.length === 0 ? '无' : result.delayed_order_ids.join('、')}
+              Late orders:{' '}
+              {result.delayed_order_ids.length === 0 ? 'none' : result.delayed_order_ids.join(', ')}
             </li>
           </ul>
           <button
             type="button"
             onClick={() => void onAdopt()}
             disabled={busy}
-            aria-label="以此场景生成正式提案"
+            aria-label="Generate formal proposal from this scenario"
           >
-            以此场景生成正式提案
+            Generate formal proposal from this scenario
           </button>
           {adopted && (
             <p className="whatif-adopted" role="status">
-              已生成提案 {adopted.plan_id}（{adopted.status}），请到审批界面处理。
+              Proposal {adopted.plan_id} generated ({adopted.status}); go to the Approval view to handle it.
             </p>
           )}
         </section>
