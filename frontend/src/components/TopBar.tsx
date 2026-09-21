@@ -107,13 +107,13 @@ export function TopBar() {
           <strong>Degraded mode (DETERMINISTIC_ONLY)</strong>
           : LLM paths are bypassed. Plan generation, validation, approval, replanning, risk scanning,
           What-if, value ledger and preference rules all continue as usual; only LLM-based spreadsheet
-          column mapping is unavailable — please use manual column mapping instead.
+          column mapping is unavailable - please use manual column mapping instead.
         </div>
       )}
       {budgetWarning && health !== null && (
         <div role="status" className="banner banner-budget">
           <strong>Budget warning</strong>
-          : cumulative estimated cost ≈ USD {health.project_usd_spent.toFixed(2)}, now above 80% of the
+          : cumulative estimated cost ~ USD {health.project_usd_spent.toFixed(2)}, now above 80% of the
           USD {PROJECT_USD_CEILING} ceiling.
         </div>
       )}
@@ -125,7 +125,7 @@ export function TopBar() {
           data-change-id={change.change_id}
         >
           <strong>Auto-applied</strong>
-          : the system automatically applied a low-impact change ({change.plan_id_before} →{' '}
+          : the system automatically applied a low-impact change ({change.plan_id_before} -&gt;{' '}
           {change.plan_id_after}).
           <button
             type="button"
