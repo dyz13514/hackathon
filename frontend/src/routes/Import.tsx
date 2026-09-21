@@ -148,7 +148,6 @@ export function Import() {
 
       {error && (
         <p role="alert" className="import-error">
-          <span aria-hidden="true">⚠ </span>
           {error}
         </p>
       )}
@@ -184,7 +183,7 @@ export function Import() {
                     <td>{f.target_field}</td>
                     <td>{f.source_column ?? '—'}</td>
                     <td>{(f.confidence * 100).toFixed(0)}%</td>
-                    <td>{f.sample_values.join('、') || '—'}</td>
+                    <td>{f.sample_values.join(', ') || '—'}</td>
                     <td>
                       <span className={`badge status-${f.status}`}>{STATUS_LABEL[f.status]}</span>
                     </td>

@@ -141,7 +141,7 @@ def test_payload_aggregates_by_machine_and_has_seven_components() -> None:
     # 基线含换算形式（措施②）：315 分钟 → "5 小时 15 分钟"。
     bc = payload["baseline_comparison"]
     assert bc["total_tardiness_minutes"] == 315
-    assert bc["total_tardiness_human"] == "5 小时 15 分钟"
+    assert bc["total_tardiness_human"] == "5 hours 15 minutes"
 
 
 def test_payload_never_contains_raw_entity_lists() -> None:
@@ -246,4 +246,4 @@ def test_template_renderer_is_pure_and_uses_only_structured_numbers() -> None:
     assert first == second
     assert "JOB-004" in first
     assert "LOW" in first
-    assert "反事实" in first
+    assert "Counterfactual" in first

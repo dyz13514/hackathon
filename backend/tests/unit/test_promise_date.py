@@ -137,7 +137,7 @@ def test_promise_date_unmeetable_returns_earliest_and_reason(
         assert result.desired_date_met is False
         assert result.earliest_completion is not None
         assert result.constraint_reason is not None
-        assert "最早可承诺" in result.constraint_reason
+        assert "earliest committable completion time" in result.constraint_reason
     else:
         # 不可行：给出约束原因。
         assert result.constraint_reason is not None

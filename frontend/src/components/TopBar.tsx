@@ -104,7 +104,6 @@ export function TopBar() {
     <div className="app-banners">
       {degraded && (
         <div role="alert" className="banner banner-degraded">
-          <span aria-hidden="true">⚠ </span>
           <strong>Degraded mode (DETERMINISTIC_ONLY)</strong>
           : LLM paths are bypassed. Plan generation, validation, approval, replanning, risk scanning,
           What-if, value ledger and preference rules all continue as usual; only LLM-based spreadsheet
@@ -113,7 +112,6 @@ export function TopBar() {
       )}
       {budgetWarning && health !== null && (
         <div role="status" className="banner banner-budget">
-          <span aria-hidden="true">💰 </span>
           <strong>Budget warning</strong>
           : cumulative estimated cost ≈ USD {health.project_usd_spent.toFixed(2)}, now above 80% of the
           USD {PROJECT_USD_CEILING} ceiling.
@@ -126,7 +124,6 @@ export function TopBar() {
           className="banner banner-auto-applied"
           data-change-id={change.change_id}
         >
-          <span aria-hidden="true">🤖 </span>
           <strong>Auto-applied</strong>
           : the system automatically applied a low-impact change ({change.plan_id_before} →{' '}
           {change.plan_id_after}).
@@ -142,7 +139,6 @@ export function TopBar() {
       ))}
       {revertError && (
         <div role="alert" className="banner banner-degraded">
-          <span aria-hidden="true">⚠ </span>
           {revertError}
         </div>
       )}

@@ -196,8 +196,8 @@ def check_material_sufficient(
                         job_ids=[sj.job_id],
                         resource_ids=[material_id],
                         human_description=(
-                            f"作业 {sj.job_id} 所需物料 {material_id} 在快照中不存在，"
-                            f"缺口 {required}"
+                            f"Material {material_id} required by job {sj.job_id} does not exist in the snapshot; "
+                            f"shortfall {required}"
                         ),
                         quantified={
                             "material_id": material_id,
@@ -217,8 +217,8 @@ def check_material_sufficient(
                         job_ids=[sj.job_id],
                         resource_ids=[material_id],
                         human_description=(
-                            f"作业 {sj.job_id} 开工时 {material_id} 可用 {usable}，"
-                            f"需要 {required}，缺口 {shortfall}"
+                            f"At job {sj.job_id} start, {material_id} has {usable} available, "
+                            f"needs {required}, shortfall {shortfall}"
                         ),
                         quantified={
                             "material_id": material_id,
@@ -264,7 +264,7 @@ def check_machine_available(
                     violation_type="MACHINE_UNAVAILABLE",
                     job_ids=[sj.job_id],
                     resource_ids=[sj.machine_id],
-                    human_description=f"作业 {sj.job_id} 引用了不存在的机器 {sj.machine_id}",
+                    human_description=f"Job {sj.job_id} references a machine {sj.machine_id} that does not exist",
                     quantified={"machine_id": sj.machine_id, "reason": "NOT_FOUND"},
                 )
             )
@@ -276,7 +276,7 @@ def check_machine_available(
                     job_ids=[sj.job_id],
                     resource_ids=[sj.machine_id],
                     human_description=(
-                        f"作业 {sj.job_id} 排在了状态为 {machine.status} 的机器 {sj.machine_id} 上"
+                        f"Job {sj.job_id} is scheduled on machine {sj.machine_id}, which has status {machine.status}"
                     ),
                     quantified={"machine_id": sj.machine_id, "status": machine.status},
                 )
@@ -289,8 +289,8 @@ def check_machine_available(
                     job_ids=[sj.job_id],
                     resource_ids=[sj.machine_id],
                     human_description=(
-                        f"作业 {sj.job_id} 的占用 [{sj.start_time}, {sj.end_time}) "
-                        f"落在机器 {sj.machine_id} 的停机窗内"
+                        f"Job {sj.job_id}'s occupation [{sj.start_time}, {sj.end_time}) "
+                        f"falls within a downtime window of machine {sj.machine_id}"
                     ),
                     quantified={"machine_id": sj.machine_id, "reason": "DOWNTIME_WINDOW"},
                 )
@@ -303,8 +303,8 @@ def check_machine_available(
                     job_ids=[sj.job_id],
                     resource_ids=[sj.machine_id],
                     human_description=(
-                        f"作业 {sj.job_id} 的占用 [{sj.start_time}, {sj.end_time}) 越出机器 "
-                        f"{sj.machine_id} 的可用窗 "
+                        f"Job {sj.job_id}'s occupation [{sj.start_time}, {sj.end_time}) falls outside machine "
+                        f"{sj.machine_id}'s available window "
                         f"[{machine.available_start}, {machine.available_end})"
                     ),
                     quantified={
@@ -379,8 +379,8 @@ def check_machine_capability(
                     job_ids=[sj.job_id],
                     resource_ids=[sj.machine_id],
                     human_description=(
-                        f"作业 {sj.job_id} 需要机型 {op.required_machine_type}，"
-                        f"但机器 {sj.machine_id} 的类型是 {machine.machine_type}"
+                        f"Job {sj.job_id} requires machine type {op.required_machine_type}, "
+                        f"but machine {sj.machine_id} is of type {machine.machine_type}"
                     ),
                     quantified={
                         "machine_id": sj.machine_id,
@@ -397,8 +397,8 @@ def check_machine_capability(
                     job_ids=[sj.job_id],
                     resource_ids=[sj.machine_id],
                     human_description=(
-                        f"作业 {sj.job_id} 需要能力 {op.required_capability}，"
-                        f"但机器 {sj.machine_id} 不具备"
+                        f"Job {sj.job_id} requires capability {op.required_capability}, "
+                        f"but machine {sj.machine_id} does not have it"
                     ),
                     quantified={
                         "machine_id": sj.machine_id,
@@ -438,7 +438,7 @@ def check_worker_available(
                     violation_type="WORKER_UNAVAILABLE",
                     job_ids=[sj.job_id],
                     resource_ids=[sj.worker_id],
-                    human_description=f"作业 {sj.job_id} 引用了不存在的工人 {sj.worker_id}",
+                    human_description=f"Job {sj.job_id} references a worker {sj.worker_id} that does not exist",
                     quantified={"worker_id": sj.worker_id, "reason": "NOT_FOUND"},
                 )
             )
@@ -450,8 +450,8 @@ def check_worker_available(
                     job_ids=[sj.job_id],
                     resource_ids=[sj.worker_id],
                     human_description=(
-                        f"作业 {sj.job_id} 的占用 [{sj.start_time}, {sj.end_time}) "
-                        f"落在工人 {sj.worker_id} 的缺勤窗内"
+                        f"Job {sj.job_id}'s occupation [{sj.start_time}, {sj.end_time}) "
+                        f"falls within an absence window of worker {sj.worker_id}"
                     ),
                     quantified={"worker_id": sj.worker_id, "reason": "ABSENCE"},
                 )
@@ -490,8 +490,8 @@ def check_worker_skill(
                     job_ids=[sj.job_id],
                     resource_ids=[sj.worker_id],
                     human_description=(
-                        f"作业 {sj.job_id} 需要技能 {op.required_worker_skill}，"
-                        f"但工人 {sj.worker_id} 不具备"
+                        f"Job {sj.job_id} requires skill {op.required_worker_skill}, "
+                        f"but worker {sj.worker_id} does not have it"
                     ),
                     quantified={
                         "worker_id": sj.worker_id,
@@ -539,8 +539,8 @@ def _pairwise_overlaps(
                             job_ids=[a.job_id, b.job_id],
                             resource_ids=[resource_id],
                             human_description=(
-                                f"作业 {a.job_id} 与 {b.job_id} 在{resource_label} "
-                                f"{resource_id} 上重叠 {minutes} 分钟"
+                                f"Jobs {a.job_id} and {b.job_id} overlap by {minutes} minutes "
+                                f"on {resource_label} {resource_id}"
                             ),
                             quantified={
                                 "overlap_minutes": minutes,
@@ -558,7 +558,7 @@ def check_machine_no_overlap(
     by_machine: dict[str, list[ScheduledJob]] = defaultdict(list)
     for sj in candidate.scheduled_jobs:
         by_machine[sj.machine_id].append(sj)
-    return _pairwise_overlaps(by_machine, "MACHINE_DOUBLE_BOOKING", "机器")
+    return _pairwise_overlaps(by_machine, "MACHINE_DOUBLE_BOOKING", "machine")
 
 
 # --------------------------------------------------------------------------
@@ -573,7 +573,7 @@ def check_worker_no_overlap(
     by_worker: dict[str, list[ScheduledJob]] = defaultdict(list)
     for sj in candidate.scheduled_jobs:
         by_worker[sj.worker_id].append(sj)
-    return _pairwise_overlaps(by_worker, "WORKER_DOUBLE_BOOKING", "工人")
+    return _pairwise_overlaps(by_worker, "WORKER_DOUBLE_BOOKING", "worker")
 
 
 # --------------------------------------------------------------------------
@@ -616,8 +616,8 @@ def check_operation_precedence(
                         job_ids=[prev_sj.job_id, cur_sj.job_id],
                         resource_ids=[],
                         human_description=(
-                            f"后序作业 {cur_sj.job_id} 于 {cur_sj.start_time} 开工，"
-                            f"早于前序作业 {prev_sj.job_id} 的结束 {prev_sj.end_time}"
+                            f"Successor job {cur_sj.job_id} starts at {cur_sj.start_time}, "
+                            f"before predecessor job {prev_sj.job_id} ends at {prev_sj.end_time}"
                         ),
                         quantified={
                             "predecessor_job_id": prev_sj.job_id,
@@ -664,8 +664,8 @@ def check_shift_boundary(
                     job_ids=[sj.job_id],
                     resource_ids=[sj.worker_id],
                     human_description=(
-                        f"作业 {sj.job_id} 的占用 [{sj.start_time}, {sj.end_time}) 越出工人 "
-                        f"{sj.worker_id} 的班次 [{worker.shift_start}, {worker.shift_end})"
+                        f"Job {sj.job_id}'s occupation [{sj.start_time}, {sj.end_time}) falls outside worker "
+                        f"{sj.worker_id}'s shift [{worker.shift_start}, {worker.shift_end})"
                     ),
                     quantified={
                         "worker_id": sj.worker_id,

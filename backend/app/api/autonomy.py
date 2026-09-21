@@ -116,7 +116,7 @@ def revert_endpoint(
         return error_response(
             status_code=404,
             code=ErrorCode.AUTO_APPLIED_CHANGE_NOT_FOUND,
-            message=f"自动应用记录 {change_id} 不存在。",
+            message=f"Auto-apply record {change_id} does not exist.",
             next_actions=[NextAction(action="list_changes", href="/autonomy/changes")],
             details={"change_id": change_id},
         )
@@ -124,7 +124,7 @@ def revert_endpoint(
         return error_response(
             status_code=409,
             code=ErrorCode.AUTO_APPLIED_CHANGE_ALREADY_REVERTED,
-            message=f"自动应用记录 {change_id} 已回滚过，无需重复回滚。",
+            message=f"Auto-apply record {change_id} has already been rolled back; no need to roll back again.",
             next_actions=[NextAction(action="list_changes", href="/autonomy/changes")],
             details={"change_id": change_id},
         )
@@ -132,7 +132,7 @@ def revert_endpoint(
         return error_response(
             status_code=422,
             code=ErrorCode.REVALIDATION_FAILED,
-            message="从变更前快照重建的计划未通过硬约束重校验，回滚已中止（不产生违规计划）。",
+            message="The plan rebuilt from the pre-change snapshot failed hard-constraint re-validation; the rollback was aborted (no violating plan is produced).",
             next_actions=[NextAction(action="list_changes", href="/autonomy/changes")],
             details={"change_id": change_id, "violation_count": len(result.violations)},
         )

@@ -368,7 +368,7 @@ def run_promise_date_sandbox(
         # `ScenarioMutationError`（API 翻译成 SCENARIO_INVALID_MUTATION / 422），而不是让一个
         # 指向不存在产品的报价以 500 冒出去。
         if product_id not in base_snapshot.products_by_id():
-            raise ScenarioMutationError(f"产品 {product_id} 不存在，无法报价。")
+            raise ScenarioMutationError(f"Product {product_id} does not exist; cannot quote.")
         # 追加订单前记下既有订单数，据此推出内核将分配的新订单 id（SANDBOX-ORD-{n+1}）。
         new_order_id = f"SANDBOX-ORD-{len(base_snapshot.orders) + 1}"
         variant = apply_mutations(base_snapshot, [quote_mutation])
@@ -399,14 +399,15 @@ def run_promise_date_sandbox(
     reason: str | None = None
     if not feasible:
         reason = (
-            f"这笔询价（产品 {product_id}，数量 {quantity}）在当前产能下无法排入："
-            f"其 {len(quote_unschedulable)} 道工序找不到可行的机器/工人/时间槽。"
+            f"This inquiry (product {product_id}, quantity {quantity}) cannot be scheduled under "
+            f"current capacity: {len(quote_unschedulable)} of its operations cannot find a "
+            f"feasible machine/worker/time slot."
         )
     elif not desired_met and earliest_completion is not None:
         reason = (
-            f"期望交期 {desired_due_date.date().isoformat()} 无法满足；"
-            f"在不违反硬约束的前提下，最早可承诺完工时刻为 "
-            f"{earliest_completion.isoformat()}。"
+            f"The desired due date {desired_due_date.date().isoformat()} cannot be met; "
+            f"without violating any hard constraint, the earliest committable completion time is "
+            f"{earliest_completion.isoformat()}."
         )
 
     log_event(

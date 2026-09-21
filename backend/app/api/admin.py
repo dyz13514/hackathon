@@ -227,7 +227,7 @@ def demo_reset(request: Request, session: PlannerSession) -> DemoResetResponse:
     log_event(
         logger,
         "DEMO_RESET",
-        message="演示数据已重置",
+        message="Demo data has been reset",
         anchor=report.anchor.isoformat(),
         input_snapshot_version=report.input_snapshot_version,
         audit_id=report.audit_id,
@@ -377,7 +377,7 @@ def set_mode(
         return error_response(
             status_code=409,
             code=ErrorCode.INVALID_STATE_TRANSITION,
-            message="当前部署未装配 LLM 出口，无法切换运行模式。",
+            message="This deployment has no LLM egress configured, so the run mode cannot be switched.",
             next_actions=[NextAction(action="view_health", href="/health")],
         )
 
@@ -398,7 +398,7 @@ def set_mode(
         return error_response(
             status_code=409,
             code=ErrorCode.INVALID_STATE_TRANSITION,
-            message="部署的基础模式为 DISABLED，无法退出降级：没有可恢复的 LLM 模式。",
+            message="The deployment base mode is DISABLED, so degraded mode cannot be exited: there is no LLM mode to restore.",
             next_actions=[NextAction(action="view_health", href="/health")],
             details={"base_mode": base_mode.value},
         )

@@ -199,4 +199,4 @@ def test_disabled_mode_falls_back_to_template(audit_engine: Engine) -> None:
     assert result.numeric_check is NumericCheck.FALLBACK
     assert result.fallback_reason is not None
     assert result.fallback_reason.startswith("LLM_UNAVAILABLE")
-    assert "置信度" in result.narrative  # 模板文本渲染了结构化证据
+    assert "Confidence" in result.narrative  # 模板文本渲染了结构化证据

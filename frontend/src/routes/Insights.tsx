@@ -71,7 +71,6 @@ export function Insights() {
 
       {error && (
         <p role="alert" className="insights-error">
-          <span aria-hidden="true">⚠ </span>
           {error}
         </p>
       )}
@@ -99,7 +98,7 @@ export function Insights() {
                     <tr key={m.machine_id} data-machine-id={m.machine_id}>
                       <th scope="row">
                         {m.machine_id}
-                        <span className="machine-type">（{m.machine_type}）</span>
+                        <span className="machine-type">({m.machine_type})</span>
                       </th>
                       <td>{pct(m.utilisation)}</td>
                       <td>{m.job_count}</td>
@@ -107,7 +106,7 @@ export function Insights() {
                       <td>
                         {m.is_critical ? (
                           <span className="badge badge-critical" title="No substitute machine with the same capability">
-                            <span aria-hidden="true">⛔ </span>Critical
+                            Critical
                           </span>
                         ) : (
                           <span className="machine-noncritical">Has substitute</span>
@@ -144,7 +143,7 @@ export function Insights() {
                       <td>
                         {g.gap_minutes > 0 ? (
                           <span className="skill-gap-short">
-                            <span aria-hidden="true">⚠ </span>short {g.gap_minutes}
+                            short {g.gap_minutes}
                           </span>
                         ) : (
                           <span className="skill-gap-ok">surplus {-g.gap_minutes}</span>

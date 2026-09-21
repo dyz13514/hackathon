@@ -143,7 +143,7 @@ export function Approval() {
     resetActionState();
     try {
       const result = await approvePlan(plan.plan_id, plan.plan_version);
-      setNotice(`✔ Plan ${result.plan_id} activated (${result.status}).`);
+      setNotice(`Plan ${result.plan_id} activated (${result.status}).`);
       await loadPending();
     } catch (err) {
       if (err instanceof ApiError && err.code === 'STALE_PROPOSAL') {
@@ -166,7 +166,7 @@ export function Approval() {
     resetActionState();
     try {
       const result = await rejectPlan(plan.plan_id, rejectionReason);
-      setNotice(`✔ Plan ${result.plan_id} rejected (${result.status}).`);
+      setNotice(`Plan ${result.plan_id} rejected (${result.status}).`);
       setRejectionReason('');
       await loadPending();
     } catch (err) {
@@ -189,7 +189,7 @@ export function Approval() {
     try {
       const result = await modifyPlan(plan.plan_id, [modification]);
       setNotice(
-        `✔ Created new pending version ${result.new_plan_id} (from plan ${result.source_plan_id}).`,
+        `Created new pending version ${result.new_plan_id} (from plan ${result.source_plan_id}).`,
       );
       setModJobId('');
       setModTarget('');
@@ -235,7 +235,6 @@ export function Approval() {
 
       {error && (
         <p role="alert" className="approval-error">
-          <span aria-hidden="true">⚠ </span>
           {error}
         </p>
       )}
@@ -243,7 +242,6 @@ export function Approval() {
       {stale && (
         <div role="alert" className="approval-stale">
           <p>
-            <span aria-hidden="true">⚠ </span>
             The input data this proposal relies on has changed since the proposal was generated.
           </p>
           <p className="approval-stale-versions">
@@ -282,8 +280,7 @@ export function Approval() {
             }
           >
             <h3 id="unschedulable-heading">
-              <span aria-hidden="true">{plan.unschedulable_jobs.length > 0 ? '⚠ ' : '✔ '}</span>
-              Unschedulable jobs: {plan.unschedulable_jobs.length}
+                            Unschedulable jobs: {plan.unschedulable_jobs.length}
             </h3>
             {affected.length > 0 ? (
               <p className="approval-affected">Affected orders ({affected.length}): {affected.join(', ')}</p>

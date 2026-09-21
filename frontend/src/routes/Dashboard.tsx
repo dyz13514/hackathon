@@ -87,7 +87,6 @@ export function Dashboard() {
 
       {error && (
         <p role="alert" className="dashboard-unavailable">
-          <span aria-hidden="true">⚠ </span>
           {error}
           <br />
           <span className="dashboard-last-success">
@@ -110,14 +109,14 @@ export function Dashboard() {
                   {order.notes && (
                     <p className="entity-notes">
                       <span className="badge badge-untrusted" aria-label="Untrusted content">
-                        <span aria-hidden="true">🛈 </span>untrusted
+                        <span className="badge-icon-i" aria-hidden="true" />untrusted
                       </span>
                       {order.injection_suspected && (
                         <span
                           className="badge badge-injection"
                           aria-label="Suspected prompt injection"
                         >
-                          <span aria-hidden="true">⚠ </span>suspected injection
+                          suspected injection
                         </span>
                       )}{' '}
                       <span className="entity-notes-text">{order.notes}</span>

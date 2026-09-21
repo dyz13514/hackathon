@@ -260,7 +260,7 @@ def test_build_decision_evidence_reassigned_records_resource_change() -> None:
     assert len(evidence) == 1
     ev = evidence[0]
     assert ev.job_id == "ORD-1-OP1"
-    assert ev.trigger == "资源改派"
+    assert ev.trigger == "Resource reassignment"
     assert "machine:CNC-01→CNC-02" in ev.resources
 
 
@@ -272,7 +272,7 @@ def test_build_decision_evidence_moved_records_time_adjustment() -> None:
     assert delta.moved == ("ORD-1-OP1",)
     evidence = build_decision_evidence(delta, a, b)
     assert len(evidence) == 1
-    assert evidence[0].trigger == "开始时间调整"
+    assert evidence[0].trigger == "Start-time adjustment"
     assert "machine:CNC-01" in evidence[0].resources
 
 

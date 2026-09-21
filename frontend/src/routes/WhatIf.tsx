@@ -232,7 +232,6 @@ export function WhatIf() {
 
           {translateError && (
             <p role="alert" className="whatif-error">
-              <span aria-hidden="true">⚠ </span>
               {translateError}
             </p>
           )}
@@ -242,7 +241,6 @@ export function WhatIf() {
               <h4>Translation result (please confirm before running)</h4>
               {translation.injection_suspected && (
                 <p role="alert" className="whatif-injection-warning">
-                  <span aria-hidden="true">⚠ </span>
                   A suspected prompt-injection pattern was detected in your question; the system treated it as
                   plain data and recorded it for audit — the translation is not influenced by its instructions.
                 </p>
@@ -352,7 +350,6 @@ export function WhatIf() {
 
       {error && (
         <p role="alert" className="whatif-error">
-          <span aria-hidden="true">⚠ </span>
           {error}
         </p>
       )}

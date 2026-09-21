@@ -113,7 +113,6 @@ export function Quote() {
 
       {error && (
         <p role="alert" className="quote-error">
-          <span aria-hidden="true">⚠ </span>
           {error}
         </p>
       )}
@@ -123,18 +122,15 @@ export function Quote() {
           <h3 id="quote-result-heading">Quote result</h3>
           {!result.feasible ? (
             <p className="quote-infeasible">
-              <span aria-hidden="true">⛔ </span>
               This inquiry <strong>cannot be scheduled</strong> under current capacity. {result.constraint_reason}
             </p>
           ) : result.desired_date_met ? (
             <p className="quote-ok">
-              <span aria-hidden="true">✅ </span>
               Desired due date can be met. Earliest committable completion:{' '}
               <strong>{fmt(result.earliest_completion)}</strong>
             </p>
           ) : (
             <p className="quote-late">
-              <span aria-hidden="true">⚠ </span>
               Desired due date cannot be met. Earliest feasible completion:{' '}
               <strong>{fmt(result.earliest_completion)}</strong>
               {result.constraint_reason && <span> ({result.constraint_reason})</span>}

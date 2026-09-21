@@ -166,14 +166,14 @@ _PROJECTED_BUILD_TOTAL_USD = Decimal("30")  # K-18（≈USD21 LLM + USD5–10 Li
 #: `manual_steps_eliminated` 的口径表（design.md §4.4，R19.5）。UI 原样展示这张表。
 #: 每一项是 (动作标识, 中文说明, 计 1 步的条件)；计数在 `manual_steps_breakdown` 里逐项算。
 MANUAL_STEP_RUBRIC: tuple[tuple[str, str, str], ...] = (
-    ("spreadsheet_import", "电子表格导入", "每个导入批次计 1 步（无论 20 行还是 2,000 行）"),
-    ("mapping_normalisation", "映射归一", "每个批次的日期/单位归一合计计 1 步"),
-    ("plan_generation", "计划生成", "每次成功生成计 1 步（替代人工排表）"),
-    ("constraint_validation", "硬约束校验", "每次校验计 1 步（替代人工逐条核对）"),
-    ("replan", "重排", "每个扰动计 1 步"),
-    ("risk_finding", "风险发现", "每条新增 WARNING+ 风险计 1 步（替代人工巡检）"),
-    ("plan_compare", "方案对比", "每次对比计 1 步"),
-    ("plan_export", "计划导出", "每次导出计 1 步（替代手抄贴墙）"),
+    ("spreadsheet_import", "Spreadsheet import", "Counts as 1 step per import batch (whether 20 rows or 2,000)"),
+    ("mapping_normalisation", "Mapping normalization", "Date/unit normalization for each batch counts as 1 step in total"),
+    ("plan_generation", "Plan generation", "Counts as 1 step per successful generation (replaces manual scheduling)"),
+    ("constraint_validation", "Hard-constraint validation", "Counts as 1 step per validation (replaces manual item-by-item review)"),
+    ("replan", "Replan", "Counts as 1 step per disruption"),
+    ("risk_finding", "Risk finding", "Counts as 1 step per new WARNING+ risk (replaces manual inspection)"),
+    ("plan_compare", "Plan comparison", "Counts as 1 step per comparison"),
+    ("plan_export", "Plan export", "Counts as 1 step per export (replaces hand-copying onto the wall)"),
 )
 
 
@@ -403,7 +403,7 @@ def kpi_rows(metrics: ValueMetrics) -> list[KpiRow]:
     rows: list[KpiRow] = [
         KpiRow(
             kpi_id="K-01",
-            metric_name="计划生成时间（秒）",
+            metric_name="Plan generation time (s)",
             current_value=_fmt(metrics.plan_generation_seconds),
             baseline_value=_fmt(metrics.baseline_plan_generation_seconds),
             delta="",
@@ -413,7 +413,7 @@ def kpi_rows(metrics: ValueMetrics) -> list[KpiRow]:
         ),
         KpiRow(
             kpi_id="K-02",
-            metric_name="扰动响应时延（秒）",
+            metric_name="Disruption response latency (s)",
             current_value=_fmt(metrics.disruption_response_seconds),
             baseline_value=_fmt(metrics.baseline_disruption_response_seconds),
             delta="",
@@ -423,7 +423,7 @@ def kpi_rows(metrics: ValueMetrics) -> list[KpiRow]:
         ),
         KpiRow(
             kpi_id="K-03",
-            metric_name="按期交付率",
+            metric_name="On-time delivery rate",
             current_value=_fmt(metrics.on_time_rate),
             baseline_value=_fmt(metrics.baseline_on_time_rate),
             delta=_delta(metrics.on_time_rate, metrics.baseline_on_time_rate),
@@ -433,27 +433,27 @@ def kpi_rows(metrics: ValueMetrics) -> list[KpiRow]:
         ),
         KpiRow(
             kpi_id="K-04",
-            metric_name="总拖期分钟",
+            metric_name="Total tardiness (minutes)",
             current_value=_fmt(metrics.total_tardiness_minutes),
             baseline_value=_fmt(metrics.baseline_total_tardiness_minutes),
             delta=_delta(metrics.total_tardiness_minutes, metrics.baseline_total_tardiness_minutes),
-            target_value="≤ FCFS 的 60%",
+            target_value="≤ 60% of FCFS",
             label="MEASURED",
             measured_at=ts,
         ),
         KpiRow(
             kpi_id="K-13",
-            metric_name="消除的人工步骤数",
+            metric_name="Manual steps eliminated",
             current_value=_fmt(metrics.manual_steps_eliminated),
             baseline_value="0",
             delta=_fmt(metrics.manual_steps_eliminated),
-            target_value="≥ 12/天",
+            target_value="≥ 12/day",
             label="MEASURED",
             measured_at=ts,
         ),
         KpiRow(
             kpi_id="K-11",
-            metric_name="累计估算成本（USD）",
+            metric_name="Cumulative estimated cost (USD)",
             current_value=_fmt(metrics.estimated_usd_cost),
             baseline_value="",
             delta="",
@@ -463,7 +463,7 @@ def kpi_rows(metrics: ValueMetrics) -> list[KpiRow]:
         ),
         KpiRow(
             kpi_id="K-17",
-            metric_name="一次完整演示 LLM 成本（USD，预测）",
+            metric_name="LLM cost for one full demo (USD, projected)",
             current_value=_fmt(metrics.projected_hero_demo_usd),
             baseline_value="",
             delta="",
@@ -473,11 +473,11 @@ def kpi_rows(metrics: ValueMetrics) -> list[KpiRow]:
         ),
         KpiRow(
             kpi_id="K-18",
-            metric_name="构建 + 排练总花费（USD，预测）",
+            metric_name="Total build + rehearsal spend (USD, projected)",
             current_value=_fmt(metrics.projected_build_total_usd),
             baseline_value="",
             delta="",
-            target_value="≈ 30（≤ 100）",
+            target_value="≈ 30 (≤ 100)",
             label="PROJECTED",
             measured_at=ts,
         ),

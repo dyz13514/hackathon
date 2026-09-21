@@ -42,19 +42,16 @@ function formatRate(rate: number): string {
 }
 
 /** 标签的图标 + 文字（不仅靠颜色区分，R27.9、R19.4/R19.6/R25.13）。 */
-const LABEL_META: Record<MetricLabel, { icon: string; text: string }> = {
-  MEASURED: { icon: '✓', text: 'Measured' },
-  ESTIMATED: { icon: '≈', text: 'Estimated (interview)' },
-  PROJECTED: { icon: '⌁', text: 'Projected' },
+const LABEL_META: Record<MetricLabel, { text: string }> = {
+  MEASURED: { text: 'Measured' },
+  ESTIMATED: { text: 'Estimated (interview)' },
+  PROJECTED: { text: 'Projected' },
 };
 
 function LabelBadge({ label }: { label: MetricLabel }) {
   const meta = LABEL_META[label];
   return (
-    <span className={`metric-label metric-label-${label}`}>
-      <span aria-hidden="true">{meta.icon} </span>
-      {meta.text}
-    </span>
+    <span className={`metric-label metric-label-${label}`}>{meta.text}</span>
   );
 }
 
@@ -110,7 +107,6 @@ export function ValueLedger() {
 
       {error && (
         <p role="alert" className="value-ledger-error">
-          <span aria-hidden="true">⚠ </span>
           {error}
         </p>
       )}

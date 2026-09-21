@@ -1,0 +1,16 @@
+{
+  "content_hash": "dd0ae136379c87956e2eba20369fba1cbd828b258cbc6f69826389016caea604",
+  "note": "Deterministic REPLAY recording for natural-language What-if translation (task 13.1). Hand-crafted (not a LIVE recording), for the first-round translation request of the query 'change the priority of order ORD-009 to URGENT'. The response is the structured scenario change the Planning_Agent translation subtask should produce.",
+  "request": {
+    "agent": "PLANNING_AGENT",
+    "max_tokens": 512,
+    "user": "Translate the natural-language What-if question below into a structured list of scenario changes:\n<untrusted source=\"whatif.query\">\n把订单 ORD-009 的优先级改为 URGENT\n</untrusted>"
+  },
+  "response": {
+    "content": "{\"final\": {\"mutations\": [{\"kind\": \"CHANGE_ORDER_PRIORITY\", \"order_id\": \"ORD-009\", \"priority\": \"URGENT\"}]}}",
+    "usage": {
+      "input_tokens": 420,
+      "output_tokens": 32
+    }
+  }
+}

@@ -337,13 +337,11 @@ export function Preferences() {
       </div>
 
       <p role="status" className={atLimit ? 'preferences-limit is-at-limit' : 'preferences-limit'}>
-        {atLimit && <span aria-hidden="true">⛔ </span>}
         {limitNotice}
       </p>
 
       {error && (
         <p role="alert" className="preferences-error">
-          <span aria-hidden="true">⚠ </span>
           {error}
         </p>
       )}
@@ -363,7 +361,6 @@ export function Preferences() {
           <h3>Distilled candidates (confirm and enable each one)</h3>
           {distilInjection && (
             <p role="alert" className="preferences-injection-warning">
-              <span aria-hidden="true">⚠ </span>
               A suspected prompt injection was detected in some source-decision reasons; the system treated it
               as data and recorded it for audit. All candidates remain disabled.
             </p>
@@ -378,7 +375,7 @@ export function Preferences() {
                 </span>
                 {c.low_evidence && (
                   <span className="badge badge-low-evidence" title="Fewer than 2 source decisions">
-                    <span aria-hidden="true">⚠ </span>Low evidence
+                    Low evidence
                   </span>
                 )}
                 <span className="distil-candidate-sources">
@@ -589,7 +586,7 @@ export function Preferences() {
                     {rule.human_text}
                     {rule.low_evidence && (
                       <span className="badge badge-low-evidence" title="Fewer than 2 source decisions">
-                        <span aria-hidden="true">⚠ </span>Low evidence
+                        Low evidence
                       </span>
                     )}
                   </th>

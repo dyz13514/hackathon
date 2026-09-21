@@ -69,7 +69,7 @@ def normalise_date(raw: str) -> DateNormalisation:
     """
     text = raw.strip()
     if not text:
-        raise NormalisationError("空日期值无法归一。")
+        raise NormalisationError("An empty date value cannot be normalized.")
 
     if m := _ISO_RE.match(text):
         y, mo, d = (int(g) for g in m.groups())
@@ -94,7 +94,7 @@ def normalise_date(raw: str) -> DateNormalisation:
             resolved = _EXCEL_EPOCH + timedelta(days=serial)
             return DateNormalisation(resolved.isoformat(), "EXCEL_SERIAL", raw)
 
-    raise NormalisationError(f"无法识别的日期形式：{raw!r}")
+    raise NormalisationError(f"Unrecognized date format: {raw!r}")
 
 
 def _iso(year: int, month: int, day: int) -> str:
@@ -102,7 +102,7 @@ def _iso(year: int, month: int, day: int) -> str:
     try:
         return date(year, month, day).isoformat()
     except ValueError as error:
-        raise NormalisationError(f"非法日期 {year}-{month}-{day}：{error}") from error
+        raise NormalisationError(f"Invalid date {year}-{month}-{day}: {error}") from error
 
 
 # --------------------------------------------------------------------------
@@ -135,5 +135,5 @@ def normalise_unit(raw: str) -> UnitNormalisation:
     text = raw.strip()
     factor = UNIT_FACTORS.get(text)
     if factor is None:
-        raise NormalisationError(f"不支持的单位：{raw!r}")
+        raise NormalisationError(f"Unsupported unit: {raw!r}")
     return UnitNormalisation(base_unit="pcs", conversion_factor=factor, detected_unit=text)

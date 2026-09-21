@@ -186,7 +186,7 @@ def _not_found(rule_id: str) -> JSONResponse:
     return error_response(
         status_code=404,
         code=ErrorCode.PREFERENCE_RULE_NOT_FOUND,
-        message=f"偏好规则 {rule_id} 不存在。",
+        message=f"Preference rule {rule_id} does not exist.",
         next_actions=[NextAction(action="list_preferences", href="/preferences")],
         details={"rule_id": rule_id},
     )

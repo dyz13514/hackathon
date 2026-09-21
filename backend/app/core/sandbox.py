@@ -88,7 +88,7 @@ def apply_mutations(
         elif kind == "CHANGE_ORDER_PRIORITY":
             current = _apply_change_order_priority(current, mutation)
         else:  # pragma: no cover — 判别联合已由 Pydantic 约束，走不到这里
-            raise ScenarioMutationError(f"未知的场景变更类型：{kind!r}")
+            raise ScenarioMutationError(f"Unknown scenario change kind: {kind!r}")
     return current
 
 
@@ -108,7 +108,7 @@ def _apply_add_or_change_order(snapshot: DomainSnapshot, m: Any) -> DomainSnapsh
         due_date = getattr(m, "due_date", None)
         if product_id is None or quantity is None or due_date is None:
             raise ScenarioMutationError(
-                "新增订单需要 product_id、quantity、due_date 三者齐全。"
+                "Adding an order requires product_id, quantity and due_date to all be present."
             )
         new_id = f"SANDBOX-ORD-{len(orders) + 1}"
         # due_date 契约里是 date；订单模型要求 datetime——取当日 00:00（与演示时钟同口径）。
@@ -127,7 +127,7 @@ def _apply_add_or_change_order(snapshot: DomainSnapshot, m: Any) -> DomainSnapsh
 
     idx = _index_of(orders, "order_id", order_id)
     if idx is None:
-        raise ScenarioMutationError(f"订单 {order_id} 不存在，无法改交期/优先级。")
+        raise ScenarioMutationError(f"Order {order_id} does not exist; cannot change its due date/priority.")
     target = orders[idx]
     due_date = getattr(m, "due_date", None)
     priority = getattr(m, "priority", None)
@@ -150,7 +150,7 @@ def _apply_set_machine_unavailable(snapshot: DomainSnapshot, m: Any) -> DomainSn
     idx = _index_of(machines, "machine_id", getattr(m, "machine_id", None))
     if idx is None:
         raise ScenarioMutationError(
-            f"机器 {getattr(m, 'machine_id', None)} 不存在，无法设为不可用。"
+            f"Machine {getattr(m, 'machine_id', None)} does not exist; cannot mark it unavailable."
         )
     target: Machine = machines[idx]
     window = DowntimeWindow(start=m.start_time, end=m.end_time, reason="BREAKDOWN")
@@ -166,7 +166,7 @@ def _apply_change_material_availability(snapshot: DomainSnapshot, m: Any) -> Dom
     idx = _index_of(materials, "material_id", getattr(m, "material_id", None))
     if idx is None:
         raise ScenarioMutationError(
-            f"物料 {getattr(m, 'material_id', None)} 不存在，无法改可用量。"
+            f"Material {getattr(m, 'material_id', None)} does not exist; cannot change its availability."
         )
     target: Material = materials[idx]
     materials[idx] = target.model_copy(
@@ -181,7 +181,7 @@ def _apply_set_worker_unavailable(snapshot: DomainSnapshot, m: Any) -> DomainSna
     idx = _index_of(workers, "worker_id", getattr(m, "worker_id", None))
     if idx is None:
         raise ScenarioMutationError(
-            f"工人 {getattr(m, 'worker_id', None)} 不存在，无法设为不可用。"
+            f"Worker {getattr(m, 'worker_id', None)} does not exist; cannot mark it unavailable."
         )
     target: Worker = workers[idx]
     window = TimeWindow(start=m.start_time, end=m.end_time)
@@ -195,7 +195,7 @@ def _apply_change_order_priority(snapshot: DomainSnapshot, m: Any) -> DomainSnap
     idx = _index_of(orders, "order_id", getattr(m, "order_id", None))
     if idx is None:
         raise ScenarioMutationError(
-            f"订单 {getattr(m, 'order_id', None)} 不存在，无法改优先级。"
+            f"Order {getattr(m, 'order_id', None)} does not exist; cannot change its priority."
         )
     target = orders[idx]
     orders[idx] = target.model_copy(update={"priority": _as_priority(m.priority)})
@@ -256,7 +256,7 @@ def pick_pivotal_job(
         return PivotalSelection(
             job_id=None,
             dominant=dominant,
-            selection_basis="本方案无 MOVED/REASSIGNED/新增作业，无可比较的取舍项。",
+            selection_basis="This plan has no MOVED/REASSIGNED/added jobs, so there is no comparable tradeoff.",
         )
 
     minutes_by_job = _job_minutes(candidate_jobs, active_jobs)
@@ -268,8 +268,9 @@ def pick_pivotal_job(
 
     chosen = sorted(pool, key=sort_key)[0]
     basis = (
-        f"作业 {chosen} 对主导目标分量「{dominant}」的贡献在候选方案中最大"
-        f"（按加工时长确定性度量），因此它是最关键的取舍项。"
+        f"Job {chosen} has the largest contribution to the dominant objective component "
+        f"\"{dominant}\" among the candidates (measured deterministically by processing time), "
+        f"so it is the most critical tradeoff."
     )
     return PivotalSelection(job_id=chosen, dominant=dominant, selection_basis=basis)
 
@@ -312,7 +313,7 @@ def _index_of(items: list, attr: str, value: object) -> int | None:
 def _as_priority(value: object) -> Priority:
     text = str(value)
     if text not in ("URGENT", "HIGH", "NORMAL", "LOW"):  # pragma: no cover — 契约已约束
-        raise ScenarioMutationError(f"非法优先级：{text!r}")
+        raise ScenarioMutationError(f"Invalid priority: {text!r}")
     return text  # type: ignore[return-value]
 
 

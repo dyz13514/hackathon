@@ -1,0 +1,16 @@
+{
+  "content_hash": "0995cdd6503cbb45fcac4a2b95960a23aa9dd81e3147ab35df0568a849b6adf6",
+  "note": "Deterministic REPLAY recording for the LLM risk attribution narrative (task 13.2). Hand-crafted (not a LIVE recording), for the attribution-narrative request of the CNC-01 bottleneck risk (WARNING). The narrative cites only the given facts and invents no numbers.",
+  "request": {
+    "agent": "RISK_MONITOR_AGENT",
+    "max_tokens": 384,
+    "user": "Write an English attribution narrative for the risk finding below (only cite the given facts, do not invent numbers):\n- Risk type: BOTTLENECK_RESOURCE\n- Severity: WARNING\n- Entity: MACHINE CNC-01\n- Metric value: 0.92\n- Threshold: 0.9\n- Affected orders: ORD-001, ORD-002"
+  },
+  "response": {
+    "content": "{\"narrative\": \"Machine CNC-01 utilization has reached 92%, exceeding the 90% bottleneck warning threshold, making it the key constraint of the current schedule. The affected orders include ORD-001 and ORD-002, whose jobs are concentrated on this machine. Consider reassigning some jobs to an equivalent alternate machine, or staggering the schedule to reduce the load on CNC-01.\"}",
+    "usage": {
+      "input_tokens": 210,
+      "output_tokens": 96
+    }
+  }
+}

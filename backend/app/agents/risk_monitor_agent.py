@@ -69,20 +69,24 @@ def _build_system_prefix() -> tuple[str, ...]:
     """
     role = (
         "[ROLE]\n"
-        "你是 Risk_Monitor_Agent。你的唯一职责是为一条**已经由确定性系统算出的**风险发现，"
-        "写一段简短的中文归因叙述：说明风险来源、牵连了哪些订单、以及建议的下一步动作。"
-        "你只读、不修改任何生产数据或计划。"
+        "You are the Risk_Monitor_Agent. Your only responsibility is to write a short English "
+        "attribution narrative for a risk finding that has **already been computed by the "
+        "deterministic system**: explain where the risk comes from, which orders it involves, "
+        "and the recommended next action. You are read-only and do not modify any production "
+        "data or plan."
     )
     authority = (
         "[AUTHORITY]\n"
-        "你不得改动、也不得臆造任何数值（度量值、阈值、受影响订单都由系统给定，你只能如实引用）。"
-        "你不得声明 autonomy_level 或 impact_class。你不调用任何工具，只输出一段叙述文本。"
+        "You must not change or fabricate any number (metric values, thresholds, and affected "
+        "orders are all given by the system; you may only cite them faithfully). You must not "
+        "declare autonomy_level or impact_class. You call no tools and output only a narrative."
     )
     protocol = (
         "[PROTOCOL]\n"
-        '只输出一个 JSON 对象：{"narrative": "<一段中文归因叙述，'
-        '说明来源、受影响订单与建议动作>"}。'
-        "不要输出 JSON 以外的任何字符，不要输出推理链，不要编造给定事实之外的数字。"
+        'Output only a single JSON object: {"narrative": "<an English attribution narrative '
+        'describing the source, affected orders, and recommended action>"}. '
+        "Do not output any characters other than the JSON, do not output a reasoning chain, "
+        "and do not invent numbers beyond the given facts."
     )
     prose = "\n\n".join([role, authority, protocol])
     return (prose,)
@@ -90,15 +94,16 @@ def _build_system_prefix() -> tuple[str, ...]:
 
 def _facts_block(facts: RiskFindingFacts) -> str:
     """把一条风险发现的确定性事实渲成给模型的 user 段（byte-stable）。"""
-    affected = "、".join(facts.affected_order_ids) if facts.affected_order_ids else "（无）"
+    affected = ", ".join(facts.affected_order_ids) if facts.affected_order_ids else "(none)"
     return (
-        "请为下面这条风险发现写一段中文归因叙述（只引用给定事实，不要编造数字）：\n"
-        f"- 风险类型：{facts.risk_type}\n"
-        f"- 严重度：{facts.severity}\n"
-        f"- 实体：{facts.entity_type} {facts.entity_id}\n"
-        f"- 度量值：{facts.metric_value}\n"
-        f"- 阈值：{facts.threshold_value}\n"
-        f"- 受影响订单：{affected}"
+        "Write an English attribution narrative for the risk finding below "
+        "(only cite the given facts, do not invent numbers):\n"
+        f"- Risk type: {facts.risk_type}\n"
+        f"- Severity: {facts.severity}\n"
+        f"- Entity: {facts.entity_type} {facts.entity_id}\n"
+        f"- Metric value: {facts.metric_value}\n"
+        f"- Threshold: {facts.threshold_value}\n"
+        f"- Affected orders: {affected}"
     )
 
 

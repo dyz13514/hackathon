@@ -205,7 +205,7 @@ def get_trace(request: Request, trace_id: str) -> TraceDetailOut | JSONResponse:
             return error_response(
                 status_code=404,
                 code=ErrorCode.TRACE_NOT_FOUND,
-                message=f"Trace {trace_id} 不存在。",
+                message=f"Trace {trace_id} does not exist.",
                 next_actions=[NextAction(action="view_traces", href="/traces")],
                 details={"trace_id": trace_id},
             )

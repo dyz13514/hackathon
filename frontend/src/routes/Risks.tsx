@@ -138,7 +138,6 @@ export function Risks() {
 
       {error && (
         <p role="alert" className="risks-error">
-          <span aria-hidden="true">⚠ </span>
           {error}
         </p>
       )}

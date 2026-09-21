@@ -93,7 +93,6 @@ export function LoginModal({ open, onSuccess }: LoginModalProps) {
 
         {error && (
           <p role="alert" className="login-modal-error">
-            <span aria-hidden="true">⚠ </span>
             {error}
           </p>
         )}

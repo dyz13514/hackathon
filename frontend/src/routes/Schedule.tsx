@@ -28,7 +28,7 @@ function formatSuggestion(suggestion: Record<string, unknown>): string {
   if (entries.length === 0) {
     return '(no quantified conditions)';
   }
-  return entries.map(([key, value]) => `${key}=${String(value)}`).join('，');
+  return entries.map(([key, value]) => `${key}=${String(value)}`).join(', ');
 }
 
 export function Schedule() {

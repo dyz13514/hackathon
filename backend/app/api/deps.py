@@ -97,7 +97,7 @@ UNAUTHENTICATED_WRITE_PATHS: Final[frozenset[str]] = frozenset(
 #: 401 响应里给出的下一步。
 _LOGIN_NEXT_ACTIONS: Final = [NextAction(action="login", href="/api/auth/login")]
 
-_UNAUTHENTICATED_MESSAGE: Final = "会话未认证或已过期，请重新输入访问口令。"
+_UNAUTHENTICATED_MESSAGE: Final = "Session is not authenticated or has expired; please re-enter the access passphrase."
 
 
 class SessionTokenError(Exception):

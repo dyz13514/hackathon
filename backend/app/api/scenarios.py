@@ -189,7 +189,7 @@ def run_scenario_endpoint(
             return error_response(
                 status_code=409,
                 code=ErrorCode.NO_ACTIVE_PLAN,
-                message="当前没有 ACTIVE 计划，无法运行 What-if 推演。请先生成并批准一个计划。",
+                message="There is no ACTIVE plan, so a what-if simulation cannot be run. Please generate and approve a plan first.",
                 next_actions=[NextAction(action="generate_plan", href="/plans/generate")],
             )
         except ScenarioMutationError as error:
@@ -233,7 +233,7 @@ def adopt_scenario_endpoint(
             return error_response(
                 status_code=404,
                 code=ErrorCode.SCENARIO_NOT_FOUND,
-                message=f"场景 {scenario_id} 不存在或已过期，请重新运行 What-if 推演。",
+                message=f"Scenario {scenario_id} does not exist or has expired; please re-run the what-if simulation.",
                 next_actions=[NextAction(action="run_scenario", href="/whatif")],
                 details={"scenario_id": scenario_id},
             )
@@ -273,7 +273,7 @@ def translate_scenario_endpoint(
         return error_response(
             status_code=503,
             code=ErrorCode.LLM_UNAVAILABLE_USE_STRUCTURED_FORM,
-            message="LLM 处于降级模式，自然语言翻译不可用。请改用结构化场景表单。",
+            message="The LLM is in degraded mode, so natural-language translation is unavailable. Please use the structured scenario form instead.",
             next_actions=[NextAction(action="use_structured_form", href="/whatif")],
         )
     if result.outcome is TranslationOutcome.UNSUPPORTED_SCENARIO:
