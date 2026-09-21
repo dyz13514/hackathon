@@ -28,9 +28,9 @@ import {
 
 /** 执行路径的中文文案（除颜色外用文字传达，R27.9）。 */
 const PATH_LABEL: Record<string, string> = {
-  PROPOSED: '自主提案',
-  ESCALATED: '上报人工',
-  AUTO_APPLIED: '自动应用',
+  PROPOSED: 'Proposed',
+  ESCALATED: 'Escalated',
+  AUTO_APPLIED: 'Auto-applied',
 };
 
 function pathLabel(path: string): string {
@@ -42,19 +42,16 @@ function formatRate(rate: number): string {
 }
 
 /** 标签的图标 + 文字（不仅靠颜色区分，R27.9、R19.4/R19.6/R25.13）。 */
-const LABEL_META: Record<MetricLabel, { icon: string; text: string }> = {
-  MEASURED: { icon: '✓', text: '实测' },
-  ESTIMATED: { icon: '≈', text: '估计（访谈）' },
-  PROJECTED: { icon: '⌁', text: '预测' },
+const LABEL_META: Record<MetricLabel, { text: string }> = {
+  MEASURED: { text: 'Measured' },
+  ESTIMATED: { text: 'Estimated (interview)' },
+  PROJECTED: { text: 'Projected' },
 };
 
 function LabelBadge({ label }: { label: MetricLabel }) {
   const meta = LABEL_META[label];
   return (
-    <span className={`metric-label metric-label-${label}`}>
-      <span aria-hidden="true">{meta.icon} </span>
-      {meta.text}
-    </span>
+    <span className={`metric-label metric-label-${label}`}>{meta.text}</span>
   );
 }
 
@@ -72,8 +69,8 @@ export function ValueLedger() {
     } catch (err) {
       const message =
         err instanceof ApiError
-          ? `台账不可用（${err.code}）：${err.message}`
-          : '台账不可用：后端服务不可用。';
+          ? `Ledger unavailable (${err.code}): ${err.message}`
+          : 'Ledger unavailable: backend service unavailable.';
       setError(message);
     } finally {
       setLoading(false);
@@ -87,30 +84,29 @@ export function ValueLedger() {
   return (
     <section aria-labelledby="value-ledger-heading" className="value-ledger">
       <div className="value-ledger-header">
-        <h2 id="value-ledger-heading">价值台账</h2>
+        <h2 id="value-ledger-heading">Value ledger</h2>
         <div className="value-ledger-actions">
           <a
             className="value-ledger-export"
             href={VALUE_LEDGER_CSV_URL}
-            aria-label="导出价值台账为 CSV"
+            aria-label="Export value ledger as CSV"
           >
-            导出 CSV
+            Export CSV
           </a>
           <button
             type="button"
             onClick={() => void load()}
             disabled={loading}
             aria-busy={loading}
-            aria-label="刷新价值台账"
+            aria-label="Refresh value ledger"
           >
-            {loading ? '加载中…' : '刷新'}
+            {loading ? 'Loading…' : 'Refresh'}
           </button>
         </div>
       </div>
 
       {error && (
         <p role="alert" className="value-ledger-error">
-          <span aria-hidden="true">⚠ </span>
           {error}
         </p>
       )}
@@ -119,18 +115,18 @@ export function ValueLedger() {
         <div className="value-ledger-body">
           {/* --- KPI 表：当前值 / 基线值 / 差值 / 目标值 + 标签（R19.4） --- */}
           <section aria-labelledby="kpi-heading" className="value-ledger-kpis">
-            <h3 id="kpi-heading">KPI（K-01 至 K-18）</h3>
+            <h3 id="kpi-heading">KPIs (K-01 to K-18)</h3>
             <table>
-              <caption className="sr-only">每项 KPI 的当前值、基线值、差值、目标值与标签</caption>
+              <caption className="sr-only">Current value, baseline, delta, target and label for each KPI</caption>
               <thead>
                 <tr>
                   <th scope="col">KPI</th>
-                  <th scope="col">指标</th>
-                  <th scope="col">当前值</th>
-                  <th scope="col">基线值</th>
-                  <th scope="col">差值</th>
-                  <th scope="col">目标值</th>
-                  <th scope="col">标签</th>
+                  <th scope="col">Metric</th>
+                  <th scope="col">Current</th>
+                  <th scope="col">Baseline</th>
+                  <th scope="col">Delta</th>
+                  <th scope="col">Target</th>
+                  <th scope="col">Label</th>
                 </tr>
               </thead>
               <tbody>
@@ -153,54 +149,54 @@ export function ValueLedger() {
 
           {/* --- 实测累计 vs 预测（两列，R25.13） --- */}
           <section aria-labelledby="cost-heading" className="value-ledger-cost">
-            <h3 id="cost-heading">成本：实测累计 vs 预测（两列并排）</h3>
+            <h3 id="cost-heading">Cost: measured cumulative vs. projected (side by side)</h3>
             <table>
               <thead>
                 <tr>
-                  <th scope="col">口径</th>
+                  <th scope="col">Basis</th>
                   <th scope="col">
-                    实测累计 <LabelBadge label="MEASURED" />
+                    Measured cumulative <LabelBadge label="MEASURED" />
                   </th>
                   <th scope="col">
-                    预测 <LabelBadge label="PROJECTED" />
+                    Projected <LabelBadge label="PROJECTED" />
                   </th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <th scope="row">LLM 累计 token</th>
+                  <th scope="row">Cumulative LLM tokens</th>
                   <td>{data.metrics.llm_tokens_used}</td>
                   <td>—</td>
                 </tr>
                 <tr>
-                  <th scope="row">估算成本（USD）</th>
+                  <th scope="row">Estimated cost (USD)</th>
                   <td>{data.metrics.estimated_usd_cost.toFixed(4)}</td>
                   <td>
-                    一次演示 ≈ {data.metrics.projected_hero_demo_usd}（K-17）；构建+排练 ≈{' '}
-                    {data.metrics.projected_build_total_usd}（K-18）
+                    One demo ≈ {data.metrics.projected_hero_demo_usd} (K-17); build + rehearsal ≈{' '}
+                    {data.metrics.projected_build_total_usd} (K-18)
                   </td>
                 </tr>
               </tbody>
             </table>
             <p className="value-ledger-quota" role="status">
-              真实运行配额：已用 <strong>{data.metrics.real_run_count}</strong> /{' '}
-              {data.metrics.project_real_run_cap}，剩余{' '}
-              <strong>{data.metrics.real_run_remaining}</strong> 次。
+              Real-run quota: used <strong>{data.metrics.real_run_count}</strong> /{' '}
+              {data.metrics.project_real_run_cap}, <strong>{data.metrics.real_run_remaining}</strong>{' '}
+              remaining.
             </p>
           </section>
 
           {/* --- manual_steps_eliminated 口径表（R19.5，原样展示） --- */}
           <section aria-labelledby="manual-steps-heading" className="value-ledger-manual-steps">
             <h3 id="manual-steps-heading">
-              消除的人工步骤（共 {data.metrics.manual_steps_eliminated} 步）
+              Manual steps eliminated ({data.metrics.manual_steps_eliminated} total)
             </h3>
             <table>
-              <caption className="sr-only">manual_steps_eliminated 的计数口径表</caption>
+              <caption className="sr-only">Counting basis for manual_steps_eliminated</caption>
               <thead>
                 <tr>
-                  <th scope="col">动作</th>
-                  <th scope="col">计 1 步的条件</th>
-                  <th scope="col">计数</th>
+                  <th scope="col">Action</th>
+                  <th scope="col">Condition counted as 1 step</th>
+                  <th scope="col">Count</th>
                 </tr>
               </thead>
               <tbody>
@@ -216,39 +212,39 @@ export function ValueLedger() {
           </section>
 
           <section aria-labelledby="autonomy-ratio-heading" className="autonomy-ratio">
-            <h3 id="autonomy-ratio-heading">自主处理 vs 上报人工（K-14）</h3>
+            <h3 id="autonomy-ratio-heading">Auto-handled vs. escalated (K-14)</h3>
             <ul className="autonomy-counts">
               <li>
-                自主处理：<strong>{data.auto_handled_count}</strong>
+                Auto-handled: <strong>{data.auto_handled_count}</strong>
               </li>
               <li>
-                上报人工：<strong>{data.escalated_count}</strong>
+                Escalated: <strong>{data.escalated_count}</strong>
               </li>
               <li>
-                裁决总数：<strong>{data.total_decisions}</strong>
+                Total decisions: <strong>{data.total_decisions}</strong>
               </li>
               <li>
-                自主占比：<strong>{formatRate(data.auto_handled_ratio)}</strong>
+                Autonomy share: <strong>{formatRate(data.auto_handled_ratio)}</strong>
               </li>
             </ul>
             {data.total_decisions === 0 && (
-              <p className="autonomy-empty">尚无影响分级裁决——登记一次扰动后这里会出现记录。</p>
+              <p className="autonomy-empty">No impact-classification decisions yet — records appear here after a disruption is registered.</p>
             )}
           </section>
 
           <section aria-labelledby="decisions-heading" className="autonomy-decisions">
-            <h3 id="decisions-heading">每次判定的决定性判据（{data.decisions.length}）</h3>
+            <h3 id="decisions-heading">Decisive predicates per decision ({data.decisions.length})</h3>
             {data.decisions.length === 0 ? (
-              <p>暂无裁决记录。</p>
+              <p>No decision records yet.</p>
             ) : (
               <table>
                 <thead>
                   <tr>
-                    <th scope="col">裁决</th>
-                    <th scope="col">影响等级</th>
-                    <th scope="col">自主等级</th>
-                    <th scope="col">执行路径</th>
-                    <th scope="col">决定性判据</th>
+                    <th scope="col">Decision</th>
+                    <th scope="col">Impact class</th>
+                    <th scope="col">Autonomy level</th>
+                    <th scope="col">Execution path</th>
+                    <th scope="col">Decisive predicates</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -270,7 +266,7 @@ export function ValueLedger() {
                             ))}
                           </ul>
                         ) : (
-                          '（无）'
+                          '(none)'
                         )}
                       </td>
                     </tr>
@@ -282,18 +278,18 @@ export function ValueLedger() {
 
           {data.active_plan_id && data.on_time_rate != null && (
             <section aria-labelledby="ledger-kpi-heading" className="value-ledger-kpi">
-              <h3 id="ledger-kpi-heading">当前生效计划的基线对比</h3>
+              <h3 id="ledger-kpi-heading">Baseline comparison for the current active plan</h3>
               <table>
                 <thead>
                   <tr>
-                    <th scope="col">指标</th>
-                    <th scope="col">本计划</th>
-                    <th scope="col">FCFS 基线</th>
+                    <th scope="col">Metric</th>
+                    <th scope="col">This plan</th>
+                    <th scope="col">FCFS baseline</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
-                    <th scope="row">按期率</th>
+                    <th scope="row">On-time rate</th>
                     <td>{formatRate(data.on_time_rate)}</td>
                     <td>
                       {data.baseline_on_time_rate != null
@@ -302,7 +298,7 @@ export function ValueLedger() {
                     </td>
                   </tr>
                   <tr>
-                    <th scope="row">拖期分钟</th>
+                    <th scope="row">Tardiness (min)</th>
                     <td>{data.total_tardiness_minutes ?? '—'}</td>
                     <td>{data.baseline_total_tardiness_minutes ?? '—'}</td>
                   </tr>

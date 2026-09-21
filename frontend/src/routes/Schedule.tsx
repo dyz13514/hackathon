@@ -26,9 +26,9 @@ function formatRate(rate: number): string {
 function formatSuggestion(suggestion: Record<string, unknown>): string {
   const entries = Object.entries(suggestion);
   if (entries.length === 0) {
-    return '（无量化条件）';
+    return '(no quantified conditions)';
   }
-  return entries.map(([key, value]) => `${key}=${String(value)}`).join('，');
+  return entries.map(([key, value]) => `${key}=${String(value)}`).join(', ');
 }
 
 export function Schedule() {
@@ -45,8 +45,8 @@ export function Schedule() {
     } catch (err) {
       const message =
         err instanceof ApiError
-          ? `生成失败（${err.code}）：${err.message}`
-          : '生成失败：网络或服务不可用。';
+          ? `Generation failed (${err.code}): ${err.message}`
+          : 'Generation failed: network or service unavailable.';
       setError(message);
     } finally {
       setLoading(false);
@@ -56,9 +56,9 @@ export function Schedule() {
   return (
     <section aria-labelledby="schedule-heading" className="schedule">
       <div className="schedule-header">
-        <h2 id="schedule-heading">排产甘特图</h2>
+        <h2 id="schedule-heading">Schedule</h2>
         <button type="button" onClick={onGenerate} disabled={loading} aria-busy={loading}>
-          {loading ? '生成中…' : '生成今日计划'}
+          {loading ? 'Generating…' : 'Generate today’s plan'}
         </button>
       </div>
 
@@ -70,7 +70,7 @@ export function Schedule() {
 
       {!plan && !error && (
         <p className="schedule-empty">
-          点击「生成今日计划」运行确定性排产流水线（不消耗 LLM token）。
+          Click “Generate today’s plan” to run the deterministic scheduling pipeline (consumes no LLM tokens).
         </p>
       )}
 
@@ -78,40 +78,40 @@ export function Schedule() {
         <div className="schedule-body">
           <div className="schedule-main">
             <p className="schedule-status">
-              计划 {plan.plan_id}
+              Plan {plan.plan_id}
               <span className={`feasibility feasibility-${plan.feasibility}`}>
                 {' '}
-                · 可行性：{plan.feasibility}
+                · Feasibility: {plan.feasibility}
               </span>
-              <span> · 状态：{plan.status}</span>
+              <span> · Status: {plan.status}</span>
             </p>
 
             <Gantt jobs={plan.scheduled_jobs} />
 
             {plan.baseline_comparison && (
               <section aria-labelledby="baseline-heading" className="baseline-compare">
-                <h3 id="baseline-heading">基线对比（相对 FCFS）</h3>
+                <h3 id="baseline-heading">Baseline comparison (vs. FCFS)</h3>
                 <table>
                   <thead>
                     <tr>
-                      <th scope="col">指标</th>
-                      <th scope="col">本计划</th>
-                      <th scope="col">FCFS 基线</th>
+                      <th scope="col">Metric</th>
+                      <th scope="col">This plan</th>
+                      <th scope="col">FCFS baseline</th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr>
-                      <th scope="row">按期率</th>
+                      <th scope="row">On-time rate</th>
                       <td>{formatRate(plan.baseline_comparison.on_time_rate)}</td>
                       <td>{formatRate(plan.baseline_comparison.baseline_on_time_rate)}</td>
                     </tr>
                     <tr>
-                      <th scope="row">拖期分钟</th>
+                      <th scope="row">Tardiness (min)</th>
                       <td>{plan.baseline_comparison.total_tardiness_minutes}</td>
                       <td>{plan.baseline_comparison.baseline_total_tardiness_minutes}</td>
                     </tr>
                     <tr>
-                      <th scope="row">迟交订单数</th>
+                      <th scope="row">Late orders</th>
                       <td>{plan.baseline_comparison.late_order_count}</td>
                       <td>{plan.baseline_comparison.baseline_late_order_count}</td>
                     </tr>
@@ -126,10 +126,10 @@ export function Schedule() {
             aria-labelledby="unschedulable-heading"
           >
             <h3 id="unschedulable-heading">
-              不可排产作业（{plan.unschedulable_jobs.length}）
+              Unschedulable jobs ({plan.unschedulable_jobs.length})
             </h3>
             {plan.unschedulable_jobs.length === 0 ? (
-              <p>全部作业均已排产。</p>
+              <p>All jobs were scheduled.</p>
             ) : (
               <ul>
                 {plan.unschedulable_jobs.map((job) => (
@@ -137,9 +137,9 @@ export function Schedule() {
                     <p className="unschedulable-job">
                       {job.order_id} · {job.job_id}
                     </p>
-                    <p className="unschedulable-reason">原因：{job.blocking_reason}</p>
+                    <p className="unschedulable-reason">Reason: {job.blocking_reason}</p>
                     <p className="unschedulable-unblock">
-                      解锁条件：{formatSuggestion(job.unblock_suggestion)}
+                      Unblock conditions: {formatSuggestion(job.unblock_suggestion)}
                     </p>
                   </li>
                 ))}

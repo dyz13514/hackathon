@@ -85,21 +85,21 @@ export function Gantt({ jobs }: GanttProps) {
 
   const summary =
     jobs.length === 0
-      ? '当前计划没有已排产作业。'
+      ? 'The current plan has no scheduled jobs.'
       : jobs
           .map(
             (job) =>
-              `订单 ${job.order_id} 工序 ${job.operation_sequence}：机器 ${job.machine_id}，` +
-              `工人 ${job.worker_id}，${formatClock(job.start_time)} 至 ${formatClock(job.end_time)}` +
-              (job.changeover_minutes > 0 ? `，含换型 ${job.changeover_minutes} 分钟` : ''),
+              `Order ${job.order_id} operation ${job.operation_sequence}: machine ${job.machine_id}, ` +
+              `worker ${job.worker_id}, ${formatClock(job.start_time)} to ${formatClock(job.end_time)}` +
+              (job.changeover_minutes > 0 ? `, incl. ${job.changeover_minutes} min changeover` : ''),
           )
-          .join('；');
+          .join('; ');
 
   return (
-    <figure className="gantt" aria-label="排产甘特图：横轴时间，纵轴机器">
+    <figure className="gantt" aria-label="Schedule Gantt chart: time on the horizontal axis, machines on the vertical axis">
       <svg
         role="img"
-        aria-label="排产甘特图"
+        aria-label="Schedule Gantt chart"
         width="100%"
         viewBox={`0 0 ${CHART_WIDTH} ${height}`}
         className="gantt-svg"
@@ -173,10 +173,10 @@ export function Gantt({ jobs }: GanttProps) {
                     data-changeover-minutes={job.changeover_minutes}
                   >
                     <title>
-                      {`${label} · 机器 ${job.machine_id} · 工人 ${job.worker_id} · ` +
+                      {`${label} · machine ${job.machine_id} · worker ${job.worker_id} · ` +
                         `${formatClock(job.start_time)}–${formatClock(job.end_time)}` +
                         (job.changeover_minutes > 0
-                          ? ` · 换型 ${job.changeover_minutes} 分钟`
+                          ? ` · changeover ${job.changeover_minutes} min`
                           : '')}
                     </title>
                     {/* 换型段（斜纹），仅在有换型分钟时绘制 */}

@@ -1,41 +1,205 @@
+/*
+ * 全局样式表（单文件，无预处理器 / 无 UI 框架）。
+ *
+ * 组织：
+ *   1. 设计令牌（:root 变量：颜色 / 间距 / 圆角 / 阴影 / 排版）
+ *   2. 基础元素与可复用原语（按钮 / 表格 / 表单字段 / 卡片 / 徽章 / 状态提示），
+ *      作用域限定在 .app-main 内，避免影响 <dialog class="login-modal"> 等独立组件。
+ *   3. 布局外壳（app-shell / header / nav / main）
+ *   4. 各视图专属样式（按任务顺序）
+ *   5. 动态状态色系（feasibility / severity / change / status / path…）
+ *   6. 响应式断点
+ *
+ * 可访问性约束贯穿全表（R27.9）：焦点可见（:focus-visible）、状态不只依赖颜色
+ * （图标 + 文字为主）、屏幕阅读器专用文本（.sr-only / .gantt-sr-summary）。
+ */
+
+/* ============================================================= *
+ * 1. 设计令牌
+ * ============================================================= */
+
 :root {
+  /* 中性色 */
   --fg: #14171a;
-  --bg: #ffffff;
+  --fg-soft: #2b3138;
   --muted: #5b6570;
-  --accent: #10508c;
+  --bg: #f5f7fa;
+  --surface: #ffffff;
+  --surface-alt: #f0f3f7;
   --border: #d5dae0;
+  --border-soft: #e5e9ee;
+
+  /* 品牌 / 强调 */
+  --accent: #10508c;
+  --accent-hover: #0c4074;
+  --accent-soft: #e6f0fb;
+
+  /* 语义色（成功 / 警告 / 危险 / 信息） */
+  --success: #157347;
+  --success-soft: #e6f4ec;
+  --success-border: #9dd3b4;
+  --warning: #8a5300;
+  --warning-soft: #fff4e5;
+  --warning-border: #e2b979;
+  --danger: #b42318;
+  --danger-soft: #fde8e8;
+  --danger-border: #eab4b0;
+  --info: #3538cd;
+  --info-soft: #ececfb;
+
+  /* 圆角 */
+  --radius-sm: 4px;
+  --radius: 8px;
+  --radius-lg: 12px;
+
+  /* 阴影 */
+  --shadow-sm: 0 1px 2px rgba(20, 23, 26, 0.06);
+  --shadow: 0 1px 3px rgba(20, 23, 26, 0.08), 0 2px 8px rgba(20, 23, 26, 0.05);
+  --shadow-lg: 0 8px 32px rgba(20, 23, 26, 0.18);
+
+  /* 间距刻度 */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+
+  /* 内容最大宽度 */
+  --content-max: 76rem;
+
   font-family: system-ui, -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
   color: var(--fg);
   background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+/* ============================================================= *
+ * 2. 基础排版
+ * ============================================================= */
+
+h2,
+h3,
+h4 {
+  color: var(--fg);
+  line-height: 1.3;
+}
+
+.app-main h2 {
+  font-size: 1.4rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  margin: 0 0 var(--space-4);
+}
+
+.app-main h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0 0 var(--space-3);
+}
+
+.app-main h4 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0 0 var(--space-2);
+}
+
+.app-main a {
+  color: var(--accent);
+}
+
+.app-main a:hover {
+  color: var(--accent-hover);
+}
+
+/* ============================================================= *
+ * 3. 布局外壳
+ * ============================================================= */
+
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
 }
 
 .app-header {
+  background: var(--surface);
   border-bottom: 1px solid var(--border);
-  padding: 0.75rem 1.25rem;
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-3) var(--space-5);
 }
 
 .app-header h1 {
-  font-size: 1.125rem;
+  font-size: 1.15rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
   margin: 0;
+  max-width: var(--content-max);
+  margin-inline: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.app-header h1::before {
+  content: '';
+  display: inline-block;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: var(--radius-sm);
+  background:
+    linear-gradient(135deg, var(--accent) 0%, #2f7fc9 100%);
+  flex: none;
+}
+
+/* 主导航：横向滚动的胶囊标签，窄屏不换行成一团。 */
+.app-nav {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .app-nav ul {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: var(--space-1);
   list-style: none;
-  margin: 0;
-  padding: 0.5rem 1.25rem;
+  margin: 0 auto;
+  max-width: var(--content-max);
+  padding: var(--space-2) var(--space-5);
 }
 
 .nav-link {
-  color: var(--accent);
-  padding: 0.25rem 0.5rem;
+  color: var(--muted);
+  border-radius: 999px;
+  display: inline-block;
+  font-size: 0.9rem;
+  font-weight: 500;
+  padding: 0.35rem 0.75rem;
   text-decoration: none;
+  transition: background 0.12s ease, color 0.12s ease;
+  white-space: nowrap;
+}
+
+.nav-link:hover {
+  background: var(--surface-alt);
+  color: var(--accent);
 }
 
 /* 焦点可见是键盘可达性的前提（R27.9） */
@@ -44,65 +208,343 @@ body {
   outline-offset: 2px;
 }
 
-/* 当前项除颜色外用下划线与粗体传达，不只依赖颜色（R27.9） */
+/* 当前项除颜色外用背景 + 粗体传达，不只依赖颜色（R27.9） */
 .nav-link.is-active {
-  font-weight: 600;
-  text-decoration: underline;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 650;
+  text-decoration: none;
 }
 
 .app-main {
-  padding: 1.25rem;
+  flex: 1;
+  width: 100%;
+  max-width: var(--content-max);
+  margin-inline: auto;
+  padding: var(--space-5);
+}
+
+.app-main > section {
+  animation: fade-in 0.18s ease;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .app-main p {
-  color: var(--muted);
+  color: var(--fg-soft);
 }
 
-/* --- 排产甘特图（任务 2.12） --- */
+/* ============================================================= *
+ * 4. 可复用原语（作用域限定在主内容区，避免影响弹窗等独立组件）
+ * ============================================================= */
 
-.schedule-header {
-  align-items: baseline;
-  display: flex;
-  gap: 1rem;
-  justify-content: space-between;
-}
-
-.schedule-header button {
+/* ---- 按钮 ---- */
+/* 默认所有主内容区按钮采用主按钮样式，覆盖浏览器默认外观 */
+.app-main button {
   background: var(--accent);
   border: 1px solid var(--accent);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: #fff;
   cursor: pointer;
+  font: inherit;
   font-size: 0.9rem;
-  padding: 0.4rem 0.9rem;
+  font-weight: 550;
+  line-height: 1.2;
+  padding: 0.45rem 0.9rem;
+  transition: background 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
-.schedule-header button:disabled {
-  cursor: progress;
-  opacity: 0.6;
+.app-main button:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
-.schedule-header button:focus-visible {
+.app-main button:active:not(:disabled) {
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.app-main button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.app-main button:focus-visible {
   outline: 2px solid var(--fg);
   outline-offset: 2px;
 }
 
-.schedule-error {
-  border: 1px solid #b42318;
-  border-radius: 4px;
-  color: #b42318;
-  padding: 0.5rem 0.75rem;
+/* 次要按钮：行内的「不导入 / 回滚 / 放弃」等——用轮廓样式与主操作区分。
+   页面里通过 aria-label 含「不导入 / 回滚 / 放弃 / 跳过」的按钮无法用属性选择器精准
+   命中所有情况，这里提供 .btn-secondary 供需要处渐进增强；未加类的按钮仍是主样式。 */
+.app-main .btn-secondary,
+.app-main button.btn-secondary {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--accent);
+}
+
+.app-main .btn-secondary:hover:not(:disabled) {
+  background: var(--surface-alt);
+  border-color: var(--accent);
+}
+
+/* ---- 表格：主内容区内所有表格统一外观 ---- */
+.app-main table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.9rem;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.app-main th,
+.app-main td {
+  border-bottom: 1px solid var(--border-soft);
+  padding: 0.5rem 0.7rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.app-main thead th {
+  background: var(--surface-alt);
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.app-main tbody tr:last-child th,
+.app-main tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.app-main tbody tr:hover {
+  background: var(--surface-alt);
+}
+
+.app-main th[scope='row'] {
+  font-weight: 600;
+}
+
+/* 表格外框：给需要卡片感的表格用容器包裹（现有页面直接用 section 包 table） */
+
+/* ---- 表单字段 ---- */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+  max-width: 32rem;
+}
+
+.field label,
+.app-main label {
+  color: var(--fg-soft);
+  font-size: 0.9rem;
+  font-weight: 550;
+}
+
+.app-main input:not([type='checkbox']):not([type='radio']):not([type='file']),
+.app-main select,
+.app-main textarea {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--fg);
+  font: inherit;
+  font-size: 0.92rem;
+  padding: 0.45rem 0.6rem;
+  width: 100%;
+  max-width: 100%;
+}
+
+.app-main textarea {
+  resize: vertical;
+}
+
+.app-main input:focus-visible,
+.app-main select:focus-visible,
+.app-main textarea:focus-visible {
+  border-color: var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.app-main input[type='file'] {
+  font-size: 0.9rem;
+}
+
+/* ---- 徽章基座 ---- */
+.badge {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.4;
+  padding: 0.08rem 0.5rem;
+  white-space: nowrap;
+}
+
+.badge-source {
+  background: var(--surface-alt);
+  color: var(--muted);
+}
+
+.badge-untrusted {
+  background: var(--warning-soft);
+  border-color: var(--warning-border);
+  color: var(--warning);
+}
+
+/* Font-stable "info" mark: a CSS circle with an ASCII lowercase "i".
+   Avoids emoji/symbol glyphs (e.g. U+1F6C8) that render as tofu boxes in
+   fonts without that codepoint. Decorative only — the badge text carries the
+   meaning and the badge has an aria-label. */
+.badge-icon-i {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 0.85em;
+  height: 0.85em;
+  margin-right: 0.3em;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 0.7em;
+  font-style: italic;
+  font-weight: 700;
+  line-height: 1;
+}
+.badge-icon-i::before {
+  content: 'i';
+}
+
+.badge-injection {
+  background: var(--danger-soft);
+  border-color: var(--danger-border);
+  color: var(--danger);
+  margin-left: 0.25rem;
+}
+
+/* ---- 通用状态提示条（错误 / 成功 / 空态）：统一样式，各页 -error/-notice 类映射到此 ---- */
+.schedule-error,
+.dashboard-unavailable,
+.approval-error,
+.approval-stale,
+.traces-error,
+.risks-error,
+.insights-error,
+.quote-error,
+.whatif-error,
+.value-ledger-error,
+.import-error,
+.compare-error,
+.preferences-error {
+  background: var(--danger-soft);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-sm);
+  color: var(--danger);
+  margin: var(--space-3) 0;
+  padding: 0.6rem 0.85rem;
+}
+
+.approval-notice,
+.import-committed,
+.import-duplicate,
+.whatif-adopted,
+.preferences-notice {
+  background: var(--success-soft);
+  border: 1px solid var(--success-border);
+  border-radius: var(--radius-sm);
+  color: var(--success);
+  margin: var(--space-3) 0;
+  padding: 0.6rem 0.85rem;
+}
+
+.schedule-empty,
+.risks-empty,
+.import-empty,
+.compare-evidence-empty,
+.traces-empty,
+.autonomy-empty {
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  padding: var(--space-4);
+  text-align: center;
+}
+
+/* ---- 页面标题栏（有操作按钮的页面）：统一 flex 头部 ---- */
+.schedule-header,
+.dashboard-header,
+.approval-header,
+.risks-header,
+.insights-header,
+.preferences-header,
+.value-ledger-header,
+.compare-header {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
+}
+
+.schedule-header h2,
+.dashboard-header h2,
+.approval-header h2,
+.risks-header h2,
+.insights-header h2,
+.preferences-header h2,
+.value-ledger-header h2,
+.compare-header h2 {
+  margin-bottom: 0;
+}
+
+/* ============================================================= *
+ * 5. 排产甘特图（任务 2.12）
+ * ============================================================= */
+
+.schedule-status {
+  color: var(--fg-soft);
+  font-size: 0.95rem;
+  margin: 0 0 var(--space-3);
 }
 
 .schedule-body {
   display: grid;
-  gap: 1.25rem;
+  gap: var(--space-5);
   grid-template-columns: minmax(0, 1fr) 20rem;
 }
 
+.gantt {
+  margin: 0;
+  overflow-x: auto;
+}
+
 .gantt-svg {
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  min-width: 640px;
 }
 
 /* 视觉隐藏但对屏幕阅读器可读（R27.9） */
@@ -116,27 +558,34 @@ body {
   width: 1px;
 }
 
-.baseline-compare table {
-  border-collapse: collapse;
-  width: 100%;
-}
-
-.baseline-compare th,
-.baseline-compare td {
-  border: 1px solid var(--border);
-  padding: 0.35rem 0.6rem;
-  text-align: left;
+.baseline-compare {
+  margin-top: var(--space-4);
 }
 
 .unschedulable-drawer {
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 0.75rem;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-4);
+}
+
+.unschedulable-drawer h3 {
+  margin-top: 0;
 }
 
 .unschedulable-item {
-  border-top: 1px solid var(--border);
-  padding: 0.5rem 0;
+  border-top: 1px solid var(--border-soft);
+  padding: var(--space-2) 0;
+}
+
+.unschedulable-item:first-of-type {
+  border-top: none;
+}
+
+.unschedulable-job {
+  font-weight: 600;
+  margin: 0 0 0.15rem;
 }
 
 .unschedulable-reason,
@@ -146,55 +595,28 @@ body {
   margin: 0.15rem 0;
 }
 
-/* --- 状态看板（任务 3.7） --- */
-
-.dashboard-header,
-.approval-header {
-  align-items: baseline;
-  display: flex;
-  gap: 1rem;
-  justify-content: space-between;
-}
-
-.dashboard-header button,
-.approval-header button,
-.approval-actions button {
-  background: var(--accent);
-  border: 1px solid var(--accent);
-  border-radius: 4px;
-  color: #fff;
-  cursor: pointer;
-  font-size: 0.9rem;
-  padding: 0.4rem 0.9rem;
-}
-
-.dashboard-header button:disabled,
-.approval-header button:disabled,
-.approval-actions button:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-.dashboard-header button:focus-visible,
-.approval-header button:focus-visible,
-.approval-actions button:focus-visible,
-.approval-actions textarea:focus-visible,
-.approval-actions input:focus-visible,
-.approval-actions select:focus-visible {
-  outline: 2px solid var(--fg);
-  outline-offset: 2px;
-}
+/* ============================================================= *
+ * 6. 状态看板（任务 3.7）
+ * ============================================================= */
 
 .dashboard-cards {
   display: grid;
-  gap: 1rem;
+  gap: var(--space-4);
   grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
 }
 
 .dashboard-card {
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 0.75rem;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-4);
+}
+
+.dashboard-card h3 {
+  border-bottom: 1px solid var(--border-soft);
+  margin: 0 0 var(--space-2);
+  padding-bottom: var(--space-2);
 }
 
 .dashboard-card ul {
@@ -204,8 +626,12 @@ body {
 }
 
 .entity-row {
-  border-top: 1px solid var(--border);
-  padding: 0.4rem 0;
+  border-top: 1px solid var(--border-soft);
+  padding: var(--space-2) 0;
+}
+
+.entity-row:first-child {
+  border-top: none;
 }
 
 .entity-line {
@@ -214,13 +640,21 @@ body {
 }
 
 .entity-meta {
+  align-items: center;
   color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
   font-size: 0.8rem;
-  margin: 0.1rem 0;
+  margin: 0.25rem 0 0;
 }
 
 .entity-notes {
-  margin: 0.2rem 0;
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0.25rem 0;
 }
 
 .entity-notes-text {
@@ -228,59 +662,39 @@ body {
   white-space: pre-wrap;
 }
 
-.badge {
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  font-size: 0.72rem;
-  padding: 0.05rem 0.35rem;
-}
-
-.badge-source {
-  background: #eef2f6;
-  color: var(--muted);
-}
-
-.badge-untrusted {
-  background: #fff4e5;
-  border-color: #b26a00;
-  color: #7a4600;
-}
-
-.badge-injection {
-  background: #fde8e8;
-  border-color: #b42318;
-  color: #b42318;
-  margin-left: 0.25rem;
-}
-
-.dashboard-unavailable {
-  border: 1px solid #b42318;
-  border-radius: 4px;
-  color: #b42318;
-  padding: 0.5rem 0.75rem;
-}
-
 .dashboard-last-success {
   color: var(--muted);
   font-size: 0.85rem;
 }
 
-/* --- 审批（任务 3.7） --- */
-
-.approval-notice {
-  border: 1px solid #1a7f37;
-  border-radius: 4px;
-  color: #1a7f37;
-  padding: 0.5rem 0.75rem;
+/* 机器状态徽章（动态 machine-status-*） */
+.machine-status {
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.05rem 0.45rem;
 }
 
-.approval-error,
-.approval-stale {
-  border: 1px solid #b42318;
-  border-radius: 4px;
-  color: #b42318;
-  padding: 0.5rem 0.75rem;
+.machine-status-AVAILABLE {
+  background: var(--success-soft);
+  color: var(--success);
 }
+
+.machine-status-BUSY {
+  background: var(--info-soft);
+  color: var(--info);
+}
+
+.machine-status-MAINTENANCE,
+.machine-status-OFFLINE,
+.machine-status-UNAVAILABLE {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+/* ============================================================= *
+ * 7. 审批（任务 3.7）
+ * ============================================================= */
 
 .approval-stale-versions {
   color: var(--fg);
@@ -293,70 +707,81 @@ body {
 
 .approval-body {
   display: grid;
-  gap: 1rem;
+  gap: var(--space-4);
 }
 
 .approval-summary,
 .approval-unschedulable,
 .approval-breakdown,
 .approval-actions {
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 0.75rem;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-4);
+}
+
+.approval-summary h3,
+.approval-unschedulable h3,
+.approval-breakdown h3,
+.approval-actions h3 {
+  margin-top: 0;
 }
 
 .approval-unschedulable-warn {
-  border-color: #b26a00;
+  border-color: var(--warning-border);
 }
 
 .approval-affected {
   font-weight: 600;
 }
 
-.approval-breakdown table {
-  border-collapse: collapse;
-  width: 100%;
-}
-
-.approval-breakdown th,
-.approval-breakdown td {
-  border: 1px solid var(--border);
-  padding: 0.35rem 0.6rem;
-  text-align: left;
-}
-
 .approval-action {
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-soft);
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
-  padding: 0.6rem 0;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+}
+
+.approval-action:first-of-type {
+  border-top: none;
 }
 
 .approval-action label {
-  font-size: 0.85rem;
+  font-size: 0.9rem;
 }
 
 .approval-action button {
   align-self: flex-start;
 }
 
-/* --- Trace 查看器（任务 5.12） --- */
+.pref-rule-text {
+  color: var(--fg-soft);
+}
+
+/* ============================================================= *
+ * 8. Trace 查看器（任务 5.12）
+ * ============================================================= */
 
 .traces-header {
-  align-items: baseline;
+  align-items: end;
   display: flex;
   flex-wrap: wrap;
-  gap: 1rem;
+  gap: var(--space-4);
   justify-content: space-between;
-  margin-bottom: 1rem;
+  margin-bottom: var(--space-4);
+}
+
+.traces-header h2 {
+  margin-bottom: 0;
 }
 
 .traces-filters {
   align-items: end;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: var(--space-3);
 }
 
 .traces-filters label {
@@ -367,23 +792,15 @@ body {
 }
 
 .traces-filters button:focus-visible,
-.traces-list-item:focus-visible {
+.trace-list-item:focus-visible {
   outline: 2px solid var(--fg);
   outline-offset: 2px;
 }
 
-.traces-error {
-  background: #fde8e8;
-  border: 1px solid #b42318;
-  border-radius: 4px;
-  color: #b42318;
-  padding: 0.5rem 0.75rem;
-}
-
 .traces-body {
   display: grid;
-  gap: 1.25rem;
-  grid-template-columns: minmax(18rem, 1fr) minmax(20rem, 2fr);
+  gap: var(--space-5);
+  grid-template-columns: minmax(17rem, 1fr) minmax(20rem, 2fr);
 }
 
 .traces-list ul,
@@ -395,17 +812,23 @@ body {
 }
 
 .trace-list-item {
-  background: none;
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
+  color: inherit;
   cursor: pointer;
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
   margin-bottom: 0.4rem;
-  padding: 0.5rem 0.6rem;
+  padding: 0.55rem 0.65rem;
   text-align: left;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
   width: 100%;
+}
+
+.trace-list-item:hover {
+  border-color: var(--accent);
 }
 
 .trace-list-item.is-active {
@@ -414,8 +837,12 @@ body {
 }
 
 .trace-list-id {
-  font-family: monospace;
-  font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 650;
+}
+
+.trace-list-kind {
+  color: var(--muted);
 }
 
 .trace-list-meta {
@@ -424,9 +851,11 @@ body {
 }
 
 .trace-detail {
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 0.75rem 1rem;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-4) var(--space-5);
 }
 
 .trace-detail-meta {
@@ -437,11 +866,23 @@ body {
 
 .trace-step {
   border-left: 3px solid var(--border);
-  margin-bottom: 0.6rem;
-  padding: 0.25rem 0 0.25rem 0.75rem;
+  margin-bottom: 0.7rem;
+  padding: 0.25rem 0 0.25rem 0.8rem;
+}
+
+.trace-step-head {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.trace-step-kind {
+  font-weight: 600;
 }
 
 .trace-step-reason {
+  color: var(--fg-soft);
   margin: 0.25rem 0;
 }
 
@@ -453,34 +894,38 @@ body {
 
 .trace-tool-name {
   color: var(--fg);
-  font-family: monospace;
-  font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 650;
 }
 
 /* mode / outcome 除颜色外都带文字（R27.9）；颜色仅作辅助。 */
 .badge-mode {
-  background: #eef2f6;
+  background: var(--surface-alt);
   color: var(--muted);
 }
 
 .badge-mode-PIPELINE {
-  background: #e6f0ff;
-  border-color: #1d4ed8;
+  background: var(--accent-soft);
+  border-color: #9cc3e8;
+  color: var(--accent);
 }
 
 .badge-mode-REACT {
   background: #f0e6ff;
-  border-color: #6d28d9;
+  border-color: #b79ce0;
+  color: #6d28d9;
 }
 
 .badge-truncated {
-  background: #fff4e5;
-  border-color: #b26a00;
+  background: var(--warning-soft);
+  border-color: var(--warning-border);
+  color: var(--warning);
 }
 
 .trace-outcome-OK,
 .trace-outcome-SUCCESS {
-  color: #147d3c;
+  color: var(--success);
+  font-weight: 600;
 }
 
 .trace-outcome-MAX_STEPS_EXCEEDED,
@@ -489,41 +934,365 @@ body {
 .trace-outcome-ERROR,
 .trace-outcome-LLM_UNAVAILABLE,
 .trace-outcome-TOOL_NOT_PERMITTED {
-  color: #b42318;
-}
-
-
-/* --- 偏好规则管理（/preferences，任务 11.1，R18）--- */
-
-.preferences-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.preferences-limit {
-  margin: 0.5rem 0;
-  color: var(--muted);
-}
-
-.preferences-limit.is-at-limit {
-  color: #b42318;
+  color: var(--danger);
   font-weight: 600;
 }
 
-.preferences-error {
-  color: #b42318;
+/* ============================================================= *
+ * 9. 表格导入（任务 10，/import）
+ * ============================================================= */
+
+.import > section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: var(--space-4);
+  padding: var(--space-4);
 }
 
-.preferences-notice {
-  color: #027a48;
+.import > section h3 {
+  margin-top: 0;
+}
+
+.import-upload label {
+  display: block;
+  margin-bottom: var(--space-2);
+}
+
+.import-unparsed {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+  margin: var(--space-3) 0;
+}
+
+.import-unparsed input {
+  width: auto;
+}
+
+/* 列映射状态徽章（动态 status-*） */
+.status-AUTO_ACCEPTED {
+  background: var(--success-soft);
+  border-color: var(--success-border);
+  color: var(--success);
+}
+
+.status-NEEDS_CONFIRMATION,
+.status-PENDING {
+  background: var(--warning-soft);
+  border-color: var(--warning-border);
+  color: var(--warning);
+}
+
+.status-NOT_IMPORTED {
+  background: var(--surface-alt);
+  color: var(--muted);
+}
+
+/* 映射 / 批次表里的行内操作按钮：次要样式，避免整片蓝色 */
+.import-mapping td button,
+.import-batches td button {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--accent);
+  font-size: 0.82rem;
+  padding: 0.25rem 0.6rem;
+}
+
+.import-mapping td button:hover:not(:disabled),
+.import-batches td button:hover:not(:disabled) {
+  background: var(--surface-alt);
+  border-color: var(--accent);
+}
+
+/* ============================================================= *
+ * 10. 瓶颈与产能洞察（任务 13.5，/insights）
+ * ============================================================= */
+
+.insights-machines,
+.insights-skills {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: var(--space-4);
+  padding: var(--space-4);
+}
+
+.insights-machines h3,
+.insights-skills h3 {
+  margin-top: 0;
+}
+
+.machine-type {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 400;
+}
+
+.machine-noncritical {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.badge-critical {
+  background: var(--danger-soft);
+  border-radius: 999px;
+  border: 1px solid var(--danger-border);
+  color: var(--danger);
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.05rem 0.5rem;
+}
+
+.skill-gap-short {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.skill-gap-ok {
+  color: var(--success);
+}
+
+/* ============================================================= *
+ * 11. 可承诺交期报价（任务 13.6，/quote）
+ * ============================================================= */
+
+.quote-hint,
+.whatif-nl-hint {
+  color: var(--muted);
+  font-size: 0.9rem;
+  max-width: 48rem;
+}
+
+.quote-form {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  padding: var(--space-4);
+  align-items: end;
+}
+
+.quote-form .field {
+  margin-bottom: 0;
+  max-width: none;
+}
+
+.quote-form button {
+  align-self: end;
+}
+
+.quote-result {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+}
+
+.quote-result h3 {
+  margin-top: 0;
+}
+
+.quote-infeasible {
+  color: var(--danger);
+  font-weight: 550;
+}
+
+.quote-ok {
+  color: var(--success);
+  font-weight: 550;
+}
+
+.quote-late {
+  color: var(--warning);
+  font-weight: 550;
+}
+
+.quote-impact {
+  color: var(--fg-soft);
+  margin: var(--space-2) 0 0;
+  padding-left: 1.2rem;
+}
+
+/* ============================================================= *
+ * 12. 风险雷达（任务 8，/risks）
+ * ============================================================= */
+
+.risks-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  list-style: none;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+}
+
+.risks-summary li {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  flex: 1 1 8rem;
+  padding: var(--space-3);
+}
+
+.risks-summary strong {
+  display: block;
+  font-size: 1.5rem;
+  margin-top: 0.15rem;
+}
+
+.risk-group {
+  margin-bottom: var(--space-5);
+}
+
+.risk-list {
+  display: grid;
+  gap: var(--space-3);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.risk-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-3) var(--space-4);
+}
+
+.risk-CRITICAL {
+  border-left-color: var(--danger);
+}
+
+.risk-WARNING {
+  border-left-color: var(--warning);
+}
+
+.risk-INFO {
+  border-left-color: var(--info);
+}
+
+.risk-head {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0 0 0.3rem;
+}
+
+.risk-metric,
+.risk-affected,
+.risk-meta {
+  color: var(--muted);
+  font-size: 0.87rem;
+  margin: 0.2rem 0;
+}
+
+.risk-narrative {
+  color: var(--fg-soft);
+  margin: 0.35rem 0;
+}
+
+.risk-mitigation {
+  margin: 0.35rem 0 0;
+}
+
+/* 严重度徽章（动态 severity-*） */
+.severity-CRITICAL {
+  background: var(--danger-soft);
+  border-color: var(--danger-border);
+  color: var(--danger);
+}
+
+.severity-WARNING {
+  background: var(--warning-soft);
+  border-color: var(--warning-border);
+  color: var(--warning);
+}
+
+.severity-INFO {
+  background: var(--info-soft);
+  border-color: #b9baf0;
+  color: var(--info);
+}
+
+/* 叙述来源徽章（动态 source-*：LLM / TEMPLATE 等） */
+.risk-narrative .badge[class*='source-'] {
+  margin-left: 0.4rem;
+}
+
+/* ============================================================= *
+ * 13. 偏好规则管理（任务 11.1，/preferences，R18）
+ * ============================================================= */
+
+.preferences-limit {
+  color: var(--muted);
+  margin: var(--space-2) 0;
+}
+
+.preferences-limit.is-at-limit {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.preferences-candidates,
+.preferences-form,
+.preferences-list-wrap {
+  margin-top: var(--space-4);
+}
+
+.preferences-injection-warning,
+.whatif-injection-warning {
+  background: var(--danger-soft);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-sm);
+  color: var(--danger);
+  padding: 0.5rem 0.75rem;
+}
+
+.distil-candidate-list {
+  display: grid;
+  gap: var(--space-3);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.distil-candidate-form {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-3) var(--space-4);
+}
+
+.distil-candidate-sources {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.preferences-form {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-4);
 }
 
 .preferences-form .field {
   display: flex;
   flex-direction: column;
-  margin-bottom: 0.75rem;
+  margin-bottom: var(--space-3);
   max-width: 32rem;
 }
 
@@ -532,23 +1301,35 @@ body {
   margin-bottom: 0.25rem;
 }
 
-.preferences-form .field-hint {
-  margin: 0.25rem 0 0;
-  font-size: 0.85em;
+.preferences-form .field-hint,
+.field-hint {
   color: var(--muted);
+  font-size: 0.85em;
+  margin: 0.25rem 0 0;
+}
+
+.rule-kind {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 400;
+}
+
+.rule-form-desc {
+  color: var(--muted);
+  font-size: 0.85rem;
 }
 
 /* LOW_EVIDENCE 徽章：图标 + 文字，不仅靠颜色区分（R27.9、R18.10）。 */
 .badge-low-evidence {
+  background: var(--warning-soft);
+  border-color: var(--warning-border);
+  color: var(--warning);
   margin-left: 0.5rem;
-  background: #fff4e5;
-  border-color: #b26a00;
-  color: #b26a00;
 }
 
 /* 启用状态：文字（已启用/未启用）为主，颜色为辅（R27.9）。 */
 .status-on {
-  color: #027a48;
+  color: var(--success);
   font-weight: 600;
 }
 
@@ -557,14 +1338,24 @@ body {
 }
 
 .rule-actions button {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--accent);
+  font-size: 0.82rem;
   margin-right: 0.4rem;
   margin-bottom: 0.4rem;
+  padding: 0.28rem 0.65rem;
+}
+
+.rule-actions button:hover:not(:disabled) {
+  background: var(--surface-alt);
+  border-color: var(--accent);
 }
 
 .affected-jobs {
-  margin-top: 0.4rem;
-  font-size: 0.9em;
   color: var(--muted);
+  font-size: 0.9em;
+  margin-top: 0.4rem;
 }
 
 .source-list,
@@ -573,62 +1364,223 @@ body {
   padding-left: 1.1rem;
 }
 
+/* ============================================================= *
+ * 14. What-if 推演（任务 8.3 / 13.1，/whatif，R16）
+ * ============================================================= */
 
-/* --- 价值台账 11.4 扩展（/value，任务 11.4，R19） --- */
+.whatif-nl,
+.whatif-form,
+.whatif-result {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: var(--space-4);
+  padding: var(--space-4);
+}
+
+.whatif-nl h3,
+.whatif-form h3,
+.whatif-result h3 {
+  margin-top: 0;
+}
+
+.whatif-nl-input {
+  margin-top: var(--space-2);
+}
+
+.whatif-form > label {
+  display: block;
+  margin: var(--space-2) 0 0.35rem;
+}
+
+.whatif-fields {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  margin: var(--space-3) 0;
+}
+
+.whatif-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.whatif-translation-card {
+  background: var(--accent-soft);
+  border: 1px solid #9cc3e8;
+  border-radius: var(--radius);
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+}
+
+.whatif-translation-card h4 {
+  margin-top: 0;
+}
+
+.whatif-translation-echo q {
+  color: var(--fg-soft);
+}
+
+.whatif-translation-mutations {
+  margin: var(--space-2) 0;
+  padding-left: 1.2rem;
+}
+
+.whatif-translation-mutations code {
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  display: inline-block;
+  font-size: 0.82rem;
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.35rem;
+}
+
+.whatif-translation-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.whatif-result ul {
+  color: var(--fg-soft);
+  padding-left: 1.2rem;
+}
+
+/* ============================================================= *
+ * 15. 价值台账（任务 7.6 / 11.4，/value，R19）
+ * ============================================================= */
 
 .value-ledger-actions {
-  display: flex;
   align-items: center;
-  gap: 0.75rem;
+  display: flex;
+  gap: var(--space-3);
 }
 
 .value-ledger-export {
-  padding: 0.35rem 0.75rem;
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
+  color: var(--accent);
+  font-size: 0.9rem;
+  padding: 0.42rem 0.85rem;
   text-decoration: none;
-  color: inherit;
+}
+
+.value-ledger-export:hover {
+  background: var(--surface-alt);
+  border-color: var(--accent);
+}
+
+.value-ledger-body {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.value-ledger-kpis,
+.value-ledger-cost,
+.value-ledger-manual-steps,
+.autonomy-ratio,
+.autonomy-decisions,
+.value-ledger-kpi {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-4);
+}
+
+.value-ledger-kpis h3,
+.value-ledger-cost h3,
+.value-ledger-manual-steps h3,
+.autonomy-ratio h3,
+.autonomy-decisions h3,
+.value-ledger-kpi h3 {
+  margin-top: 0;
 }
 
 .value-ledger-kpis table,
 .value-ledger-cost table,
 .value-ledger-manual-steps table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 0.5rem 0 1rem;
-}
-
-.value-ledger-kpis th,
-.value-ledger-kpis td,
-.value-ledger-cost th,
-.value-ledger-cost td,
-.value-ledger-manual-steps th,
-.value-ledger-manual-steps td {
-  border: 1px solid var(--border);
-  padding: 0.35rem 0.5rem;
-  text-align: left;
+  margin: var(--space-2) 0 0;
 }
 
 /* 标签：图标 + 文字为主，颜色为辅（R27.9）。 */
 .metric-label {
   font-size: 0.85em;
+  font-weight: 600;
   white-space: nowrap;
 }
 
 .metric-label-MEASURED {
-  color: #027a48;
+  color: var(--success);
 }
 
 .metric-label-ESTIMATED {
-  color: #b26a00;
+  color: var(--warning);
 }
 
 .metric-label-PROJECTED {
-  color: #3538cd;
+  color: var(--info);
 }
 
 .value-ledger-quota {
   color: var(--muted);
+  margin-top: var(--space-3);
+}
+
+.autonomy-counts {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.autonomy-counts li {
+  background: var(--surface-alt);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+}
+
+.autonomy-counts strong {
+  display: block;
+  font-size: 1.4rem;
+  margin-top: 0.15rem;
+}
+
+/* 执行路径标签（动态 path-*） */
+.path-tag {
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.08rem 0.5rem;
+}
+
+.path-PROPOSED {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.path-ESCALATED {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.path-AUTO_APPLIED {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+/* 方案对比里 change 标签复用同色系 */
+.change-tag {
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.08rem 0.5rem;
 }
 
 /* 屏幕阅读器专用（表格 caption 等），视觉隐藏但可被辅助技术读取。 */
@@ -644,8 +1596,149 @@ body {
   border: 0;
 }
 
+/* ============================================================= *
+ * 16. 方案对比（/plans/:a/compare/:b）
+ * ============================================================= */
 
-/* --- 全局顶栏横幅（任务 11.6，R25.8/R25.9/R25.4） --- */
+.compare-ids {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.compare-body {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.compare-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.compare-summary li {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  flex: 1 1 8rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  padding: var(--space-3);
+}
+
+.compare-summary strong {
+  color: var(--fg);
+  display: block;
+  font-size: 1.3rem;
+  margin-top: 0.15rem;
+}
+
+.compare-gantts {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.compare-gantts figure {
+  margin: 0;
+}
+
+.compare-gantts figcaption {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: var(--space-2);
+}
+
+.compare-changes,
+.compare-evidence {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-4);
+}
+
+.compare-changes h3,
+.compare-evidence h3 {
+  margin-top: 0;
+}
+
+/* change 标签色系（动态 change-*） */
+.change-ADDED {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.change-REMOVED {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.change-MOVED {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.change-REASSIGNED {
+  background: var(--info-soft);
+  color: var(--info);
+}
+
+.change-UNCHANGED {
+  background: var(--surface-alt);
+  color: var(--muted);
+}
+
+.evidence-item {
+  border-top: 1px solid var(--border-soft);
+  padding: var(--space-2) 0;
+}
+
+.evidence-item:first-child {
+  border-top: none;
+}
+
+.evidence-job {
+  font-weight: 600;
+  margin: 0 0 0.2rem;
+}
+
+.evidence-trigger,
+.evidence-constraint,
+.evidence-resources {
+  color: var(--muted);
+  font-size: 0.87rem;
+  margin: 0.15rem 0;
+}
+
+/* ============================================================= *
+ * 17. 可行性标签（跨页动态 feasibility-*）
+ * ============================================================= */
+
+.feasibility {
+  font-weight: 600;
+}
+
+.feasibility-FEASIBLE {
+  color: var(--success);
+}
+
+.feasibility-PARTIAL {
+  color: var(--warning);
+}
+
+.feasibility-INFEASIBLE {
+  color: var(--danger);
+}
+
+/* ============================================================= *
+ * 18. 全局顶栏横幅（任务 11.6，R25.8/R25.9/R25.4）
+ * ============================================================= */
 
 .app-banners {
   display: flex;
@@ -653,72 +1746,80 @@ body {
 }
 
 .banner {
-  padding: 0.6rem 1rem;
-  font-size: 0.95em;
   border-bottom: 1px solid var(--border);
+  font-size: 0.95em;
+  padding: 0.65rem var(--space-5);
+}
+
+.banner strong {
+  font-weight: 650;
 }
 
 /* 降级模式：图标 + 文字为主，颜色为辅（R27.9）。 */
 .banner-degraded {
-  background: #fff4e5;
-  color: #7a4a00;
-  border-bottom-color: #b26a00;
+  background: var(--warning-soft);
+  border-bottom-color: var(--warning-border);
+  color: var(--warning);
 }
 
 .banner-budget {
-  background: #fde8e8;
-  color: #7a1a12;
-  border-bottom-color: #b42318;
-}
-
-/* 瓶颈洞察（任务 13.5）：关键机器 / 技能缺口的图标 + 文字标识（R27.9）。 */
-.badge-critical {
-  background: #fde8e8;
-  color: #7a1a12;
-  border-radius: 4px;
-  padding: 0 0.4rem;
-}
-
-.skill-gap-short {
-  color: #7a1a12;
-  font-weight: 600;
-}
-
-.skill-gap-ok {
-  color: #1a6b2f;
+  background: var(--danger-soft);
+  border-bottom-color: var(--danger-border);
+  color: var(--danger);
 }
 
 /* L4 自动应用通知（任务 13.4）：图标 + 文字为主，含一键回滚入口。 */
 .banner-auto-applied {
-  background: #e7f0ff;
-  color: #0b3a75;
-  border-bottom-color: #1f5fbf;
-  display: flex;
   align-items: center;
-  gap: 0.5rem;
+  background: var(--accent-soft);
+  border-bottom-color: #9cc3e8;
+  color: var(--accent);
+  display: flex;
+  gap: var(--space-2);
 }
 
 .banner-auto-applied button {
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 550;
   margin-left: auto;
+  padding: 0.3rem 0.7rem;
 }
 
-/* --- 登录弹窗（R23.12） --- */
+.banner-auto-applied button:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.banner-auto-applied button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* ============================================================= *
+ * 19. 登录弹窗（R23.12）— 独立于 .app-main 作用域，样式自包含
+ * ============================================================= */
 
 .login-modal {
   border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
-  max-width: 360px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  max-width: 380px;
   padding: 1.75rem;
   width: 90vw;
 }
 
 .login-modal::backdrop {
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(20, 23, 26, 0.45);
+  backdrop-filter: blur(1px);
 }
 
 .login-modal h2 {
-  font-size: 1.1rem;
+  font-size: 1.15rem;
   margin: 0 0 0.5rem;
 }
 
@@ -729,59 +1830,149 @@ body {
 }
 
 .login-modal-error {
-  background: #fff3f3;
-  border: 1px solid #f5c6c6;
-  border-radius: 4px;
-  color: #b91c1c;
+  background: var(--danger-soft);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-sm);
+  color: var(--danger);
   font-size: 0.875rem;
   margin: 0 0 1rem;
   padding: 0.5rem 0.75rem;
 }
 
 .login-modal-label {
+  color: var(--fg-soft);
   display: block;
   font-size: 0.875rem;
-  font-weight: 500;
+  font-weight: 550;
   margin-bottom: 0.35rem;
 }
 
 .login-modal-input {
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   display: block;
   font-size: 1rem;
-  padding: 0.5rem 0.75rem;
+  padding: 0.55rem 0.75rem;
   width: 100%;
   box-sizing: border-box;
 }
 
 .login-modal-input:focus-visible {
+  border-color: var(--accent);
   outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline-offset: 1px;
 }
 
 .login-modal-actions {
   display: flex;
   justify-content: flex-end;
-  margin-top: 1.25rem;
+  margin-top: 1.5rem;
 }
 
 .login-modal-btn-primary {
   background: var(--accent);
   border: 1px solid var(--accent);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: #fff;
   cursor: pointer;
+  font: inherit;
   font-size: 0.9rem;
-  padding: 0.45rem 1.1rem;
+  font-weight: 550;
+  padding: 0.5rem 1.2rem;
+}
+
+.login-modal-btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 .login-modal-btn-primary:disabled {
   cursor: not-allowed;
-  opacity: 0.6;
+  opacity: 0.55;
 }
 
 .login-modal-btn-primary:focus-visible {
   outline: 2px solid var(--fg);
   outline-offset: 2px;
+}
+
+/* ============================================================= *
+ * 20. 响应式断点
+ * ============================================================= */
+
+/* 平板及以下：两列布局收起为单列 */
+@media (max-width: 900px) {
+  .schedule-body,
+  .traces-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .compare-gantts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* 手机：进一步压缩留白，头部纵向堆叠 */
+@media (max-width: 640px) {
+  :root {
+    font-size: 15px;
+  }
+
+  .app-header,
+  .app-nav ul,
+  .app-main,
+  .banner {
+    padding-left: var(--space-4);
+    padding-right: var(--space-4);
+  }
+
+  .app-main {
+    padding-top: var(--space-4);
+    padding-bottom: var(--space-4);
+  }
+
+  .schedule-header,
+  .dashboard-header,
+  .approval-header,
+  .risks-header,
+  .insights-header,
+  .preferences-header,
+  .value-ledger-header,
+  .compare-header,
+  .traces-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .quote-form,
+  .whatif-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* 宽表格在窄屏可横向滚动，避免撑破布局 */
+  .value-ledger-kpis,
+  .value-ledger-cost,
+  .value-ledger-manual-steps,
+  .autonomy-decisions,
+  .insights-machines,
+  .insights-skills,
+  .compare-changes {
+    overflow-x: auto;
+  }
+
+  .app-main table {
+    min-width: 34rem;
+  }
+}
+
+/* 尊重「减少动效」偏好（无障碍） */
+@media (prefers-reduced-motion: reduce) {
+  .app-main > section {
+    animation: none;
+  }
+
+  * {
+    transition: none !important;
+  }
 }

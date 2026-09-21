@@ -389,7 +389,7 @@ class DanglingReference(_Frozen):
 
     def human_description(self) -> str:
         return (
-            f"{self.entity_type} {self.entity_id} 的 {self.field} 指向了不存在的 "
+            f"{self.field} of {self.entity_type} {self.entity_id} references a nonexistent "
             f"{self.missing_type} {self.missing_id}"
         )
 
@@ -412,8 +412,8 @@ class DataIntegrityError(Exception):
     def __init__(self, references: tuple[DanglingReference, ...]) -> None:
         self.references = references
         super().__init__(
-            f"输入数据存在 {len(references)} 处引用完整性错误："
-            + "；".join(reference.human_description() for reference in references)
+            f"The input data has {len(references)} referential-integrity error(s): "
+            + "; ".join(reference.human_description() for reference in references)
         )
 
     def details(self) -> dict[str, Any]:

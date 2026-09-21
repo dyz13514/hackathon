@@ -38,19 +38,19 @@ import {
 } from '../api/preferences';
 
 const KIND_LABEL: Record<PreferenceKind, string> = {
-  AVOID_MACHINE_FOR_ORDER: '订单避开机器',
-  AVOID_MACHINE_FOR_PRODUCT: '产品避开机器',
-  PREFER_WORKER_FOR_SKILL: '技能优先指派工人',
-  ADJUST_OBJECTIVE_WEIGHT: '调整目标权重',
+  AVOID_MACHINE_FOR_ORDER: 'Avoid machine for order',
+  AVOID_MACHINE_FOR_PRODUCT: 'Avoid machine for product',
+  PREFER_WORKER_FOR_SKILL: 'Prefer worker for skill',
+  ADJUST_OBJECTIVE_WEIGHT: 'Adjust objective weight',
 };
 
 const SOFT_WEIGHT_LABEL: Record<SoftWeightKey, string> = {
-  late_order_count: '迟交订单数',
-  total_tardiness_minutes: '总拖期分钟',
-  urgent_order_lateness: '加急订单迟交',
-  churn_ratio: '扰动比率',
-  machine_utilisation: '机器利用率',
-  total_changeover_minutes: '总换型分钟',
+  late_order_count: 'Late order count',
+  total_tardiness_minutes: 'Total tardiness minutes',
+  urgent_order_lateness: 'Urgent order lateness',
+  churn_ratio: 'Churn ratio',
+  machine_utilisation: 'Machine utilisation',
+  total_changeover_minutes: 'Total changeover minutes',
 };
 
 const KINDS = Object.keys(KIND_LABEL) as PreferenceKind[];
@@ -64,13 +64,13 @@ function kindLabel(kind: string): string {
 function describeForm(form: PreferenceForm): string {
   switch (form.kind) {
     case 'AVOID_MACHINE_FOR_ORDER':
-      return `订单 ${form.order_id} 避开机器 ${form.machine_id}（惩罚 ${form.weight_delta ?? 1}）`;
+      return `Order ${form.order_id} avoids machine ${form.machine_id} (penalty ${form.weight_delta ?? 1})`;
     case 'AVOID_MACHINE_FOR_PRODUCT':
-      return `产品 ${form.product_id} 避开机器 ${form.machine_id}（惩罚 ${form.weight_delta ?? 1}）`;
+      return `Product ${form.product_id} avoids machine ${form.machine_id} (penalty ${form.weight_delta ?? 1})`;
     case 'PREFER_WORKER_FOR_SKILL':
-      return `技能 ${form.skill} 优先指派工人 ${form.worker_id}（惩罚 ${form.weight_delta ?? 1}）`;
+      return `Skill ${form.skill} prefers worker ${form.worker_id} (penalty ${form.weight_delta ?? 1})`;
     case 'ADJUST_OBJECTIVE_WEIGHT':
-      return `目标「${SOFT_WEIGHT_LABEL[form.component]}」权重 ×${form.multiplier}`;
+      return `Objective “${SOFT_WEIGHT_LABEL[form.component]}” weight ×${form.multiplier}`;
   }
 }
 
@@ -156,8 +156,8 @@ export function Preferences() {
     } catch (err) {
       setError(
         err instanceof ApiError
-          ? `偏好规则不可用（${err.code}）：${err.message}`
-          : '偏好规则不可用：后端服务不可用。',
+          ? `Preferences unavailable (${err.code}): ${err.message}`
+          : 'Preferences unavailable: backend service unavailable.',
       );
     } finally {
       setLoading(false);
@@ -185,7 +185,7 @@ export function Preferences() {
           structured_form: buildForm(fields),
           source_decision_ids: sources,
         });
-        setNotice('规则已创建（未启用）。请在列表中点「启用」使其生效。');
+        setNotice('Rule created (disabled). Click “Enable” in the list to make it take effect.');
         setHumanText('');
         setSourceIds('');
         setFields(EMPTY_FIELDS);
@@ -193,8 +193,8 @@ export function Preferences() {
       } catch (err) {
         setError(
           err instanceof ApiError
-            ? `创建失败（${err.code}）：${err.message}`
-            : '创建失败：后端服务不可用。',
+            ? `Create failed (${err.code}): ${err.message}`
+            : 'Create failed: backend service unavailable.',
         );
       }
     },
@@ -214,10 +214,10 @@ export function Preferences() {
         await load();
       } catch (err) {
         if (err instanceof ApiError && err.code === 'PREFERENCE_RULE_LIMIT_REACHED') {
-          setError(`已达启用上限 ${maxEnabled} 条，请先停用一条既有规则再启用。`);
+          setError(`Enable limit of ${maxEnabled} reached; disable an existing rule before enabling another.`);
         } else {
           setError(
-            err instanceof ApiError ? `操作失败（${err.code}）：${err.message}` : '操作失败。',
+            err instanceof ApiError ? `Operation failed (${err.code}): ${err.message}` : 'Operation failed.',
           );
         }
       }
@@ -234,7 +234,7 @@ export function Preferences() {
         await load();
       } catch (err) {
         setError(
-          err instanceof ApiError ? `删除失败（${err.code}）：${err.message}` : '删除失败。',
+          err instanceof ApiError ? `Delete failed (${err.code}): ${err.message}` : 'Delete failed.',
         );
       }
     },
@@ -243,7 +243,7 @@ export function Preferences() {
 
   const handleEditText = useCallback(
     async (ruleId: string, currentText: string) => {
-      const next = window.prompt('编辑规则说明（human_text）', currentText);
+      const next = window.prompt('Edit rule description (human_text)', currentText);
       if (next == null || next.trim() === '' || next.trim() === currentText) {
         return;
       }
@@ -253,7 +253,7 @@ export function Preferences() {
         await load();
       } catch (err) {
         setError(
-          err instanceof ApiError ? `编辑失败（${err.code}）：${err.message}` : '编辑失败。',
+          err instanceof ApiError ? `Edit failed (${err.code}): ${err.message}` : 'Edit failed.',
         );
       }
     },
@@ -280,25 +280,25 @@ export function Preferences() {
       const result = await distilPreferences();
       setDistilInjection(result.injection_suspected);
       if (result.outcome === 'NO_EVIDENCE') {
-        setNotice('暂无可蒸馏的历史决策（需要先有带理由的拒绝/修改决策）。');
+        setNotice('No historical decisions available to distil yet (rejection/modification decisions with reasons are needed first).');
         setCandidates([]);
       } else if (result.outcome === 'LLM_UNAVAILABLE') {
-        setNotice('LLM 处于降级模式，历史决策蒸馏不可用。可继续手写规则。');
+        setNotice('The LLM is in degraded mode, so distilling from historical decisions is unavailable. You can keep writing rules manually.');
         setCandidates([]);
       } else {
         setCandidates([...result.candidates]);
         setNotice(
           result.candidates.length > 0
-            ? `蒸馏出 ${result.candidates.length} 条候选规则（均未启用）。请逐条确认后启用。`
-            : '未能从历史决策蒸馏出可用的候选规则。',
+            ? `Distilled ${result.candidates.length} candidate rule(s) (all disabled). Please confirm and enable each one.`
+            : 'Could not distil any usable candidate rules from historical decisions.',
         );
       }
       await load();
     } catch (err) {
       setError(
         err instanceof ApiError
-          ? `蒸馏失败（${err.code}）：${err.message}`
-          : '蒸馏失败：后端服务不可用。',
+          ? `Distillation failed (${err.code}): ${err.message}`
+          : 'Distillation failed: backend service unavailable.',
       );
     } finally {
       setDistilling(false);
@@ -307,43 +307,41 @@ export function Preferences() {
 
   const limitNotice = useMemo(() => {
     if (atLimit) {
-      return `已启用 ${enabledCount} / ${maxEnabled}（已达上限）。要启用新规则，请先停用一条既有规则。`;
+      return `${enabledCount} / ${maxEnabled} enabled (limit reached). To enable a new rule, disable an existing one first.`;
     }
-    return `已启用 ${enabledCount} / ${maxEnabled}。`;
+    return `${enabledCount} / ${maxEnabled} enabled.`;
   }, [atLimit, enabledCount, maxEnabled]);
 
   return (
     <section aria-labelledby="preferences-heading" className="preferences">
       <div className="preferences-header">
-        <h2 id="preferences-heading">偏好规则管理</h2>
+        <h2 id="preferences-heading">Preferences</h2>
         <button
           type="button"
           onClick={() => void handleDistil()}
           disabled={distilling}
           aria-busy={distilling}
-          aria-label="从历史决策蒸馏候选偏好规则"
+          aria-label="Distil candidate preference rules from historical decisions"
         >
-          {distilling ? '蒸馏中…' : '从历史决策蒸馏'}
+          {distilling ? 'Distilling…' : 'Distil from history'}
         </button>
         <button
           type="button"
           onClick={() => void load()}
           disabled={loading}
           aria-busy={loading}
-          aria-label="刷新偏好规则列表"
+          aria-label="Refresh preference rule list"
         >
-          {loading ? '加载中…' : '刷新'}
+          {loading ? 'Loading…' : 'Refresh'}
         </button>
       </div>
 
       <p role="status" className={atLimit ? 'preferences-limit is-at-limit' : 'preferences-limit'}>
-        {atLimit && <span aria-hidden="true">⛔ </span>}
         {limitNotice}
       </p>
 
       {error && (
         <p role="alert" className="preferences-error">
-          <span aria-hidden="true">⚠ </span>
           {error}
         </p>
       )}
@@ -356,15 +354,15 @@ export function Preferences() {
       {/* --- 任务 13.3 蒸馏候选确认区（候选均已落库但未启用，逐条确认后启用） --- */}
       {candidates !== null && candidates.length > 0 && (
         <section
-          aria-label="蒸馏候选确认"
+          aria-label="Distilled candidates confirmation"
           className="preferences-candidates"
           role="group"
         >
-          <h3>蒸馏候选（请逐条确认后启用）</h3>
+          <h3>Distilled candidates (confirm and enable each one)</h3>
           {distilInjection && (
             <p role="alert" className="preferences-injection-warning">
-              <span aria-hidden="true">⚠ </span>
-              部分来源决策的理由中检测到疑似提示注入；系统已作为数据处理并记入审计，候选一律未启用。
+              A suspected prompt injection was detected in some source-decision reasons; the system treated it
+              as data and recorded it for audit. All candidates remain disabled.
             </p>
           )}
           <ul className="distil-candidate-list">
@@ -373,31 +371,32 @@ export function Preferences() {
                 <span className="distil-candidate-text">{c.human_text}</span>
                 <span className="distil-candidate-form">{describeForm(c.structured_form)}</span>
                 <span className={c.enabled ? 'status status-on' : 'status status-off'}>
-                  {c.enabled ? '已启用' : '未启用'}
+                  {c.enabled ? 'Enabled' : 'Disabled'}
                 </span>
                 {c.low_evidence && (
-                  <span className="badge badge-low-evidence" title="来源决策少于 2 条">
-                    <span aria-hidden="true">⚠ </span>证据不足
+                  <span className="badge badge-low-evidence" title="Fewer than 2 source decisions">
+                    Low evidence
                   </span>
                 )}
                 <span className="distil-candidate-sources">
-                  来源：{c.source_decision_ids.length > 0 ? c.source_decision_ids.join('、') : '—'}
+                  Sources: {c.source_decision_ids.length > 0 ? c.source_decision_ids.join(', ') : '—'}
                 </span>
               </li>
             ))}
           </ul>
           <p className="field-hint">
-            候选已作为未启用规则加入下方列表。核对后在列表中点「启用」使其生效——蒸馏本身不会启用任何规则。
+            Candidates have been added to the list below as disabled rules. After reviewing, click “Enable” in
+            the list to make them take effect — distillation itself never enables any rule.
           </p>
         </section>
       )}
 
       {/* --- 新建规则表单（无「启用」勾选框：创建即未启用，R18.4） --- */}
       <section aria-labelledby="new-rule-heading" className="preferences-form">
-        <h3 id="new-rule-heading">新建规则</h3>
+        <h3 id="new-rule-heading">New rule</h3>
         <form onSubmit={(e) => void handleCreate(e)}>
           <div className="field">
-            <label htmlFor="rule-human-text">规则说明（human_text）</label>
+            <label htmlFor="rule-human-text">Rule description (human_text)</label>
             <input
               id="rule-human-text"
               type="text"
@@ -405,12 +404,12 @@ export function Preferences() {
               maxLength={200}
               value={humanText}
               onChange={(e) => setHumanText(e.target.value)}
-              placeholder="例如：ORD-007 不要排 CNC-03，那个客户投诉过表面处理"
+              placeholder="e.g. Don’t schedule ORD-007 on CNC-03 — that customer complained about the finish"
             />
           </div>
 
           <div className="field">
-            <label htmlFor="rule-kind">规则类型</label>
+            <label htmlFor="rule-kind">Rule type</label>
             <select
               id="rule-kind"
               value={fields.kind}
@@ -427,7 +426,7 @@ export function Preferences() {
           {fields.kind === 'AVOID_MACHINE_FOR_ORDER' && (
             <>
               <div className="field">
-                <label htmlFor="f-order-id">订单 ID</label>
+                <label htmlFor="f-order-id">Order ID</label>
                 <input
                   id="f-order-id"
                   type="text"
@@ -437,7 +436,7 @@ export function Preferences() {
                 />
               </div>
               <div className="field">
-                <label htmlFor="f-machine-id-o">机器 ID</label>
+                <label htmlFor="f-machine-id-o">Machine ID</label>
                 <input
                   id="f-machine-id-o"
                   type="text"
@@ -452,7 +451,7 @@ export function Preferences() {
           {fields.kind === 'AVOID_MACHINE_FOR_PRODUCT' && (
             <>
               <div className="field">
-                <label htmlFor="f-product-id">产品 ID</label>
+                <label htmlFor="f-product-id">Product ID</label>
                 <input
                   id="f-product-id"
                   type="text"
@@ -462,7 +461,7 @@ export function Preferences() {
                 />
               </div>
               <div className="field">
-                <label htmlFor="f-machine-id-p">机器 ID</label>
+                <label htmlFor="f-machine-id-p">Machine ID</label>
                 <input
                   id="f-machine-id-p"
                   type="text"
@@ -477,7 +476,7 @@ export function Preferences() {
           {fields.kind === 'PREFER_WORKER_FOR_SKILL' && (
             <>
               <div className="field">
-                <label htmlFor="f-skill">技能</label>
+                <label htmlFor="f-skill">Skill</label>
                 <input
                   id="f-skill"
                   type="text"
@@ -487,7 +486,7 @@ export function Preferences() {
                 />
               </div>
               <div className="field">
-                <label htmlFor="f-worker-id">工人 ID</label>
+                <label htmlFor="f-worker-id">Worker ID</label>
                 <input
                   id="f-worker-id"
                   type="text"
@@ -501,7 +500,7 @@ export function Preferences() {
 
           {fields.kind !== 'ADJUST_OBJECTIVE_WEIGHT' && (
             <div className="field">
-              <label htmlFor="f-weight-delta">惩罚权重（0–10，只能加惩罚）</label>
+              <label htmlFor="f-weight-delta">Penalty weight (0–10, penalties only)</label>
               <input
                 id="f-weight-delta"
                 type="number"
@@ -517,7 +516,7 @@ export function Preferences() {
           {fields.kind === 'ADJUST_OBJECTIVE_WEIGHT' && (
             <>
               <div className="field">
-                <label htmlFor="f-component">目标分量</label>
+                <label htmlFor="f-component">Objective component</label>
                 <select
                   id="f-component"
                   value={fields.component}
@@ -533,7 +532,7 @@ export function Preferences() {
                 </select>
               </div>
               <div className="field">
-                <label htmlFor="f-multiplier">权重倍数（0.5–2.0）</label>
+                <label htmlFor="f-multiplier">Weight multiplier (0.5–2.0)</label>
                 <input
                   id="f-multiplier"
                   type="number"
@@ -548,7 +547,7 @@ export function Preferences() {
           )}
 
           <div className="field">
-            <label htmlFor="f-source-ids">来源决策 ID（逗号分隔，可留空）</label>
+            <label htmlFor="f-source-ids">Source decision IDs (comma-separated, optional)</label>
             <input
               id="f-source-ids"
               type="text"
@@ -556,28 +555,28 @@ export function Preferences() {
               onChange={(e) => setSourceIds(e.target.value)}
               placeholder="DEC-xxxx, DEC-yyyy"
             />
-            <p className="field-hint">少于 2 条来源决策的规则会被标记为「证据不足」（R18.10）。</p>
+            <p className="field-hint">Rules with fewer than 2 source decisions are marked “Low evidence” (R18.10).</p>
           </div>
 
-          <button type="submit">创建规则（创建后需显式启用）</button>
+          <button type="submit">Create rule (must be enabled explicitly)</button>
         </form>
       </section>
 
       {/* --- 规则列表 --- */}
       <section aria-labelledby="rule-list-heading" className="preferences-list">
-        <h3 id="rule-list-heading">规则列表（{rules.length}）</h3>
+        <h3 id="rule-list-heading">Rule list ({rules.length})</h3>
         {rules.length === 0 ? (
-          <p>暂无偏好规则。用上方表单创建第一条。</p>
+          <p>No preference rules yet. Create the first one with the form above.</p>
         ) : (
           <table>
             <thead>
               <tr>
-                <th scope="col">说明</th>
-                <th scope="col">类型 / 参数</th>
-                <th scope="col">来源决策</th>
-                <th scope="col">创建时间</th>
-                <th scope="col">状态</th>
-                <th scope="col">操作</th>
+                <th scope="col">Description</th>
+                <th scope="col">Type / parameters</th>
+                <th scope="col">Source decisions</th>
+                <th scope="col">Created</th>
+                <th scope="col">Status</th>
+                <th scope="col">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -586,8 +585,8 @@ export function Preferences() {
                   <th scope="row">
                     {rule.human_text}
                     {rule.low_evidence && (
-                      <span className="badge badge-low-evidence" title="来源决策少于 2 条">
-                        <span aria-hidden="true">⚠ </span>证据不足
+                      <span className="badge badge-low-evidence" title="Fewer than 2 source decisions">
+                        Low evidence
                       </span>
                     )}
                   </th>
@@ -612,7 +611,7 @@ export function Preferences() {
                   <td>{new Date(rule.created_at).toLocaleString()}</td>
                   <td>
                     <span className={rule.enabled ? 'status status-on' : 'status status-off'}>
-                      {rule.enabled ? '已启用' : '未启用'}
+                      {rule.enabled ? 'Enabled' : 'Disabled'}
                     </span>
                   </td>
                   <td className="rule-actions">
@@ -620,37 +619,37 @@ export function Preferences() {
                       type="button"
                       onClick={() => void handleEnable(rule)}
                       disabled={!rule.enabled && atLimit}
-                      aria-label={rule.enabled ? `停用规则 ${rule.rule_id}` : `启用规则 ${rule.rule_id}`}
+                      aria-label={rule.enabled ? `Disable rule ${rule.rule_id}` : `Enable rule ${rule.rule_id}`}
                     >
-                      {rule.enabled ? '停用' : '启用'}
+                      {rule.enabled ? 'Disable' : 'Enable'}
                     </button>
                     <button
                       type="button"
                       onClick={() => void handleEditText(rule.rule_id, rule.human_text)}
-                      aria-label={`编辑规则 ${rule.rule_id}`}
+                      aria-label={`Edit rule ${rule.rule_id}`}
                     >
-                      编辑
+                      Edit
                     </button>
                     <button
                       type="button"
                       onClick={() => void handleDelete(rule.rule_id)}
-                      aria-label={`删除规则 ${rule.rule_id}`}
+                      aria-label={`Delete rule ${rule.rule_id}`}
                     >
-                      删除
+                      Delete
                     </button>
                     <button
                       type="button"
                       onClick={() => void handleAffected(rule.rule_id)}
-                      aria-label={`查看规则 ${rule.rule_id} 影响了哪些作业`}
+                      aria-label={`Show which jobs rule ${rule.rule_id} affects`}
                     >
-                      影响了哪些作业
+                      Affected jobs
                     </button>
                     {affected[rule.rule_id] !== undefined && (
                       <div className="affected-jobs" role="status">
                         {(affected[rule.rule_id] ?? []).length > 0 ? (
-                          <>受影响作业：{(affected[rule.rule_id] ?? []).join(', ')}</>
+                          <>Affected jobs: {(affected[rule.rule_id] ?? []).join(', ')}</>
                         ) : (
-                          <>当前生效计划中无受该规则影响的作业。</>
+                          <>No jobs in the current active plan are affected by this rule.</>
                         )}
                       </div>
                     )}

@@ -28,30 +28,45 @@ __all__ = ["NEXT_ACTION", "Narrative", "render_template_narrative"]
 #: 每类风险的「建议下一步动作」（R14.5 第 3 项）。确定性、面向车间可执行。
 NEXT_ACTION: dict[RiskType, str] = {
     RiskType.MATERIAL_RUNOUT_FORECAST: (
-        "尽快联系供应商确认到货，或调整受影响订单的排产顺序以延后该物料的消耗。"
+        "Contact the supplier to confirm delivery as soon as possible, or reorder the "
+        "affected orders to defer consumption of this material."
     ),
-    RiskType.ZERO_SLACK_ORDER: "复核该订单的交期与优先级，考虑提前排产或与客户协商交期。",
+    RiskType.ZERO_SLACK_ORDER: (
+        "Review the order's due date and priority; consider scheduling it earlier or "
+        "renegotiating the due date with the customer."
+    ),
     RiskType.BOTTLENECK_RESOURCE: (
-        "评估把部分作业改派到同类替代机器，或错峰安排以降低该机器的负载。"
+        "Consider reassigning some jobs to an equivalent alternate machine, or "
+        "stagger the schedule to reduce the load on this machine."
     ),
-    RiskType.OVERCOMMITTED_SHIFT: "为该工人减载或增派同技能工人，避免班次内工时超配导致延误。",
-    RiskType.SINGLE_POINT_OF_FAILURE_MACHINE: "识别或准备同能力替代机器，降低对该单点机器的依赖。",
+    RiskType.OVERCOMMITTED_SHIFT: (
+        "Reduce this worker's load or add a worker with the same skill to avoid "
+        "delays from overcommitting the shift."
+    ),
+    RiskType.SINGLE_POINT_OF_FAILURE_MACHINE: (
+        "Identify or prepare an alternate machine with the same capability to reduce "
+        "reliance on this single point of failure."
+    ),
 }
 
 #: 每类风险「风险来源」段的度量含义描述，使模板对不同风险读起来自然。
 _METRIC_LABEL: dict[RiskType, str] = {
-    RiskType.MATERIAL_RUNOUT_FORECAST: "预计在 {metric} 小时内降至 0",
-    RiskType.ZERO_SLACK_ORDER: "剩余 slack 仅 {metric} 分钟",
-    RiskType.BOTTLENECK_RESOURCE: "利用率达 {metric}",
-    RiskType.OVERCOMMITTED_SHIFT: "所需工时 {metric} 分钟超过可用工时 {threshold} 分钟",
-    RiskType.SINGLE_POINT_OF_FAILURE_MACHINE: "承担了 {metric} 的已排产作业且无替代机器",
+    RiskType.MATERIAL_RUNOUT_FORECAST: "is projected to reach 0 within {metric} hours",
+    RiskType.ZERO_SLACK_ORDER: "has only {metric} minutes of slack remaining",
+    RiskType.BOTTLENECK_RESOURCE: "utilization has reached {metric}",
+    RiskType.OVERCOMMITTED_SHIFT: (
+        "requires {metric} minutes of work, exceeding the {threshold} minutes available"
+    ),
+    RiskType.SINGLE_POINT_OF_FAILURE_MACHINE: (
+        "carries {metric} of the scheduled jobs with no alternate machine"
+    ),
 }
 
 _ENTITY_LABEL: dict[str, str] = {
-    "MATERIAL": "物料",
-    "ORDER": "订单",
-    "MACHINE": "机器",
-    "WORKER": "工人",
+    "MATERIAL": "Material",
+    "ORDER": "Order",
+    "MACHINE": "Machine",
+    "WORKER": "Worker",
 }
 
 
@@ -77,22 +92,22 @@ def _format_metric(finding: RiskFinding) -> str:
 
 
 def render_template_narrative(finding: RiskFinding) -> Narrative:
-    """把一条 `RiskFinding` 渲成三段式中文叙述（R14.5）。纯函数、无 LLM，`source=TEMPLATE`。
+    """把一条 `RiskFinding` 渲成三段式英文叙述（R14.5）。纯函数、无 LLM，`source=TEMPLATE`。
 
     只依赖 `finding` 自身的字段（度量/阈值/实体/受影响订单），因此同一发现必得同一叙述
     （与 R5.7 同一纪律，也便于回归断言）。受影响订单为空时省略第 2 段。
     """
     entity_label = _ENTITY_LABEL.get(finding.entity_type, finding.entity_type)
     source_part = (
-        f"{entity_label} {finding.entity_id} {_format_metric(finding)}"
-        f"（{finding.severity}）。"
+        f"{entity_label} {finding.entity_id} {_format_metric(finding)} "
+        f"({finding.severity})."
     )
 
     if finding.affected_order_ids:
-        affected_part = f" 受影响订单：{'、'.join(finding.affected_order_ids)}。"
+        affected_part = f" Affected orders: {', '.join(finding.affected_order_ids)}."
     else:
         affected_part = ""
 
-    action_part = f" 建议：{NEXT_ACTION[finding.risk_type]}"
+    action_part = f" Recommendation: {NEXT_ACTION[finding.risk_type]}"
 
     return Narrative(text=source_part + affected_part + action_part, source="TEMPLATE")

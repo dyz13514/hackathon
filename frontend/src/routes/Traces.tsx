@@ -41,8 +41,8 @@ function formatTimestamp(iso: string | null): string {
 
 function errorText(err: unknown, prefix: string): string {
   return err instanceof ApiError
-    ? `${prefix}（${err.code}）：${err.message}`
-    : `${prefix}：网络或服务不可用。`;
+    ? `${prefix} (${err.code}): ${err.message}`
+    : `${prefix}: network or service unavailable.`;
 }
 
 function StepView({ step }: { step: TraceStep }) {
@@ -51,10 +51,10 @@ function StepView({ step }: { step: TraceStep }) {
       <p className="trace-step-head">
         <strong>#{step.step_index}</strong> · <span className="trace-step-kind">{step.step_kind}</span>
         {' · '}
-        {step.duration_ms} ms · token {step.input_tokens}/{step.output_tokens}
+        {step.duration_ms} ms · tokens {step.input_tokens}/{step.output_tokens}
       </p>
       {step.decision_reason && (
-        <p className="trace-step-reason">决策摘要：{step.decision_reason}</p>
+        <p className="trace-step-reason">Decision summary: {step.decision_reason}</p>
       )}
       {step.tool_calls.length > 0 && (
         <ul className="trace-tool-calls">
@@ -64,10 +64,10 @@ function StepView({ step }: { step: TraceStep }) {
               {' · '}
               <span className={`trace-outcome trace-outcome-${call.outcome}`}>{call.outcome}</span>
               {' · '}
-              输入 {call.args_digest} · 输出 {call.result_summary}
+              in {call.args_digest} · out {call.result_summary}
               {' · '}
-              {call.duration_ms} ms · token {call.result_tokens}
-              {call.truncated && <span className="badge badge-truncated"> 已截断</span>}
+              {call.duration_ms} ms · tokens {call.result_tokens}
+              {call.truncated && <span className="badge badge-truncated"> truncated</span>}
             </li>
           ))}
         </ul>
@@ -81,28 +81,28 @@ function TraceDetailView({ detail }: { detail: TraceDetail }) {
     <section aria-labelledby="trace-detail-heading" className="trace-detail">
       <h3 id="trace-detail-heading">
         {detail.trace_id}
-        <span className={`badge badge-mode badge-mode-${detail.mode}`} aria-label={`执行形态：${detail.mode}`}>
+        <span className={`badge badge-mode badge-mode-${detail.mode}`} aria-label={`Execution mode: ${detail.mode}`}>
           {' '}
           mode = {detail.mode}
         </span>
       </h3>
       <p className="trace-detail-meta">
-        意图 {detail.kind} · 触发 {detail.trigger_source}
-        {detail.agent && <> · Agent {detail.agent}</>} · 结果{' '}
+        Intent {detail.kind} · trigger {detail.trigger_source}
+        {detail.agent && <> · agent {detail.agent}</>} · outcome{' '}
         <span className={`trace-outcome trace-outcome-${detail.outcome ?? 'NONE'}`}>
-          {detail.outcome ?? '进行中'}
+          {detail.outcome ?? 'in progress'}
         </span>
       </p>
       <p className="trace-detail-meta">
-        起 {formatTimestamp(detail.started_at)} · 止 {formatTimestamp(detail.ended_at)} · 步数{' '}
-        {detail.step_count} · token {detail.total_input_tokens}/{detail.total_output_tokens} · 估算 USD{' '}
+        Start {formatTimestamp(detail.started_at)} · end {formatTimestamp(detail.ended_at)} · steps{' '}
+        {detail.step_count} · tokens {detail.total_input_tokens}/{detail.total_output_tokens} · est. USD{' '}
         {detail.estimated_usd.toFixed(6)}
-        {detail.result_ref && <> · 结果引用 {detail.result_ref}</>}
+        {detail.result_ref && <> · result ref {detail.result_ref}</>}
       </p>
 
-      <h4>逐步（{detail.steps.length}）</h4>
+      <h4>Steps ({detail.steps.length})</h4>
       {detail.steps.length === 0 ? (
-        <p>本次运行未记录步骤。</p>
+        <p>No steps recorded for this run.</p>
       ) : (
         <ol className="trace-steps">
           {detail.steps.map((step) => (
@@ -113,13 +113,13 @@ function TraceDetailView({ detail }: { detail: TraceDetail }) {
 
       {detail.unassigned_tool_calls.length > 0 && (
         <>
-          <h4>未关联到步骤的工具调用（{detail.unassigned_tool_calls.length}）</h4>
+          <h4>Tool calls not linked to a step ({detail.unassigned_tool_calls.length})</h4>
           <ul className="trace-tool-calls">
             {detail.unassigned_tool_calls.map((call) => (
               <li key={call.call_id} className="trace-tool-call">
                 <span className="trace-tool-name">{call.tool_name}</span> ·{' '}
                 <span className={`trace-outcome trace-outcome-${call.outcome}`}>{call.outcome}</span> ·
-                输入 {call.args_digest} · 输出 {call.result_summary} · {call.duration_ms} ms
+                in {call.args_digest} · out {call.result_summary} · {call.duration_ms} ms
               </li>
             ))}
           </ul>
@@ -149,7 +149,7 @@ export function Traces() {
       });
       setTraces(rows);
     } catch (err) {
-      setListError(errorText(err, 'Trace 列表加载失败'));
+      setListError(errorText(err, 'Failed to load trace list'));
     } finally {
       setLoading(false);
     }
@@ -165,19 +165,19 @@ export function Traces() {
       setSelected(await getTrace(traceId));
     } catch (err) {
       setSelected(null);
-      setDetailError(errorText(err, 'Trace 详情加载失败'));
+      setDetailError(errorText(err, 'Failed to load trace detail'));
     }
   }, []);
 
   return (
     <section aria-labelledby="traces-heading" className="traces">
       <div className="traces-header">
-        <h2 id="traces-heading">Trace 查看器</h2>
+        <h2 id="traces-heading">Trace Viewer</h2>
         <div className="traces-filters">
           <label>
             Agent
             <select value={agent} onChange={(e) => setAgent(e.target.value)}>
-              <option value="">全部</option>
+              <option value="">All</option>
               {AGENTS.map((a) => (
                 <option key={a} value={a}>
                   {a}
@@ -186,9 +186,9 @@ export function Traces() {
             </select>
           </label>
           <label>
-            触发类型
+            Trigger type
             <select value={triggerSource} onChange={(e) => setTriggerSource(e.target.value)}>
-              <option value="">全部</option>
+              <option value="">All</option>
               {TRIGGER_SOURCES.map((t) => (
                 <option key={t} value={t}>
                   {t}
@@ -201,9 +201,9 @@ export function Traces() {
             onClick={() => void loadList()}
             disabled={loading}
             aria-busy={loading}
-            aria-label="刷新 Trace 列表"
+            aria-label="Refresh trace list"
           >
-            {loading ? '加载中…' : '刷新'}
+            {loading ? 'Loading…' : 'Refresh'}
           </button>
         </div>
       </div>
@@ -216,9 +216,9 @@ export function Traces() {
 
       <div className="traces-body">
         <section aria-labelledby="traces-list-heading" className="traces-list">
-          <h3 id="traces-list-heading">运行列表（{traces.length}）</h3>
+          <h3 id="traces-list-heading">Runs ({traces.length})</h3>
           {traces.length === 0 && !listError ? (
-            <p className="traces-empty">尚无 Trace。生成计划或运行编排后，这里会出现记录。</p>
+            <p className="traces-empty">No traces yet. Records appear here after you generate a plan or run orchestration.</p>
           ) : (
             <ul>
               {traces.map((trace) => (
@@ -231,16 +231,16 @@ export function Traces() {
                         : 'trace-list-item'
                     }
                     onClick={() => void onSelect(trace.trace_id)}
-                    aria-label={`查看 Trace ${trace.trace_id}`}
+                    aria-label={`View trace ${trace.trace_id}`}
                   >
                     <span className="trace-list-id">{trace.trace_id}</span>
                     <span className={`badge badge-mode badge-mode-${trace.mode}`}>{trace.mode}</span>
                     <span className="trace-list-kind">{trace.kind}</span>
                     <span className={`trace-outcome trace-outcome-${trace.outcome ?? 'NONE'}`}>
-                      {trace.outcome ?? '进行中'}
+                      {trace.outcome ?? 'in progress'}
                     </span>
                     <span className="trace-list-meta">
-                      {trace.step_count} 步 · {formatTimestamp(trace.started_at)}
+                      {trace.step_count} steps · {formatTimestamp(trace.started_at)}
                     </span>
                   </button>
                 </li>
@@ -258,7 +258,7 @@ export function Traces() {
           {selected ? (
             <TraceDetailView detail={selected} />
           ) : (
-            !detailError && <p className="traces-empty">从左侧选择一条运行以查看逐步详情。</p>
+            !detailError && <p className="traces-empty">Select a run on the left to view its step-by-step detail.</p>
           )}
         </div>
       </div>

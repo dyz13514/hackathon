@@ -293,7 +293,7 @@ class Orchestrator:
                     trace,
                     step_kind="GUARDRAIL",
                     outcome="TOKEN_BUDGET_EXCEEDED",
-                    detail="预算耗尽，返回已完成的确定性结果（R25.3）",
+                    detail="Budget exhausted; returning the completed deterministic result (R25.3)",
                 )
                 trace.outcome = "TOKEN_BUDGET_EXCEEDED"
                 return OrchestratorResult(
@@ -345,7 +345,7 @@ class Orchestrator:
             trace,
             step_kind="GUARDRAIL",
             outcome="MAX_STEPS_EXCEEDED",
-            detail=f"step 达上限 {max_steps}（R21.6）",
+            detail=f"step limit reached {max_steps} (R21.6)",
         )
         trace.outcome = "MAX_STEPS_EXCEEDED"
         return OrchestratorResult(
@@ -504,7 +504,7 @@ class Orchestrator:
                 terminal_outcome="VALIDATION_FAILED",
             )
         self._tracer.record_step(
-            trace, step_kind="GUARDRAIL", outcome="OK", detail="final 通过契约校验"
+            trace, step_kind="GUARDRAIL", outcome="OK", detail="final passed contract validation"
         )
         return _StepOutcome(observation=_EMPTY_OBS, is_error=False, final=validated)
 

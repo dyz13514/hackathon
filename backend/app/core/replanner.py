@@ -547,7 +547,7 @@ def _append_locked_infeasible(
                 blocking_reason=LOCKED_JOB_INFEASIBLE,
                 unblock_suggestion={
                     "locked_job_id": sj.job_id if sj.job_id in locked_set else None,
-                    "reason": "作业被锁定且受本次扰动影响或已不可行，等待规划员解锁后重排",
+                    "reason": "Job is locked and affected by this disruption or already infeasible; awaiting planner unlock before rescheduling",
                     "awaiting_unlock": True,
                 },
             )

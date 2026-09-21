@@ -50,20 +50,20 @@ const PROPOSAL: ProposalResponse = {
       },
       {
         target_field: 'name',
-        source_column: '名称',
+        source_column: 'Name',
         confidence: 0.5,
-        sample_values: ['钢板'],
+        sample_values: ['Steel plate'],
         status: 'NEEDS_CONFIRMATION',
       },
     ],
-    missing_required_fields: [{ target_field: 'quantity_available', reason: '未找到源列' }],
+    missing_required_fields: [{ target_field: 'quantity_available', reason: 'No source column found' }],
     normalisations: [
       {
         source_column: 'unit',
         kind: 'UNIT_CONVERSION',
         detected_pattern: 'UNIT',
         conversion_factor: 12,
-        sample_before: ['箱'],
+        sample_before: ['box'],
         sample_after: ['12'],
       },
     ],
@@ -92,18 +92,18 @@ describe('Import 视图', () => {
     vi.mocked(getProposal).mockResolvedValue(PROPOSAL);
     render(<Import />);
 
-    fireEvent.change(screen.getByLabelText('选择要导入的表格文件'), {
+    fireEvent.change(screen.getByLabelText('Choose a spreadsheet file to import'), {
       target: { files: [fileOf('materials.csv')] },
     });
 
-    expect(await screen.findByRole('heading', { name: /列映射/ })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /Column mapping/ })).toBeInTheDocument();
     expect(screen.getAllByText('material_id').length).toBeGreaterThanOrEqual(1);
     // 待确认状态可见（R2.7）
-    expect(screen.getAllByText('待确认').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Needs confirmation').length).toBeGreaterThanOrEqual(1);
     // 缺失必填（R2）
-    expect(screen.getByRole('heading', { name: /缺失的必填字段/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Missing required fields/ })).toBeInTheDocument();
     // 归一化换算系数（R2.5）
-    expect(screen.getByText(/换算系数 12/)).toBeInTheDocument();
+    expect(screen.getByText(/conversion factor 12/)).toBeInTheDocument();
   });
 
   it('确认并导入触发 confirm 并显示批次（R2.9/R3.2）', async () => {
@@ -113,14 +113,14 @@ describe('Import 视图', () => {
     const commit: CommitResult = { batch_id: 'BATCH-9', entity_type: 'MATERIAL', imported_row_count: 2 };
     vi.mocked(confirmImport).mockResolvedValue(commit);
     render(<Import />);
-    fireEvent.change(screen.getByLabelText('选择要导入的表格文件'), {
+    fireEvent.change(screen.getByLabelText('Choose a spreadsheet file to import'), {
       target: { files: [fileOf('m.csv')] },
     });
-    await screen.findByRole('heading', { name: /列映射/ });
+    await screen.findByRole('heading', { name: /Column mapping/ });
 
-    fireEvent.click(screen.getByRole('button', { name: /确认映射并落库/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Confirm mapping and import/ }));
     await waitFor(() => expect(confirmImport).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText(/已导入为批次 BATCH-9/)).toBeInTheDocument();
+    expect(await screen.findByText(/Imported as batch BATCH-9/)).toBeInTheDocument();
   });
 
   it('重复文件提示上次导入（R3.6）', async () => {
@@ -132,10 +132,10 @@ describe('Import 视图', () => {
     });
     vi.mocked(getProposal).mockResolvedValue(PROPOSAL);
     render(<Import />);
-    fireEvent.change(screen.getByLabelText('选择要导入的表格文件'), {
+    fireEvent.change(screen.getByLabelText('Choose a spreadsheet file to import'), {
       target: { files: [fileOf('dup.csv')] },
     });
-    expect(await screen.findByText(/此前已导入（批次 BATCH-old/)).toBeInTheDocument();
+    expect(await screen.findByText(/imported before \(batch BATCH-old/)).toBeInTheDocument();
   });
 
   it('批次列表支持回滚（R3.4）', async () => {
@@ -153,9 +153,9 @@ describe('Import 视图', () => {
     });
     vi.mocked(revertImport).mockResolvedValue({ batch_id: 'BATCH-1', reverted_row_count: 3 });
     render(<Import />);
-    await screen.findByRole('heading', { name: /导入批次/ });
+    await screen.findByRole('heading', { name: /Import batches/ });
 
-    fireEvent.click(await screen.findByRole('button', { name: /回滚批次 BATCH-1/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Revert batch BATCH-1/ }));
     await waitFor(() => expect(revertImport).toHaveBeenCalledWith('BATCH-1'));
   });
 
@@ -163,7 +163,7 @@ describe('Import 视图', () => {
     vi.mocked(listImports).mockResolvedValue({ batches: [] });
     vi.mocked(uploadImport).mockRejectedValue(new Error('boom'));
     render(<Import />);
-    fireEvent.change(screen.getByLabelText('选择要导入的表格文件'), {
+    fireEvent.change(screen.getByLabelText('Choose a spreadsheet file to import'), {
       target: { files: [fileOf('bad.csv')] },
     });
     expect(await screen.findByRole('alert')).toBeInTheDocument();
@@ -172,13 +172,13 @@ describe('Import 视图', () => {
   it('无批次时显示空态', async () => {
     vi.mocked(listImports).mockResolvedValue({ batches: [] });
     render(<Import />);
-    expect(await screen.findByText(/暂无导入批次/)).toBeInTheDocument();
+    expect(await screen.findByText(/No import batches yet/)).toBeInTheDocument();
   });
 
   it('无严重可访问性违规（axe-core）', async () => {
     vi.mocked(listImports).mockResolvedValue({ batches: [] });
     const { container } = render(<Import />);
-    await screen.findByRole('heading', { name: /导入批次/ });
+    await screen.findByRole('heading', { name: /Import batches/ });
     const results = await axe.run(container, { rules: { 'color-contrast': { enabled: false } } });
     const serious = results.violations.filter(
       (v) => v.impact === 'serious' || v.impact === 'critical',

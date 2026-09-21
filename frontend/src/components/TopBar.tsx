@@ -82,8 +82,8 @@ export function TopBar() {
       } catch (err) {
         setRevertError(
           err instanceof ApiError
-            ? `回滚失败（${err.code}）：${err.message}`
-            : '回滚失败：后端服务不可用。',
+            ? `Rollback failed (${err.code}): ${err.message}`
+            : 'Rollback failed: backend service unavailable.',
         );
       } finally {
         setRevertBusy(null);
@@ -104,18 +104,17 @@ export function TopBar() {
     <div className="app-banners">
       {degraded && (
         <div role="alert" className="banner banner-degraded">
-          <span aria-hidden="true">⚠ </span>
-          <strong>降级模式（DETERMINISTIC_ONLY）</strong>
-          ：LLM 路径已旁路，计划生成、校验、审批、重排、风险扫描、What-if、价值台账与偏好规则照常；
-          仅电子表格 LLM 列映射不可用，请改用手工列映射。
+          <strong>Degraded mode (DETERMINISTIC_ONLY)</strong>
+          : LLM paths are bypassed. Plan generation, validation, approval, replanning, risk scanning,
+          What-if, value ledger and preference rules all continue as usual; only LLM-based spreadsheet
+          column mapping is unavailable — please use manual column mapping instead.
         </div>
       )}
       {budgetWarning && health !== null && (
         <div role="status" className="banner banner-budget">
-          <span aria-hidden="true">💰 </span>
-          <strong>预算告警</strong>
-          ：累计估算成本 ≈ USD {health.project_usd_spent.toFixed(2)}，已达上限 USD{' '}
-          {PROJECT_USD_CEILING} 的 80% 以上。
+          <strong>Budget warning</strong>
+          : cumulative estimated cost ≈ USD {health.project_usd_spent.toFixed(2)}, now above 80% of the
+          USD {PROJECT_USD_CEILING} ceiling.
         </div>
       )}
       {activeChanges.map((change) => (
@@ -125,22 +124,21 @@ export function TopBar() {
           className="banner banner-auto-applied"
           data-change-id={change.change_id}
         >
-          <span aria-hidden="true">🤖 </span>
-          <strong>自动应用</strong>
-          ：系统已自动应用一个小影响变更（{change.plan_id_before} → {change.plan_id_after}）。
+          <strong>Auto-applied</strong>
+          : the system automatically applied a low-impact change ({change.plan_id_before} →{' '}
+          {change.plan_id_after}).
           <button
             type="button"
             onClick={() => void onRevert(change.change_id)}
             disabled={revertBusy === change.change_id}
-            aria-label={`一键回滚自动应用变更 ${change.change_id}`}
+            aria-label={`Roll back auto-applied change ${change.change_id}`}
           >
-            {revertBusy === change.change_id ? '回滚中…' : '一键回滚'}
+            {revertBusy === change.change_id ? 'Rolling back…' : 'Roll back'}
           </button>
         </div>
       ))}
       {revertError && (
         <div role="alert" className="banner banner-degraded">
-          <span aria-hidden="true">⚠ </span>
           {revertError}
         </div>
       )}

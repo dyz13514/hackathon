@@ -94,7 +94,7 @@ def main(argv: list[str] | None = None) -> int:
         log_event(
             logger,
             "SEED_SKIPPED",
-            message="库中已有演示数据，未做写入（加 --force 可强制重铺）",
+            message="Demo data already exists in the database; nothing written (use --force to re-seed)",
             already_present=True,
         )
         return EXIT_OK
@@ -103,7 +103,7 @@ def main(argv: list[str] | None = None) -> int:
     log_event(
         logger,
         "SEED_APPLIED",
-        message="演示数据集已就位",
+        message="Demo dataset is in place",
         forced=bool(args.force),
         anchor=report.anchor.isoformat(),
         input_snapshot_version=report.input_snapshot_version,

@@ -46,14 +46,14 @@ export function Quote() {
         );
       } catch (err) {
         if (err instanceof ApiError && err.code === 'NO_ACTIVE_PLAN') {
-          setError('当前没有 ACTIVE 计划。请先生成并批准一个计划后再报价。');
+          setError('There is no ACTIVE plan. Generate and approve a plan before requesting a quote.');
         } else if (err instanceof ApiError && err.code === 'SCENARIO_INVALID_MUTATION') {
-          setError(`无法报价：${err.message}`);
+          setError(`Cannot quote: ${err.message}`);
         } else {
           setError(
             err instanceof ApiError
-              ? `报价失败（${err.code}）：${err.message}`
-              : '报价失败：后端服务不可用。',
+              ? `Quote failed (${err.code}): ${err.message}`
+              : 'Quote failed: backend service unavailable.',
           );
         }
       } finally {
@@ -65,26 +65,27 @@ export function Quote() {
 
   return (
     <section aria-labelledby="quote-heading" className="quote">
-      <h2 id="quote-heading">可承诺交期报价</h2>
+      <h2 id="quote-heading">Promise-date quote</h2>
       <p className="quote-hint">
-        输入产品、数量与期望交期，系统在只读沙箱里模拟把这笔询价排进当前计划，给出最早可承诺完工日
-        与对现有订单的影响。报价不会改动任何生产数据或计划。
+        Enter a product, quantity and desired due date. The system simulates fitting this inquiry into the
+        current plan inside a read-only sandbox and returns the earliest committable completion date and the
+        impact on existing orders. Quoting does not modify any production data or plan.
       </p>
 
       <form onSubmit={(e) => void onSubmit(e)} className="quote-form">
         <div className="field">
-          <label htmlFor="quote-product">产品 ID</label>
+          <label htmlFor="quote-product">Product ID</label>
           <input
             id="quote-product"
             type="text"
             required
             value={productId}
             onChange={(e) => setProductId(e.target.value)}
-            placeholder="例如 PRD-BRACKET"
+            placeholder="e.g. PRD-BRACKET"
           />
         </div>
         <div className="field">
-          <label htmlFor="quote-quantity">数量</label>
+          <label htmlFor="quote-quantity">Quantity</label>
           <input
             id="quote-quantity"
             type="number"
@@ -96,7 +97,7 @@ export function Quote() {
           />
         </div>
         <div className="field">
-          <label htmlFor="quote-due">期望交期</label>
+          <label htmlFor="quote-due">Desired due date</label>
           <input
             id="quote-due"
             type="datetime-local"
@@ -105,53 +106,50 @@ export function Quote() {
             onChange={(e) => setDesiredDue(e.target.value)}
           />
         </div>
-        <button type="submit" disabled={busy} aria-label="计算可承诺交期">
-          {busy ? '计算中…' : '计算可承诺交期'}
+        <button type="submit" disabled={busy} aria-label="Calculate promise date">
+          {busy ? 'Calculating…' : 'Calculate promise date'}
         </button>
       </form>
 
       {error && (
         <p role="alert" className="quote-error">
-          <span aria-hidden="true">⚠ </span>
           {error}
         </p>
       )}
 
       {result && (
         <section aria-labelledby="quote-result-heading" className="quote-result" role="status">
-          <h3 id="quote-result-heading">报价结果</h3>
+          <h3 id="quote-result-heading">Quote result</h3>
           {!result.feasible ? (
             <p className="quote-infeasible">
-              <span aria-hidden="true">⛔ </span>
-              这笔询价在当前产能下**无法排入**。{result.constraint_reason}
+              This inquiry <strong>cannot be scheduled</strong> under current capacity. {result.constraint_reason}
             </p>
           ) : result.desired_date_met ? (
             <p className="quote-ok">
-              <span aria-hidden="true">✅ </span>
-              可满足期望交期。最早可承诺完工时刻：<strong>{fmt(result.earliest_completion)}</strong>
+              Desired due date can be met. Earliest committable completion:{' '}
+              <strong>{fmt(result.earliest_completion)}</strong>
             </p>
           ) : (
             <p className="quote-late">
-              <span aria-hidden="true">⚠ </span>
-              期望交期无法满足。最早可行完工时刻：
+              Desired due date cannot be met. Earliest feasible completion:{' '}
               <strong>{fmt(result.earliest_completion)}</strong>
-              {result.constraint_reason && <span>（{result.constraint_reason}）</span>}
+              {result.constraint_reason && <span> ({result.constraint_reason})</span>}
             </p>
           )}
           <ul className="quote-impact">
             <li>
-              被推迟的既有订单：
+              Existing orders deferred:{' '}
               {result.deferred_order_ids.length === 0
-                ? '无'
-                : result.deferred_order_ids.join('、')}
+                ? 'none'
+                : result.deferred_order_ids.join(', ')}
             </li>
             <li>
-              总拖期变化：{result.total_tardiness_delta_minutes} 分钟
+              Total tardiness change: {result.total_tardiness_delta_minutes} min
               {result.total_tardiness_delta_minutes > 0
-                ? '（变差）'
+                ? ' (worse)'
                 : result.total_tardiness_delta_minutes < 0
-                  ? '（改善）'
-                  : '（不变）'}
+                  ? ' (better)'
+                  : ' (unchanged)'}
             </li>
           </ul>
         </section>

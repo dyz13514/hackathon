@@ -50,13 +50,13 @@ export function App() {
     <div className="app-shell">
       <LoginModal open={loginOpen} onSuccess={handleLoginSuccess} />
       <header className="app-header">
-        <h1>AI 生产排产助手</h1>
+        <h1>AI Production Planning Assistant</h1>
       </header>
 
       {/* 全局降级模式横幅 + 预算告警（任务 11.6，R25.8/R25.9/R25.4），跨所有视图可见。 */}
       <TopBar />
 
-      <nav className="app-nav" aria-label="主导航">
+      <nav className="app-nav" aria-label="Main navigation">
         <ul>
           {ROUTES.filter((route) => route.implemented).map((route) => (
             <li key={route.path}>

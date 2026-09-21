@@ -53,53 +53,53 @@ describe('Insights 视图', () => {
   it('渲染每台机器的利用率、作业数、订单价值占比与 +20% 拖期变化（R15.1/R15.2）', async () => {
     vi.mocked(getBottlenecks).mockResolvedValue(INSIGHTS);
     render(<Insights />);
-    await screen.findByRole('heading', { name: /机器产能/ });
+    await screen.findByRole('heading', { name: /Machine capacity/ });
 
     const row = screen.getByRole('row', { name: /CNC-01/ });
     expect(row).toHaveTextContent('92.0%'); // 利用率
     expect(row).toHaveTextContent('75.0%'); // 订单价值占比
     // +20% 工时改善 30 分钟 → 显示「改善」。
-    expect(row).toHaveTextContent(/-30（改善）/);
+    expect(row).toHaveTextContent(/-30 \(better\)/);
   });
 
   it('关键机器带「关键」标识，非关键显示「有替代」（R15.3）', async () => {
     vi.mocked(getBottlenecks).mockResolvedValue(INSIGHTS);
     const { container } = render(<Insights />);
-    await screen.findByRole('heading', { name: /机器产能/ });
+    await screen.findByRole('heading', { name: /Machine capacity/ });
     // 关键机器行有 badge-critical 徽章；非关键行显示「有替代」。
     expect(container.querySelector('.badge-critical')).not.toBeNull();
-    expect(screen.getByText(/有替代/)).toBeInTheDocument();
+    expect(screen.getByText(/Has substitute/)).toBeInTheDocument();
   });
 
   it('渲染技能缺口，供不应求显示「缺」，富余显示「富余」（R15.4）', async () => {
     vi.mocked(getBottlenecks).mockResolvedValue(INSIGHTS);
     render(<Insights />);
-    await screen.findByRole('heading', { name: /技能缺口/ });
-    expect(screen.getByText(/缺 120/)).toBeInTheDocument();
-    expect(screen.getByText(/富余 300/)).toBeInTheDocument();
+    await screen.findByRole('heading', { name: /Skill gaps/ });
+    expect(screen.getByText(/short 120/)).toBeInTheDocument();
+    expect(screen.getByText(/surplus 300/)).toBeInTheDocument();
   });
 
   it('无 ACTIVE 计划时显示明确提示（不空白）', async () => {
     vi.mocked(getBottlenecks).mockRejectedValue(
-      new ApiError(409, 'NO_ACTIVE_PLAN', '无活动计划'),
+      new ApiError(409, 'NO_ACTIVE_PLAN', 'No active plan'),
     );
     render(<Insights />);
     const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent(/没有 ACTIVE 计划/);
+    expect(alert).toHaveTextContent(/no ACTIVE plan/);
   });
 
   it('刷新按钮重新拉取', async () => {
     vi.mocked(getBottlenecks).mockResolvedValue(INSIGHTS);
     render(<Insights />);
-    await screen.findByRole('heading', { name: /机器产能/ });
-    fireEvent.click(screen.getByRole('button', { name: /刷新瓶颈洞察/ }));
+    await screen.findByRole('heading', { name: /Machine capacity/ });
+    fireEvent.click(screen.getByRole('button', { name: /Refresh insights/ }));
     await waitFor(() => expect(getBottlenecks).toHaveBeenCalledTimes(2));
   });
 
   it('无严重可访问性违规（axe-core）', async () => {
     vi.mocked(getBottlenecks).mockResolvedValue(INSIGHTS);
     const { container } = render(<Insights />);
-    await screen.findByRole('heading', { name: /机器产能/ });
+    await screen.findByRole('heading', { name: /Machine capacity/ });
     const results = await axe.run(container, {
       rules: { 'color-contrast': { enabled: false } },
     });

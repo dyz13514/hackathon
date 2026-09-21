@@ -442,7 +442,7 @@ def test_expand_rejects_more_than_three_operations() -> None:
     )
     with pytest.raises(InvalidRoutingError) as exc:
         expand(_order("ORD-01"), product)
-    assert "最多 3 道工序" in exc.value.detail
+    assert "at most 3 operations" in exc.value.detail
 
 
 def test_material_ready_time_material_missing_from_snapshot() -> None:

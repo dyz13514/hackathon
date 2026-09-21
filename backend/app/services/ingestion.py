@@ -135,7 +135,7 @@ def propose_mapping(parsed: ParsedFile, *, entity_type_hint: str | None = None) 
         col_idx = _match_column(target, header_norm)
         if col_idx is None:
             if target in required:
-                missing.append({"target_field": target, "reason": "未找到匹配的源列"})
+                missing.append({"target_field": target, "reason": "no matching source column found"})
             continue
         confidence = 0.95
         samples = _column_samples(parsed, col_idx)
@@ -213,7 +213,7 @@ def _propose_normalisations(parsed: ParsedFile, header_norm: list[str]) -> list[
                 after.append(dn.iso)
                 pattern = dn.detected_pattern
             except NormalisationError:
-                after.append("<解析失败>")
+                after.append("<parse failed>")
         out.append(
             {
                 "source_column": parsed.header[date_idx],
@@ -344,7 +344,7 @@ class AcceptedMapping:
         for fm in self.field_mappings:
             if fm.get("status") == "NEEDS_CONFIRMATION":
                 raise AcceptedMappingError(
-                    f"字段 {fm.get('target_field')} 仍为 NEEDS_CONFIRMATION，不能落库。"
+                    f"Field {fm.get('target_field')} is still NEEDS_CONFIRMATION; cannot persist."
                 )
         required = REQUIRED_FIELDS.get(self.entity_type, [])
         mapped = {
@@ -355,10 +355,10 @@ class AcceptedMapping:
         missing = [f for f in required if f not in mapped]
         if missing:
             raise AcceptedMappingError(
-                f"缺必填字段 {missing}（MISSING_REQUIRED_FIELD），不能落库。"
+                f"Missing required fields {missing} (MISSING_REQUIRED_FIELD); cannot persist."
             )
         if not self.unparsed_cells_resolved:
-            raise AcceptedMappingError("存在未处置的 unparsed_cells，不能落库。")
+            raise AcceptedMappingError("There are unresolved unparsed_cells; cannot persist.")
 
 
 @dataclass(frozen=True)

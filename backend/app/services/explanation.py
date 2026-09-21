@@ -98,8 +98,10 @@ EXPLANATION_MAX_TOKENS = 700
 #: **只写解释文本**，因此角色描述聚焦「把结构化载荷转成可读解释」，并重申不改数。
 _EXPLANATION_ROLE_BLOCK = (
     "[ROLE]\n"
-    "你是 Planning_Agent 的解释子任务。你的唯一职责是把下方结构化载荷转成一段面向"
-    "生产规划员的中文解释。你不排产、不选择工具、不做多步操作——只写解释文本。"
+    "You are the Planning_Agent's explanation subtask. Your only responsibility is to turn the "
+    "structured payload below into an English explanation for a production planner. You do not "
+    "schedule, do not select tools, and do not perform multi-step operations — you only write "
+    "the explanation text."
 )
 
 #: [NUMBERS]——解释路径专用，数值一致性的**提示词侧**约束（guardrail §2.7(d) 措施①）。
@@ -107,17 +109,20 @@ _EXPLANATION_ROLE_BLOCK = (
 #: `NUMBER_RE` 只识别阿拉伯数字，中文数词会导致每次都回退——把这条最常见的误报源在输入侧消除。
 _NUMBERS_BLOCK = (
     "[NUMBERS]\n"
-    "文中出现的每一个数字都必须逐字复制自下方载荷，不得换算、不得四舍五入、不得推算出"
-    "载荷里没有的新数字。一律使用阿拉伯数字（例如写 5，不要写“五”）。载荷里已给出"
-    "可读的换算形式（如 total_tardiness_human），需要时直接照抄。"
+    "Every number that appears in the text must be copied verbatim from the payload below; do "
+    "not convert, do not round, and do not derive new numbers absent from the payload. Always "
+    "use Arabic numerals (for example write 5, not \"five\"). The payload already provides "
+    "readable converted forms (such as total_tardiness_human); copy them directly when needed."
 )
 
 #: [OUTPUT]——解释路径专用。与 ReAct 路径不同：这里**不要求 JSON、不给工具 schema**，
 #: 只要求一段纯解释文本。这正是「不发送任何工具 schema」在输出侧的对应约束。
 _EXPLANATION_OUTPUT_BLOCK = (
     "[OUTPUT]\n"
-    "只输出解释文本本身，不要输出 JSON、不要输出推理链、不要复述载荷结构。"
-    "按“决策要点 / 与基线对比 / 假设与置信度”的顺序组织成通顺的中文段落。"
+    "Output only the explanation text itself; do not output JSON, do not output a reasoning "
+    "chain, and do not restate the payload structure. Organize it into fluent English "
+    "paragraphs in the order: Decision highlights / Comparison with baseline / Assumptions and "
+    "confidence."
 )
 
 

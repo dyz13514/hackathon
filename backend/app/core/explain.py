@@ -210,17 +210,17 @@ def derive_confidence(assumptions: tuple[Assumption, ...]) -> Confidence:
     if count == 0:
         return Confidence(
             level=ConfidenceLevel.HIGH,
-            basis="不依赖任何可能过期的输入。",
+            basis="Does not depend on any potentially stale input.",
         )
-    risks = "；".join(a.stale_risk for a in assumptions)
+    risks = "; ".join(a.stale_risk for a in assumptions)
     if count == 1:
         return Confidence(
             level=ConfidenceLevel.MEDIUM,
-            basis=f"依赖 1 项可能过期的输入：{risks}。",
+            basis=f"Depends on 1 potentially stale input: {risks}.",
         )
     return Confidence(
         level=ConfidenceLevel.LOW,
-        basis=f"依赖 {count} 项可能过期的输入：{risks}。",
+        basis=f"Depends on {count} potentially stale inputs: {risks}.",
     )
 
 
@@ -244,18 +244,18 @@ def default_plan_assumptions() -> tuple[Assumption, ...]:
     return (
         Assumption(
             kind="DELIVERY_ETA",
-            description="物料到货时间取自登记的预计到货 ETA。",
-            stale_risk="依赖尚未确认的到货 ETA",
+            description="Material arrival time is taken from the registered estimated delivery ETA.",
+            stale_risk="relies on an unconfirmed delivery ETA",
         ),
         Assumption(
             kind="MACHINE_REPAIR_ETA",
-            description="故障机器的可用时刻取自修复时间估计。",
-            stale_risk="依赖机器修复时间的估计值",
+            description="The availability time of a failed machine is taken from a repair-time estimate.",
+            stale_risk="relies on an estimated machine repair time",
         ),
         Assumption(
             kind="MATERIAL_RESERVATION",
-            description="整单物料在首道工序一次性预留，不逐工序建模领用。",
-            stale_risk="首道工序一次性预留物料的简化假设",
+            description="The full order's material is reserved once at the first operation, without modeling per-operation withdrawal.",
+            stale_risk="the simplifying assumption of one-time material reservation at the first operation",
         ),
     )
 
@@ -268,7 +268,7 @@ def initial_plan_counterfactual() -> NoTradeoff:
     重排路径上填真正的 `Tradeoff`（`pick_pivotal_job` + 沙箱重算 Z）。
     """
     return NoTradeoff(
-        reason="本计划为初始生成，非对既有方案的重排，无可比较的关键取舍。"
+        reason="This plan is an initial generation, not a replan of an existing plan, so there is no key tradeoff to compare."
     )
 
 
@@ -322,9 +322,9 @@ def build_decision_evidence(
         evidence.append(
             DecisionEvidence(
                 job_id=job_id,
-                trigger="资源改派",
-                constraint="原资源不可用或能力不匹配（MACHINE_UNAVAILABLE / "
-                "WORKER_UNAVAILABLE / 能力匹配）",
+                trigger="Resource reassignment",
+                constraint="Original resource unavailable or capability mismatch (MACHINE_UNAVAILABLE / "
+                "WORKER_UNAVAILABLE / capability match)",
                 resources=tuple(resources),
             )
         )
@@ -337,9 +337,9 @@ def build_decision_evidence(
         evidence.append(
             DecisionEvidence(
                 job_id=job_id,
-                trigger="开始时间调整",
-                constraint="维持原开始时间将违反时间线/前后序约束（"
-                "OPERATION_PRECEDENCE / MACHINE_DOUBLE_BOOKING）",
+                trigger="Start-time adjustment",
+                constraint="Keeping the original start time would violate timeline/precedence constraints ("
+                "OPERATION_PRECEDENCE / MACHINE_DOUBLE_BOOKING)",
                 resources=(f"machine:{after.machine_id}", f"worker:{after.worker_id}"),
             )
         )
@@ -438,10 +438,10 @@ def _tardiness_human(total_minutes: int) -> str:
     """
     hours, minutes = divmod(total_minutes, 60)
     if hours and minutes:
-        return f"{hours} 小时 {minutes} 分钟"
+        return f"{hours} hours {minutes} minutes"
     if hours:
-        return f"{hours} 小时"
-    return f"{minutes} 分钟"
+        return f"{hours} hours"
+    return f"{minutes} minutes"
 
 
 def build_explanation_payload(
@@ -556,36 +556,39 @@ class TemplateExplanationRenderer:
         evidence: tuple[DecisionEvidence, ...],
     ) -> str:
         if not evidence:
-            return "本计划为初始生成，无相对既有方案的作业调整，因此没有逐作业的决策证据。"
-        lines = ["决策证据："]
+            return (
+                "This plan is an initial generation with no job adjustments relative to an "
+                "existing plan, so there is no per-job decision evidence."
+            )
+        lines = ["Decision evidence:"]
         for ev in evidence:
-            resources = "、".join(ev.resources) if ev.resources else "无"
+            resources = ", ".join(ev.resources) if ev.resources else "none"
             lines.append(
-                f"- 作业 {ev.job_id}：因 {ev.trigger} 调整，"
-                f"涉及约束 {ev.constraint}，相关资源 {resources}。"
+                f"- Job {ev.job_id}: adjusted due to {ev.trigger}, "
+                f"constraint involved: {ev.constraint}, resources involved: {resources}."
             )
         return "\n".join(lines)
 
     @staticmethod
     def _render_counterfactual(counterfactual: Counterfactual) -> str:
         if isinstance(counterfactual, NoTradeoff):
-            return f"反事实：{counterfactual.reason}"
+            return f"Counterfactual: {counterfactual.reason}"
         return (
-            f"反事实：若维持原方案，作业 {counterfactual.pivotal_job_id} 的目标分量 "
-            f"{counterfactual.component} 将从 {counterfactual.current_value} "
-            f"变为 {counterfactual.counterfactual_value}"
-            f"（选取依据：{counterfactual.selection_basis}）。"
+            f"Counterfactual: if the original plan were kept, the objective component "
+            f"{counterfactual.component} of job {counterfactual.pivotal_job_id} would change from "
+            f"{counterfactual.current_value} to {counterfactual.counterfactual_value} "
+            f"(basis for selection: {counterfactual.selection_basis})."
         )
 
     @staticmethod
     def _render_assumptions(assumptions: tuple[Assumption, ...]) -> str:
         if not assumptions:
             return ""
-        lines = ["假设（可能过期的输入）："]
+        lines = ["Assumptions (potentially stale inputs):"]
         for a in assumptions:
-            lines.append(f"- {a.description}（{a.stale_risk}）")
+            lines.append(f"- {a.description} ({a.stale_risk})")
         return "\n".join(lines)
 
     @staticmethod
     def _render_confidence(confidence: Confidence) -> str:
-        return f"置信度：{confidence.level.value}。判定依据：{confidence.basis}"
+        return f"Confidence: {confidence.level.value}. Basis: {confidence.basis}"

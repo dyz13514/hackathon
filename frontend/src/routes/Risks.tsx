@@ -19,17 +19,17 @@ import { ApiError } from '../api/client';
 import { getRisks, type RiskFinding, type RiskList, scanRisks } from '../api/risks';
 
 const SEVERITY_LABEL: Record<string, string> = {
-  CRITICAL: '严重',
-  WARNING: '警告',
-  INFO: '提示',
+  CRITICAL: 'Critical',
+  WARNING: 'Warning',
+  INFO: 'Info',
 };
 
 const RISK_TYPE_LABEL: Record<string, string> = {
-  MATERIAL_RUNOUT_FORECAST: '物料将耗尽',
-  ZERO_SLACK_ORDER: '订单零余量',
-  BOTTLENECK_RESOURCE: '瓶颈资源',
-  OVERCOMMITTED_SHIFT: '班次超配',
-  SINGLE_POINT_OF_FAILURE_MACHINE: '单点故障机器',
+  MATERIAL_RUNOUT_FORECAST: 'Material runout forecast',
+  ZERO_SLACK_ORDER: 'Zero-slack order',
+  BOTTLENECK_RESOURCE: 'Bottleneck resource',
+  OVERCOMMITTED_SHIFT: 'Overcommitted shift',
+  SINGLE_POINT_OF_FAILURE_MACHINE: 'Single point of failure machine',
 };
 
 const SEVERITY_ORDER = ['CRITICAL', 'WARNING', 'INFO'] as const;
@@ -43,14 +43,14 @@ function RiskCard({ finding }: { finding: RiskFinding }) {
   return (
     <li className={`risk-card risk-${finding.severity}`} data-severity={finding.severity}>
       <p className="risk-head">
-        <span className={`badge severity-${finding.severity}`} aria-label={`严重度：${SEVERITY_LABEL[finding.severity] ?? finding.severity}`}>
+        <span className={`badge severity-${finding.severity}`} aria-label={`Severity: ${SEVERITY_LABEL[finding.severity] ?? finding.severity}`}>
           {SEVERITY_LABEL[finding.severity] ?? finding.severity}
         </span>{' '}
         <strong>{RISK_TYPE_LABEL[finding.risk_type] ?? finding.risk_type}</strong> ·{' '}
         {finding.entity_type} {finding.entity_id}
       </p>
       <p className="risk-metric">
-        度量 {finding.metric_value} · 阈值 {finding.threshold_value}
+        Metric {finding.metric_value} · threshold {finding.threshold_value}
       </p>
       {finding.narrative && (
         <p className="risk-narrative">
@@ -58,7 +58,7 @@ function RiskCard({ finding }: { finding: RiskFinding }) {
           {finding.narrative_source && (
             <span
               className={`badge source-${finding.narrative_source}`}
-              aria-label={`叙述来源：${finding.narrative_source}`}
+              aria-label={`Narrative source: ${finding.narrative_source}`}
             >
               {finding.narrative_source}
             </span>
@@ -66,12 +66,12 @@ function RiskCard({ finding }: { finding: RiskFinding }) {
         </p>
       )}
       {finding.affected_order_ids.length > 0 && (
-        <p className="risk-affected">受影响订单：{finding.affected_order_ids.join('、')}</p>
+        <p className="risk-affected">Affected orders: {finding.affected_order_ids.join(', ')}</p>
       )}
-      <p className="risk-meta">最近出现：{formatTimestamp(finding.last_seen_at)}</p>
+      <p className="risk-meta">Last seen: {formatTimestamp(finding.last_seen_at)}</p>
       {finding.severity === 'CRITICAL' && finding.mitigation_plan_id && (
         <p className="risk-mitigation">
-          <a href={`/plans/${finding.mitigation_plan_id}`}>查看缓解提案</a>
+          <a href={`/plans/${finding.mitigation_plan_id}`}>View mitigation proposal</a>
         </p>
       )}
     </li>
@@ -92,8 +92,8 @@ export function Risks() {
     } catch (err) {
       const message =
         err instanceof ApiError
-          ? `风险面板不可用（${err.code}）：${err.message}`
-          : '风险面板不可用：后端服务不可用。';
+          ? `Risks unavailable (${err.code}): ${err.message}`
+          : 'Risks unavailable: backend service unavailable.';
       setError(message);
     } finally {
       setLoading(false);
@@ -109,8 +109,8 @@ export function Risks() {
     } catch (err) {
       const message =
         err instanceof ApiError
-          ? `扫描失败（${err.code}）：${err.message}`
-          : '扫描失败：网络或服务不可用。';
+          ? `Scan failed (${err.code}): ${err.message}`
+          : 'Scan failed: network or service unavailable.';
       setError(message);
     } finally {
       setScanning(false);
@@ -124,35 +124,34 @@ export function Risks() {
   return (
     <section aria-labelledby="risks-heading" className="risks">
       <div className="risks-header">
-        <h2 id="risks-heading">风险雷达</h2>
+        <h2 id="risks-heading">Risk radar</h2>
         <button
           type="button"
           onClick={() => void onScan()}
           disabled={scanning || loading}
           aria-busy={scanning}
-          aria-label="重新扫描风险"
+          aria-label="Rescan risks"
         >
-          {scanning ? '扫描中…' : '重新扫描'}
+          {scanning ? 'Scanning…' : 'Rescan'}
         </button>
       </div>
 
       {error && (
         <p role="alert" className="risks-error">
-          <span aria-hidden="true">⚠ </span>
           {error}
         </p>
       )}
 
       {data && !loading && (
         <div className="risks-body">
-          <ul className="risks-summary" aria-label="风险计数">
-            <li>严重：<strong>{data.critical_count}</strong></li>
-            <li>警告：<strong>{data.warning_count}</strong></li>
-            <li>提示：<strong>{data.info_count}</strong></li>
+          <ul className="risks-summary" aria-label="Risk counts">
+            <li>Critical: <strong>{data.critical_count}</strong></li>
+            <li>Warning: <strong>{data.warning_count}</strong></li>
+            <li>Info: <strong>{data.info_count}</strong></li>
           </ul>
 
           {data.findings.length === 0 ? (
-            <p className="risks-empty">当前无风险发现。点击「重新扫描」运行确定性风险扫描。</p>
+            <p className="risks-empty">No risk findings. Click “Rescan” to run the deterministic risk scan.</p>
           ) : (
             SEVERITY_ORDER.map((severity) => {
               const group = data.findings.filter((f) => f.severity === severity);
@@ -166,7 +165,7 @@ export function Risks() {
                   className="risk-group"
                 >
                   <h3 id={`risk-group-${severity}`}>
-                    {SEVERITY_LABEL[severity]}（{group.length}）
+                    {SEVERITY_LABEL[severity]} ({group.length})
                   </h3>
                   <ul className="risk-list">
                     {group.map((finding) => (

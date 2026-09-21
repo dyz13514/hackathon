@@ -220,7 +220,7 @@ def post_disruption(
             return error_response(
                 status_code=409,
                 code=ErrorCode.PENDING_PLAN_EXISTS,
-                message="该生产日已存在一个待审批计划，请先取消既有提案再登记扰动。",
+                message="A pending-approval plan already exists for this production date; please cancel the existing proposal before registering a disruption.",
                 next_actions=[NextAction(action="cancel_pending", href="/plans/pending")],
                 details={"pending_plan_id": existing_pending},
             )
@@ -239,7 +239,7 @@ def post_disruption(
         return error_response(
             status_code=409,
             code=ErrorCode.NO_ACTIVE_PLAN,
-            message="当前没有 ACTIVE 计划，无法登记扰动。请先生成并批准一个计划。",
+            message="There is no ACTIVE plan, so a disruption cannot be registered. Please generate and approve a plan first.",
             next_actions=[NextAction(action="generate_plan", href="/plans/generate")],
         )
     finally:
@@ -284,7 +284,7 @@ def post_disruption(
         return error_response(
             status_code=422,
             code=ErrorCode.DATA_INTEGRITY_ERROR,
-            message="扰动后数据存在引用完整性错误，重排前已终止。",
+            message="The post-disruption data has referential-integrity errors; aborted before rescheduling.",
             next_actions=[NextAction(action="fix_data", href="/")],
             details=error.details(),
         )
@@ -334,7 +334,7 @@ def get_impact(request: Request, disruption_id: str) -> ImpactAnalysisOut | JSON
             return error_response(
                 status_code=404,
                 code=ErrorCode.DISRUPTION_NOT_FOUND,
-                message=f"扰动 {disruption_id} 不存在或尚无影响分析。",
+                message=f"Disruption {disruption_id} does not exist or has no impact analysis yet.",
                 next_actions=[NextAction(action="list_pending", href="/plans/pending")],
                 details={"disruption_id": disruption_id},
             )

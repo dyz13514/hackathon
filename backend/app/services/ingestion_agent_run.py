@@ -186,7 +186,7 @@ def _agent_final_to_proposed(
         mapped_targets.add(target)
 
     missing = [
-        {"target_field": f, "reason": "Agent 未映射且必填"}
+        {"target_field": f, "reason": "not mapped by the agent and required"}
         for f in required
         if f not in mapped_targets
     ]

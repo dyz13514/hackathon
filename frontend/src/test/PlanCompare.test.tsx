@@ -94,13 +94,13 @@ const COMPARE: PlanCompareData = {
   decision_evidence: [
     {
       job_id: 'ORD-002-OP1',
-      trigger: '资源改派',
+      trigger: 'Resource reassignment',
       constraint: 'MACHINE_UNAVAILABLE',
       resources: ['machine:CNC-01→CNC-02'],
     },
     {
       job_id: 'ORD-003-OP1',
-      trigger: '开始时间调整',
+      trigger: 'Start time adjustment',
       constraint: 'MACHINE_DOWNTIME',
       resources: ['machine:MILL-01'],
     },
@@ -156,31 +156,31 @@ describe('PlanCompare 视图', () => {
     expect(await screen.findByText('50.0%')).toBeInTheDocument();
 
     // 两张甘特（A 对照 / B 建议）
-    expect(screen.getByText('计划 A（对照）')).toBeInTheDocument();
-    expect(screen.getByText('计划 B（建议）')).toBeInTheDocument();
-    expect(screen.getAllByRole('img', { name: '排产甘特图' })).toHaveLength(2);
+    expect(screen.getByText('Plan A (baseline)')).toBeInTheDocument();
+    expect(screen.getByText('Plan B (proposed)')).toBeInTheDocument();
+    expect(screen.getAllByRole('img', { name: 'Schedule Gantt chart' })).toHaveLength(2);
 
     // 逐作业变更标签（R10.1）
-    const changesTable = screen.getByRole('heading', { name: /逐作业变更/ });
+    const changesTable = screen.getByRole('heading', { name: /Per-job changes/ });
     expect(changesTable).toBeInTheDocument();
-    expect(screen.getByText('改派')).toBeInTheDocument();
-    expect(screen.getByText('改期')).toBeInTheDocument();
-    expect(screen.getByText('新增')).toBeInTheDocument();
-    expect(screen.getByText('移除')).toBeInTheDocument();
+    expect(screen.getByText('Reassigned')).toBeInTheDocument();
+    expect(screen.getByText('Rescheduled')).toBeInTheDocument();
+    expect(screen.getByText('Added')).toBeInTheDocument();
+    expect(screen.getByText('Removed')).toBeInTheDocument();
 
     // 决策证据（R10.2）：每个 MOVED/REASSIGNED 一条
     const evidenceSection = screen
-      .getByRole('heading', { name: /决策证据/ })
+      .getByRole('heading', { name: /Decision evidence/ })
       .closest('section') as HTMLElement;
-    expect(within(evidenceSection).getByText(/资源改派/)).toBeInTheDocument();
-    expect(within(evidenceSection).getByText(/开始时间调整/)).toBeInTheDocument();
+    expect(within(evidenceSection).getByText(/Resource reassignment/)).toBeInTheDocument();
+    expect(within(evidenceSection).getByText(/Start time adjustment/)).toBeInTheDocument();
     expect(within(evidenceSection).getByText(/MACHINE_UNAVAILABLE/)).toBeInTheDocument();
     expect(within(evidenceSection).getByText(/machine:CNC-01→CNC-02/)).toBeInTheDocument();
   });
 
   it('PLAN_NOT_FOUND 时显示错误而不是空白', async () => {
     vi.mocked(comparePlans).mockRejectedValue(
-      new ApiError(404, 'PLAN_NOT_FOUND', '计划不存在'),
+      new ApiError(404, 'PLAN_NOT_FOUND', 'Plan not found'),
     );
     renderView();
     const alert = await screen.findByRole('alert');

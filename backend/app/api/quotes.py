@@ -80,7 +80,7 @@ def promise_date(
             return error_response(
                 status_code=409,
                 code=ErrorCode.NO_ACTIVE_PLAN,
-                message="当前没有 ACTIVE 计划，无法计算可承诺交期。请先生成并批准一个计划。",
+                message="There is no ACTIVE plan, so a promise date cannot be computed. Please generate and approve a plan first.",
                 next_actions=[NextAction(action="generate_plan", href="/plans/generate")],
             )
         except ScenarioMutationError as error:

@@ -27,9 +27,9 @@ import {
 } from '../api/imports';
 
 const STATUS_LABEL: Record<FieldMapping['status'], string> = {
-  AUTO_ACCEPTED: '已接受',
-  NEEDS_CONFIRMATION: '待确认',
-  NOT_IMPORTED: '不导入',
+  AUTO_ACCEPTED: 'Accepted',
+  NEEDS_CONFIRMATION: 'Needs confirmation',
+  NOT_IMPORTED: 'Not imported',
 };
 
 export function Import() {
@@ -73,8 +73,8 @@ export function Import() {
       } catch (err) {
         setError(
           err instanceof ApiError
-            ? `上传失败（${err.code}）：${err.message}`
-            : '上传失败：后端服务不可用。',
+            ? `Upload failed (${err.code}): ${err.message}`
+            : 'Upload failed: backend service unavailable.',
         );
       } finally {
         setLoading(false);
@@ -101,8 +101,8 @@ export function Import() {
     } catch (err) {
       setError(
         err instanceof ApiError
-          ? `提交失败（${err.code}）：${err.message}`
-          : '提交失败：后端服务不可用。',
+          ? `Confirm failed (${err.code}): ${err.message}`
+          : 'Confirm failed: backend service unavailable.',
       );
     } finally {
       setLoading(false);
@@ -118,8 +118,8 @@ export function Import() {
       } catch (err) {
         setError(
           err instanceof ApiError
-            ? `回滚失败（${err.code}）：${err.message}`
-            : '回滚失败：后端服务不可用。',
+            ? `Revert failed (${err.code}): ${err.message}`
+            : 'Revert failed: backend service unavailable.',
         );
       }
     },
@@ -128,35 +128,34 @@ export function Import() {
 
   return (
     <section aria-labelledby="import-heading" className="import">
-      <h2 id="import-heading">表格导入</h2>
+      <h2 id="import-heading">Spreadsheet import</h2>
 
       <section aria-labelledby="import-upload-heading" className="import-upload">
-        <h3 id="import-upload-heading">上传</h3>
-        <label htmlFor="import-file">选择 .csv / .xlsx 文件</label>
+        <h3 id="import-upload-heading">Upload</h3>
+        <label htmlFor="import-file">Choose a .csv / .xlsx file</label>
         <input
           id="import-file"
           type="file"
           accept=".csv,.xlsx"
-          aria-label="选择要导入的表格文件"
+          aria-label="Choose a spreadsheet file to import"
           onChange={(e) => {
             const f = e.target.files?.[0];
             if (f) void onUpload(f);
           }}
         />
-        {loading && <p role="status">处理中…</p>}
+        {loading && <p role="status">Processing…</p>}
       </section>
 
       {error && (
         <p role="alert" className="import-error">
-          <span aria-hidden="true">⚠ </span>
           {error}
         </p>
       )}
 
       {duplicateOf && (
         <p role="status" className="import-duplicate">
-          该文件此前已导入（批次 {duplicateOf}
-          {lastImportedAt ? `，上次导入于 ${lastImportedAt}` : ''}）。可选择「跳过」或作为新批次重新导入。
+          This file was imported before (batch {duplicateOf}
+          {lastImportedAt ? `, last imported ${lastImportedAt}` : ''}). You can skip it or re-import it as a new batch.
         </p>
       )}
 
@@ -164,18 +163,18 @@ export function Import() {
         <>
           <section aria-labelledby="import-mapping-heading" className="import-mapping">
             <h3 id="import-mapping-heading">
-              列映射（实体：{proposal.proposal.entity_type}
-              {proposal.from_agent ? '，来自 Ingestion_Agent' : '，来自确定性提议'}）
+              Column mapping (entity: {proposal.proposal.entity_type}
+              {proposal.from_agent ? ', from Ingestion_Agent' : ', from deterministic proposal'})
             </h3>
             <table>
               <thead>
                 <tr>
-                  <th>目标字段</th>
-                  <th>源列</th>
-                  <th>置信</th>
-                  <th>样例</th>
-                  <th>状态</th>
-                  <th>操作</th>
+                  <th>Target field</th>
+                  <th>Source column</th>
+                  <th>Confidence</th>
+                  <th>Samples</th>
+                  <th>Status</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -184,7 +183,7 @@ export function Import() {
                     <td>{f.target_field}</td>
                     <td>{f.source_column ?? '—'}</td>
                     <td>{(f.confidence * 100).toFixed(0)}%</td>
-                    <td>{f.sample_values.join('、') || '—'}</td>
+                    <td>{f.sample_values.join(', ') || '—'}</td>
                     <td>
                       <span className={`badge status-${f.status}`}>{STATUS_LABEL[f.status]}</span>
                     </td>
@@ -192,16 +191,16 @@ export function Import() {
                       <button
                         type="button"
                         onClick={() => setFieldStatus(f.target_field, 'AUTO_ACCEPTED')}
-                        aria-label={`确认字段 ${f.target_field}`}
+                        aria-label={`Accept field ${f.target_field}`}
                       >
-                        确认
+                        Accept
                       </button>{' '}
                       <button
                         type="button"
                         onClick={() => setFieldStatus(f.target_field, 'NOT_IMPORTED')}
-                        aria-label={`标记字段 ${f.target_field} 不导入`}
+                        aria-label={`Mark field ${f.target_field} as not imported`}
                       >
-                        不导入
+                        Don’t import
                       </button>
                     </td>
                   </tr>
@@ -212,7 +211,7 @@ export function Import() {
 
           {proposal.proposal.missing_required_fields.length > 0 && (
             <section aria-labelledby="import-missing-heading" className="import-missing">
-              <h3 id="import-missing-heading">缺失的必填字段</h3>
+              <h3 id="import-missing-heading">Missing required fields</h3>
               <ul>
                 {proposal.proposal.missing_required_fields.map((m) => (
                   <li key={m.target_field}>
@@ -225,13 +224,13 @@ export function Import() {
 
           {proposal.proposal.normalisations.length > 0 && (
             <section aria-labelledby="import-norm-heading" className="import-normalisation">
-              <h3 id="import-norm-heading">归一化前后对照</h3>
+              <h3 id="import-norm-heading">Normalisation before / after</h3>
               <ul>
                 {proposal.proposal.normalisations.map((n) => (
                   <li key={n.source_column}>
-                    {n.source_column}（{n.kind}
-                    {n.conversion_factor != null ? `，换算系数 ${n.conversion_factor}` : ''}）：
-                    {n.sample_before.join('、')} → {n.sample_after.join('、')}
+                    {n.source_column} ({n.kind}
+                    {n.conversion_factor != null ? `, conversion factor ${n.conversion_factor}` : ''}):{' '}
+                    {n.sample_before.join(', ')} → {n.sample_after.join(', ')}
                   </li>
                 ))}
               </ul>
@@ -244,40 +243,40 @@ export function Import() {
               checked={unparsedResolved}
               onChange={(e) => setUnparsedResolved(e.target.checked)}
             />
-            我已处置全部未解析单元格 / 冲突项
+            I have resolved all unparsed cells / conflicts
           </label>
 
           <button
             type="button"
             onClick={() => void onConfirm()}
             disabled={loading}
-            aria-label="确认映射并落库"
+            aria-label="Confirm mapping and import"
           >
-            确认并导入
+            Confirm and import
           </button>
         </>
       )}
 
       {committed && (
         <p role="status" className="import-committed">
-          已导入为批次 {committed}。
+          Imported as batch {committed}.
         </p>
       )}
 
       <section aria-labelledby="import-batches-heading" className="import-batches">
-        <h3 id="import-batches-heading">导入批次</h3>
+        <h3 id="import-batches-heading">Import batches</h3>
         {batches.length === 0 ? (
-          <p className="import-empty">暂无导入批次。</p>
+          <p className="import-empty">No import batches yet.</p>
         ) : (
           <table>
             <thead>
               <tr>
-                <th>批次</th>
-                <th>文件</th>
-                <th>实体</th>
-                <th>行数</th>
-                <th>状态</th>
-                <th>操作</th>
+                <th>Batch</th>
+                <th>File</th>
+                <th>Entity</th>
+                <th>Rows</th>
+                <th>Status</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -293,9 +292,9 @@ export function Import() {
                       <button
                         type="button"
                         onClick={() => void onRevert(b.batch_id)}
-                        aria-label={`回滚批次 ${b.batch_id}`}
+                        aria-label={`Revert batch ${b.batch_id}`}
                       >
-                        回滚
+                        Revert
                       </button>
                     )}
                   </td>

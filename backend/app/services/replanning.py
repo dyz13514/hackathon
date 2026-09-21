@@ -149,7 +149,7 @@ def require_active_plan(session: Session, production_date: date) -> orm.Producti
         )
     ).scalars().first()
     if plan is None:
-        raise NoActivePlanError(f"生产日 {production_date.isoformat()} 无 ACTIVE 计划")
+        raise NoActivePlanError(f"No ACTIVE plan for production date {production_date.isoformat()}")
     return plan
 
 
@@ -163,7 +163,7 @@ def require_any_active_plan(session: Session) -> orm.ProductionPlan:
         select(orm.ProductionPlan).where(orm.ProductionPlan.status == ACTIVE_STATUS)
     ).scalars().first()
     if plan is None:
-        raise NoActivePlanError("当前无 ACTIVE 计划，无法登记扰动")
+        raise NoActivePlanError("There is no ACTIVE plan; cannot register a disruption")
     return plan
 
 

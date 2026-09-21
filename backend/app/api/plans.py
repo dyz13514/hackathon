@@ -397,7 +397,7 @@ def generate_plan(
         return error_response(
             status_code=422,
             code=ErrorCode.DATA_INTEGRITY_ERROR,
-            message="输入数据存在引用完整性错误，排产前已终止。请先修正下列引用。",
+            message="The input data has referential-integrity errors; aborted before scheduling. Please fix the references below first.",
             next_actions=[NextAction(action="fix_data", href="/")],
             details=error.details(),
         )
@@ -406,7 +406,7 @@ def generate_plan(
         return error_response(
             status_code=422,
             code=ErrorCode.INVALID_ROUTING,
-            message=f"产品 {error.product_id} 的工序路线非法：{error.detail}",
+            message=f"Invalid operation routing for product {error.product_id}: {error.detail}",
             next_actions=[NextAction(action="fix_routing", href="/")],
             details={"product_id": error.product_id, "detail": error.detail},
         )
@@ -444,7 +444,7 @@ def get_plan(request: Request, plan_id: str) -> PlanDetailOut | JSONResponse:
             return error_response(
                 status_code=404,
                 code=ErrorCode.PLAN_NOT_FOUND,
-                message=f"计划 {plan_id} 不存在。",
+                message=f"Plan {plan_id} does not exist.",
                 next_actions=[NextAction(action="view_pending", href="/plans/pending")],
             )
         return _detail_from_db(db, plan)
@@ -477,7 +477,7 @@ def get_plan_explanation(
             return error_response(
                 status_code=404,
                 code=ErrorCode.PLAN_NOT_FOUND,
-                message=f"计划 {plan_id} 不存在。",
+                message=f"Plan {plan_id} does not exist.",
                 next_actions=[NextAction(action="view_pending", href="/plans/pending")],
             )
         inputs = _explanation_inputs_from_db(db, plan)
@@ -522,7 +522,7 @@ def compare_plans_detail(
             return error_response(
                 status_code=404,
                 code=ErrorCode.PLAN_NOT_FOUND,
-                message=f"计划 {missing} 不存在。",
+                message=f"Plan {missing} does not exist.",
                 next_actions=[NextAction(action="view_pending", href="/plans/pending")],
                 details={"plan_id": missing},
             )
@@ -604,7 +604,7 @@ def export_plan(
         return error_response(
             status_code=422,
             code=ErrorCode.EXPORT_FORMAT_UNSUPPORTED,
-            message="导出格式仅支持 xlsx 与 csv。",
+            message="Only xlsx and csv export formats are supported.",
             next_actions=[
                 NextAction(action="export_xlsx", href=f"/plans/{plan_id}/export?format=xlsx"),
                 NextAction(action="export_csv", href=f"/plans/{plan_id}/export?format=csv"),
@@ -625,7 +625,7 @@ def export_plan(
             return error_response(
                 status_code=404,
                 code=ErrorCode.PLAN_NOT_FOUND,
-                message=f"计划 {plan_id} 不存在。",
+                message=f"Plan {plan_id} does not exist.",
                 next_actions=[NextAction(action="view_pending", href="/plans/pending")],
                 details={"plan_id": plan_id},
             )
@@ -686,8 +686,8 @@ async def update_plan(
             status_code=403,
             code=ErrorCode.PLAN_STATUS_WRITE_FORBIDDEN,
             message=(
-                "计划状态不可经此端点修改。审批、拒绝、修改请使用对应的动作端点"
-                "（/approve、/reject、/modify）。"
+                "Plan status cannot be modified through this endpoint. To approve, reject, or modify, "
+                "use the corresponding action endpoints (/approve, /reject, /modify)."
             ),
             next_actions=[
                 NextAction(action="approve", href=f"/plans/{plan_id}/approve"),
@@ -705,7 +705,7 @@ async def update_plan(
         return error_response(
             status_code=422,
             code=ErrorCode.PLAN_UPDATE_INVALID,
-            message="请求体包含不被接受的字段。P0 阶段计划没有可就地修改的字段。",
+            message="The request body contains unaccepted fields. In P0 the plan has no in-place editable fields.",
             next_actions=[NextAction(action="refresh", href=f"/plans/{plan_id}")],
             details={"errors": error.errors(include_url=False)},
         )

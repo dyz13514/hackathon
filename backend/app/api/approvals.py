@@ -106,7 +106,7 @@ def approve_plan(
         return error_response(
             status_code=409,
             code=ErrorCode.INVALID_STATE_TRANSITION,
-            message=f"计划 {plan_id} 当前状态无法审批（仅 PENDING_APPROVAL 可批准）。",
+            message=f"Plan {plan_id} cannot be approved in its current state (only PENDING_APPROVAL can be approved).",
             next_actions=[NextAction(action="view_pending", href="/plans/pending")],
             details={"current_status": result.current_status},
         )
@@ -114,7 +114,7 @@ def approve_plan(
         return error_response(
             status_code=409,
             code=ErrorCode.STALE_PROPOSAL,
-            message="该提案所依赖的输入数据已在提案生成之后发生变化。请基于最新数据重新生成。",
+            message="The input data this proposal relies on has changed since the proposal was generated. Please regenerate from the latest data.",
             next_actions=[NextAction(action="regenerate", href="/plans/generate")],
             details={
                 "proposal_version": result.proposal_version,
@@ -125,7 +125,7 @@ def approve_plan(
         return error_response(
             status_code=422,
             code=ErrorCode.REVALIDATION_FAILED,
-            message="激活前重校验发现硬约束违反，计划保持待审批状态。",
+            message="Re-validation before activation found a hard-constraint violation; the plan remains pending approval.",
             next_actions=[NextAction(action="modify", href=f"/plans/{plan_id}/modify")],
             details={"violations": [v.model_dump(mode="json") for v in result.violations]},
         )
@@ -133,7 +133,7 @@ def approve_plan(
     return error_response(
         status_code=409,
         code=ErrorCode.CONCURRENT_MODIFICATION,
-        message="该计划已被另一操作修改，请刷新后重试。",
+        message="This plan was modified by another operation; please refresh and try again.",
         next_actions=[NextAction(action="refresh", href=f"/plans/{plan_id}")],
         details={"current_status": result.current_status},
     )
@@ -160,14 +160,14 @@ def reject_plan(
         return error_response(
             status_code=422,
             code=ErrorCode.REASON_TOO_SHORT,
-            message="拒绝理由至少需要 5 个字符。",
+            message="The rejection reason must be at least 5 characters.",
             next_actions=[NextAction(action="retry")],
         )
     # INVALID_STATE_TRANSITION
     return error_response(
         status_code=409,
         code=ErrorCode.INVALID_STATE_TRANSITION,
-        message=f"计划 {plan_id} 当前状态无法拒绝（仅 PENDING_APPROVAL 可拒绝）。",
+        message=f"Plan {plan_id} cannot be rejected in its current state (only PENDING_APPROVAL can be rejected).",
         next_actions=[NextAction(action="view_pending", href="/plans/pending")],
         details={"current_status": result.current_status},
     )
@@ -201,7 +201,7 @@ def modify_plan(
         return error_response(
             status_code=422,
             code=ErrorCode.JOB_NOT_IN_PLAN,
-            message=f"作业 {result.missing_job_id} 不在该计划的已排产作业里。",
+            message=f"Job {result.missing_job_id} is not among this plan's scheduled jobs.",
             next_actions=[NextAction(action="refresh", href=f"/plans/{plan_id}")],
             details={"job_id": result.missing_job_id},
         )
@@ -209,7 +209,7 @@ def modify_plan(
         return error_response(
             status_code=422,
             code=ErrorCode.MODIFICATION_REVALIDATION_FAILED,
-            message="修改后校验发现硬约束违反，计划状态未改变。",
+            message="Validation after the modification found a hard-constraint violation; the plan state is unchanged.",
             next_actions=[NextAction(action="revise", href=f"/plans/{plan_id}/modify")],
             details={"violations": [v.model_dump(mode="json") for v in result.violations]},
         )
@@ -217,14 +217,14 @@ def modify_plan(
         return error_response(
             status_code=409,
             code=ErrorCode.PENDING_PLAN_EXISTS,
-            message="该生产日已存在一个待审批计划，请先取消既有提案。",
+            message="A pending-approval plan already exists for this production date; please cancel the existing proposal first.",
             next_actions=[NextAction(action="cancel_pending", href="/plans/pending")],
         )
     # INVALID_STATE_TRANSITION
     return error_response(
         status_code=409,
         code=ErrorCode.INVALID_STATE_TRANSITION,
-        message=f"计划 {plan_id} 当前状态无法修改（仅 PENDING_APPROVAL 可修改）。",
+        message=f"Plan {plan_id} cannot be modified in its current state (only PENDING_APPROVAL can be modified).",
         next_actions=[NextAction(action="view_pending", href="/plans/pending")],
         details={"current_status": result.current_status},
     )

@@ -156,8 +156,8 @@ def get_proposal(request: Request, upload_id: str) -> JSONResponse:
             status_code=409,
             code=ErrorCode.LLM_UNAVAILABLE_USE_MANUAL_MAPPING,
             message=(
-                "当前处于降级模式（DETERMINISTIC_ONLY），LLM 列映射不可用。"
-                "请使用手工列映射：逐列从下拉中选择目标字段。"
+                "Currently in degraded mode (DETERMINISTIC_ONLY); LLM column mapping is unavailable. "
+                "Please use manual column mapping: choose the target field from the dropdown for each column."
             ),
             next_actions=[
                 NextAction(action="manual_mapping", href=f"/imports/{upload_id}/validate"),
@@ -307,7 +307,7 @@ def revert_import(request: Request, batch_id: str, session: PlannerSession) -> J
             return error_response(
                 status_code=404,
                 code=ErrorCode.IMPORT_BATCH_NOT_FOUND,
-                message=f"批次 {batch_id} 不存在。",
+                message=f"Batch {batch_id} does not exist.",
                 next_actions=[NextAction(action="list_imports", href="/import")],
             )
         reverted = ingestion.revert_batch(db, batch_id=batch_id)
@@ -319,7 +319,7 @@ def _upload_not_found(upload_id: str) -> JSONResponse:
     return error_response(
         status_code=404,
         code=ErrorCode.UPLOAD_NOT_FOUND,
-        message=f"上传 {upload_id} 不存在或已过期，请重新上传。",
+        message=f"Upload {upload_id} does not exist or has expired; please upload again.",
         next_actions=[NextAction(action="reupload", href="/import")],
         details={"upload_id": upload_id},
     )

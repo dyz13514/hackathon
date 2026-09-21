@@ -325,7 +325,7 @@ def test_the_injection_demo_order_carries_untrusted_text_but_is_not_pre_flagged(
     """
     order = next(order for order in ORDERS if order.order_id == INJECTION_DEMO_ORDER_ID)
     assert order.notes is not None
-    assert "忽略先前指令" in order.notes
+    assert "Ignore the previous instructions" in order.notes
 
 
 # --------------------------------------------------------------------------

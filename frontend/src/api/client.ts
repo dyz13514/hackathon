@@ -78,7 +78,7 @@ function waitForLogin(): Promise<void> {
     };
     const timer = setTimeout(() => {
       window.removeEventListener('login-succeeded', onSuccess);
-      reject(new ApiError(401, 'UNAUTHENTICATED', '登录超时，请重试。'));
+      reject(new ApiError(401, 'UNAUTHENTICATED', 'Login timed out. Please try again.'));
     }, TIMEOUT_MS);
 
     window.addEventListener('login-succeeded', onSuccess, { once: true });

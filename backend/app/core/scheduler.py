@@ -214,7 +214,7 @@ class InvalidRoutingError(Exception):
     def __init__(self, product_id: str, detail: str) -> None:
         self.product_id = product_id
         self.detail = detail
-        super().__init__(f"产品 {product_id} 的工序路线非法：{detail}")
+        super().__init__(f"Invalid operation routing for product {product_id}: {detail}")
 
 
 # --------------------------------------------------------------------------
@@ -239,15 +239,15 @@ def expand(order: Order, product: Product) -> tuple[ProductionJob, ...]:
     operations = product.operations_in_sequence()
 
     if len(operations) < 1:
-        raise InvalidRoutingError(product.product_id, "至少需要 1 道工序")
+        raise InvalidRoutingError(product.product_id, "at least 1 operation is required")
     if len(operations) > 3:
         raise InvalidRoutingError(
-            product.product_id, f"最多 3 道工序，实际 {len(operations)} 道"
+            product.product_id, f"at most 3 operations, got {len(operations)}"
         )
 
     sequences = [op.sequence for op in operations]
     if len(set(sequences)) != len(sequences):
-        raise InvalidRoutingError(product.product_id, f"sequence 重复：{sequences}")
+        raise InvalidRoutingError(product.product_id, f"duplicate sequence: {sequences}")
 
     jobs: list[ProductionJob] = []
     predecessor: str | None = None
