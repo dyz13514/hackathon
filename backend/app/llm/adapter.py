@@ -159,18 +159,25 @@ class LlmRequest(BaseModel):
         )
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
-    def assemble_body(self) -> dict[str, Any]:
-        """静态前缀优先的请求体（design.md §2.1 的 JSON 草图）。
+    def assemble_body(self, model: str = "sonnet4.5:latest") -> dict[str, Any]:
+        """Ollama /api/chat 格式请求体。
 
-        `system` 数组：`system[0]` 提示词段、`system[1..]` 工具 schema 段——顺序即
-        `LlmRequest.system` 的顺序，装配不重排。`messages` 恰好一条 `role="user"`，
-        变化内容全在这里。给定同一个 `LlmRequest`，返回逐字节确定。
+        Ollama 不支持独立的 `system` 数组，改用标准的 messages 列表：
+        system 块合并为一条 role=system 消息，user 内容作为 role=user 消息。
+        给定同一个 `LlmRequest` 与 `model`，返回逐字节确定。
         """
+        system_text = "\n\n".join(self.system)
         return {
-            "system": [{"type": "text", "text": block} for block in self.system],
-            "messages": [{"role": "user", "content": self.user}],
-            "max_tokens": self.max_tokens,
-            "temperature": self.temperature,
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_text},
+                {"role": "user", "content": self.user},
+            ],
+            "stream": False,
+            "options": {
+                "temperature": self.temperature,
+                "num_predict": self.max_tokens,
+            },
         }
 
 
@@ -267,6 +274,7 @@ class BedrockAdapter:
         cassette: Cassette,
         gateway_url: str | None = None,
         api_key: str | None = None,
+        model: str = "sonnet4.5:latest",
         cache: ResponseCache | None = None,
         budget: BudgetRecorder | None = None,
         http_client: httpx.Client | None = None,
@@ -277,6 +285,7 @@ class BedrockAdapter:
         # 断言 BEDROCK_GATEWAY_URL 只被本文件引用（见 from_settings）。
         self._gateway_url = gateway_url
         self._api_key = api_key
+        self._model = model
         self._cache: ResponseCache = cache if cache is not None else InMemoryResponseCache()
         self._budget: BudgetRecorder = budget if budget is not None else _NullBudget()
         self._http_client = http_client
@@ -303,6 +312,7 @@ class BedrockAdapter:
             cassette=cassette,
             gateway_url=settings.bedrock_gateway_url,
             api_key=api_key,
+            model=settings.bedrock_model,
             cache=cache,
             budget=budget,
             http_client=http_client,
@@ -335,7 +345,7 @@ class BedrockAdapter:
 
     def _invoke_live(self, req: LlmRequest) -> LlmResponse:
         """真实调用网关，含超时、重试与降级。仅 `LIVE` 模式下走到这里。"""
-        body = req.assemble_body()
+        body = req.assemble_body(model=self._model)
         try:
             payload = self._post_with_retry(body)
         except _RetryExhaustedError as exc:
@@ -406,18 +416,23 @@ class BedrockAdapter:
 
     @staticmethod
     def _parse_response(payload: dict[str, Any]) -> LlmResponse:
-        """把网关 JSON 解析成 `LlmResponse`。
+        """把 Ollama /api/chat 网关 JSON 解析成 `LlmResponse`。
 
-        字段名按网关约定：`content` 为文本，`usage.input_tokens` / `output_tokens`
-        为用量。缺字段按 0 计（保守：宁可低估用量也不让解析崩掉，实际用量以网关账单
-        为准，本地估算只用于告警阈值）。
+        Ollama 响应格式：
+          {
+            "message": {"role": "assistant", "content": "..."},
+            "prompt_eval_count": 100,   # 输入 token 数
+            "eval_count": 50,           # 输出 token 数
+          }
+        缺字段按 0 计，宁可低估用量也不让解析崩掉。
         """
-        usage_raw = payload.get("usage") or {}
+        message = payload.get("message") or {}
+        content = str(message.get("content", ""))
         return LlmResponse(
-            content=str(payload.get("content", "")),
+            content=content,
             usage=LlmUsage(
-                input_tokens=int(usage_raw.get("input_tokens", 0)),
-                output_tokens=int(usage_raw.get("output_tokens", 0)),
+                input_tokens=int(payload.get("prompt_eval_count", 0)),
+                output_tokens=int(payload.get("eval_count", 0)),
             ),
         )
 

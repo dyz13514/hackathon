@@ -79,6 +79,7 @@ class Settings(BaseSettings):
     # --- 仅 LLM_MODE=LIVE 时必需 ---
     bedrock_gateway_url: str | None = None
     bedrock_api_key: SecretStr | None = None
+    bedrock_model: str = "sonnet4.5:latest"
 
     @property
     def cors_origins(self) -> tuple[str, ...]:
