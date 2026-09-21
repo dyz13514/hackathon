@@ -354,6 +354,36 @@ def generate_plan(
     """
     factory: sessionmaker[Session] = request.app.state.session_factory
     db = factory()
+
+    # 前置检查：同一 production_date 已存在 PENDING_APPROVAL 计划时拒绝重复生成
+    # （ux_pending_per_day 部分唯一索引的前端保护，R11.8 / R12.6）。
+    # 不依赖数据库约束抛 IntegrityError，而是主动返回 409 + PENDING_PLAN_EXISTS。
+    try:
+        existing_pending = db.scalars(
+            select(orm.ProductionPlan).where(
+                orm.ProductionPlan.production_date == body.production_date,
+                orm.ProductionPlan.status == "PENDING_APPROVAL",
+            )
+        ).first()
+        if existing_pending is not None:
+            db.close()
+            return error_response(
+                status_code=409,
+                code=ErrorCode.PENDING_PLAN_EXISTS,
+                message=(
+                    f"生产日 {body.production_date} 已有一个待审批计划（{existing_pending.plan_id}）。"
+                    "请先审批或拒绝现有计划，再生成新计划。"
+                ),
+                next_actions=[
+                    NextAction(action="view_pending", href="/plans/pending"),
+                    NextAction(action="approve", href=f"/plans/{existing_pending.plan_id}/approve"),
+                ],
+                details={"existing_plan_id": existing_pending.plan_id},
+            )
+    except Exception:
+        db.close()
+        raise
+
     try:
         result = run_plan_generation(
             db,

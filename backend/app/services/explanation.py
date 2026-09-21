@@ -68,6 +68,7 @@ from app.llm.adapter import (
     LlmDisabledError,
     LlmRequest,
 )
+from app.llm.cassette import CassetteMiss
 from app.services.guardrail import guard_explanation_numeric_consistency
 
 __all__ = [
@@ -383,8 +384,8 @@ def build_explanation(
 
     try:
         response = adapter.invoke(request)
-    except (LlmDisabledError, BedrockUnavailableError) as exc:
-        # 降级：Bedrock 不可用，发布模板解释（R25.9）。
+    except (LlmDisabledError, BedrockUnavailableError, CassetteMiss) as exc:
+        # 降级：Bedrock 不可用或 REPLAY 缺少录制，发布模板解释（R25.9）。
         return _template_result(
             explanation, reason=f"LLM_UNAVAILABLE:{type(exc).__name__}"
         )

@@ -153,7 +153,10 @@ def _apply_set_machine_unavailable(snapshot: DomainSnapshot, m: Any) -> DomainSn
             f"Machine {getattr(m, 'machine_id', None)} does not exist; cannot mark it unavailable."
         )
     target: Machine = machines[idx]
-    window = DowntimeWindow(start=m.start_time, end=m.end_time, reason="BREAKDOWN")
+    # 保证 time window 使用 offset-naive datetime，避免与数据库读出的 naive datetime 混用
+    start_time = m.start_time.replace(tzinfo=None) if m.start_time.tzinfo else m.start_time
+    end_time = m.end_time.replace(tzinfo=None) if m.end_time.tzinfo else m.end_time
+    window = DowntimeWindow(start=start_time, end=end_time, reason="BREAKDOWN")
     machines[idx] = target.model_copy(
         update={"downtime_windows": (*target.downtime_windows, window)}
     )
@@ -184,7 +187,10 @@ def _apply_set_worker_unavailable(snapshot: DomainSnapshot, m: Any) -> DomainSna
             f"Worker {getattr(m, 'worker_id', None)} does not exist; cannot mark it unavailable."
         )
     target: Worker = workers[idx]
-    window = TimeWindow(start=m.start_time, end=m.end_time)
+    # 同上：保证 TimeWindow 使用 offset-naive datetime
+    start_time = m.start_time.replace(tzinfo=None) if m.start_time.tzinfo else m.start_time
+    end_time = m.end_time.replace(tzinfo=None) if m.end_time.tzinfo else m.end_time
+    window = TimeWindow(start=start_time, end=end_time)
     workers[idx] = target.model_copy(update={"absences": (*target.absences, window)})
     return snapshot.model_copy(deep=True, update={"workers": tuple(workers)})
 

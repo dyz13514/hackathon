@@ -347,6 +347,35 @@ def _persist(
     """
     _ensure_production_jobs(session, specs=result.production_jobs)
 
+    # 清理同一 production_date 下已有的所有计划行（scheduled_jobs 等子表均设了
+    # ondelete=CASCADE，但 SQLAlchemy ORM 的 delete() 不触发级联，所以用纯 SQL DELETE）。
+    # PENDING_APPROVAL 计划由 API 层 409 前置拦截，不会到达这里。
+    # ACTIVE / REJECTED 计划属于历史记录，理论上不应有同一天的旧计划，但为保险仍清理。
+    from sqlalchemy import text
+
+    # 先删子表行（baseline_comparisons 引用 BASELINE 计划，直接删计划头会撞外键）
+    session.execute(
+        text("DELETE FROM baseline_comparisons WHERE baseline_plan_id IN (SELECT plan_id FROM production_plans WHERE production_date = :pd)"),
+        {"pd": result.production_date},
+    )
+    session.execute(
+        text("DELETE FROM scheduled_jobs WHERE plan_id IN (SELECT plan_id FROM production_plans WHERE production_date = :pd)"),
+        {"pd": result.production_date},
+    )
+    session.execute(
+        text("DELETE FROM unschedulable_jobs WHERE plan_id IN (SELECT plan_id FROM production_plans WHERE production_date = :pd)"),
+        {"pd": result.production_date},
+    )
+    session.execute(
+        text("DELETE FROM objective_breakdowns WHERE plan_id IN (SELECT plan_id FROM production_plans WHERE production_date = :pd)"),
+        {"pd": result.production_date},
+    )
+    session.execute(
+        text("DELETE FROM production_plans WHERE production_date = :pd"),
+        {"pd": result.production_date},
+    )
+    session.flush()  # 确保删除在新行插入前完成
+
     # 两个计划头先落库并 flush：`scheduled_jobs` / `baseline_comparisons` 的外键都指向
     # `production_plans`，SQLite 在 `foreign_keys = ON` 下逐条 INSERT 就检查外键，因此被
     # 引用的计划头必须先在库里。先 add 两个头再 flush，比依赖 SQLAlchemy 对无 relationship

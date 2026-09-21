@@ -46,6 +46,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from app.api.scenarios import ScenarioMutationBody
 from app.llm.adapter import BedrockAdapter, LlmDisabledError, LlmRequest
+from app.llm.cassette import CassetteMiss
 
 __all__ = [
     "MAX_TRANSLATE_STEPS",
@@ -264,12 +265,12 @@ def translate_whatif_query(
         request = _build_request(system, _user_block(wrapped, error_feedback))
         try:
             response = adapter.invoke(request)
-        except LlmDisabledError:
+        except (LlmDisabledError, CassetteMiss):
             return TranslationResult(
                 outcome=TranslationOutcome.LLM_UNAVAILABLE,
                 injection_suspected=verdict.suspected,
                 source_query_echo=query,
-                reason="The LLM is disabled (degraded mode); please use the structured scenario form.",
+                reason="The LLM is unavailable (degraded mode or missing recording); please use the structured scenario form.",
             )
 
         final = _extract_final(response.content)
