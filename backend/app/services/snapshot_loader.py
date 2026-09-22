@@ -139,6 +139,19 @@ def _rows(session: Session, stmt: Select[Any]) -> list[Any]:
 # --------------------------------------------------------------------------
 
 
+def resolve_production_date(production_date: date | None, *, now: datetime) -> date:
+    """把「请求未指定生产日」解析成确定的一天：缺省取 `now.date()`。
+
+    这是全流程**唯一**一次由「现在」派生生产日的规则（R5.7 可重现性的入口条件，见
+    `load_snapshot` docstring）。调用方若需要**提前**知道目标生产日——例如生成端点的
+    `PENDING_PLAN_EXISTS` 前置检查——必须调用本函数，而不是各自再写一遍 `or now.date()`：
+    两处口径一旦分叉，前置检查就会拿一个与流水线不同的日期去判断。请求体里
+    `production_date` 缺省为 `None` 时，`column == None` 会渲染成 `IS NULL`，那正是
+    「重复生成的前置检查恒不命中」的成因。
+    """
+    return production_date if production_date is not None else now.date()
+
+
 def load_snapshot(
     session: Session,
     *,
@@ -152,7 +165,8 @@ def load_snapshot(
     `datetime.now()` 会让「当前时间」重新变成一个隐式输入，而调用方多半察觉不到——排产结果
     随之取决于运行时刻，属性 1 却仍然通过，因为它构造的入参没变。
 
-    `production_date` 默认取 `now.date()`。这是全流程里唯一一次由「现在」派生生产日，且它
+    `production_date` 默认取 `now.date()`（规则封装在 `resolve_production_date()`，调用方若
+    需要提前知道目标生产日应当复用它）。这是全流程里唯一一次由「现在」派生生产日，且它
     发生在内核之外。
 
     `snapshot_version` 默认在同一事务里读 `MAX(input_snapshots.snapshot_version)`。允许传入
@@ -257,7 +271,7 @@ def load_snapshot(
 
     snapshot = DomainSnapshot(
         snapshot_version=version,
-        production_date=production_date if production_date is not None else now.date(),
+        production_date=resolve_production_date(production_date, now=now),
         now=now,
         orders=tuple(_order(row) for row in order_rows),
         products=_products(product_rows, operation_rows, bom_rows),

@@ -59,6 +59,7 @@ from app.services.explanation import (
     build_explanation,
 )
 from app.services.exporter import PlanNotFoundError, export_csv, export_xlsx
+from app.services.snapshot_loader import resolve_production_date
 
 router = APIRouter(prefix="/plans", tags=["plans"])
 
@@ -355,13 +356,20 @@ def generate_plan(
     factory: sessionmaker[Session] = request.app.state.session_factory
     db = factory()
 
+    # 目标生产日只解析一次，前置检查与流水线共用这一个值。请求缺省 `production_date` 时它是
+    # `None`，**不能**直接拿去查库：`column == None` 会渲染成 `IS NULL`，前置检查因此恒不命中
+    # 真实计划——这正是「重复生成」曾经绕过守卫、直接进入流水线并撞上清理阶段外键 /
+    # `ux_pending_per_day` 的成因。解析规则归 `resolve_production_date`（与 `load_snapshot`
+    # 同一处定义），两处口径不会分叉。
+    production_date = resolve_production_date(body.production_date, now=DEMO_ANCHOR)
+
     # 前置检查：同一 production_date 已存在 PENDING_APPROVAL 计划时拒绝重复生成
     # （ux_pending_per_day 部分唯一索引的前端保护，R11.8 / R12.6）。
     # 不依赖数据库约束抛 IntegrityError，而是主动返回 409 + PENDING_PLAN_EXISTS。
     try:
         existing_pending = db.scalars(
             select(orm.ProductionPlan).where(
-                orm.ProductionPlan.production_date == body.production_date,
+                orm.ProductionPlan.production_date == production_date,
                 orm.ProductionPlan.status == "PENDING_APPROVAL",
             )
         ).first()
@@ -371,7 +379,7 @@ def generate_plan(
                 status_code=409,
                 code=ErrorCode.PENDING_PLAN_EXISTS,
                 message=(
-                    f"Production date {body.production_date} already has a pending-approval plan "
+                    f"Production date {production_date} already has a pending-approval plan "
                     f"({existing_pending.plan_id}). Please approve or reject the existing plan "
                     "before generating a new one."
                 ),
@@ -388,7 +396,7 @@ def generate_plan(
     try:
         result = run_plan_generation(
             db,
-            production_date=body.production_date,
+            production_date=production_date,
             now=DEMO_ANCHOR,
             actor=session.subject.upper(),
             session_id=f"session-{session.subject}",

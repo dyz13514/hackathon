@@ -134,9 +134,9 @@ def build_explanation_system() -> tuple[str, ...]:
     output。**刻意不拼** `build_tools_block`——解释调用不选工具，省下 ≈2,200 token 是 K-10
     成立的关键（模块 docstring）。
 
-    返回一个单元素元组 `(prose,)`：`LlmRequest.system` 因此只有一个块，`assemble_body` 把它
-    放进 `system[0]`，没有 `system[1]`（工具块）。给定本函数无入参，返回逐字节确定，因此
-    `content_hash` 稳定、缓存可命中。
+    返回一个单元素元组 `(prose,)`：解释调用**不拼工具块**，静态前缀因此只有提示词一块
+    （`Bedrock_Adapter.assemble_body` 把 `system` 的各块按原序拼成请求体的第一条 system
+    消息）。给定本函数无入参，返回逐字节确定，因此 `content_hash` 稳定、缓存可命中。
     """
     prose = "\n\n".join(
         [

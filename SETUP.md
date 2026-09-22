@@ -37,16 +37,21 @@ cd d:\Hackathon\hackathon
 copy .env.example .env
 ```
 
-`.env` 文件内容如下（已配置好，无需修改）：
+`.env` 的各键含义如下。**取值一律以你本地 `.env` 的实际内容为准**——本文档不记录任何真实口令或密钥：
 
 ```
 DATABASE_URL=sqlite:///./var/planning.db
-SESSION_SHARED_PASSWORD=demo-password-2026
-SESSION_SECRET_KEY=demo-secret-key-for-hackathon-use-only-2026
+SESSION_SHARED_PASSWORD=<你本地 .env 里的共享口令：登录浏览器时用的就是它>
+SESSION_SECRET_KEY=<你本地 .env 里 ≥32 字符的会话签名密钥>
 LLM_MODE=STUB
 CORS_ALLOW_ORIGINS=http://localhost:5173
 UPLOAD_DIR=./var/uploads
 ```
+
+> **记住你的登录口令**：它就是 `SESSION_SHARED_PASSWORD`。查看方式（不会把口令打印到本文档里）：
+> cmd 用 `findstr SESSION_SHARED_PASSWORD .env`，PowerShell 用
+> `Select-String -Path .env -Pattern '^SESSION_SHARED_PASSWORD='`。
+> **后端以哪个值启动，浏览器登录就必须用哪个值**——两者不一致会一直提示口令错误。
 
 > **注意**：`LLM_MODE=STUB` 表示不调用任何 LLM 服务，无需配置 Bedrock 凭证即可运行。
 
@@ -116,11 +121,15 @@ set EVAL_REPORT=d:\Hackathon\hackathon\eval_report.md
 ```cmd
 cd d:\Hackathon\hackathon\backend
 set DATABASE_URL=sqlite:///./var/planning.db
-set SESSION_SHARED_PASSWORD=demo-password-2026
-set SESSION_SECRET_KEY=demo-secret-key-for-hackathon-use-only-2026
+set SESSION_SHARED_PASSWORD=<你本地 .env 的 SESSION_SHARED_PASSWORD>
+set SESSION_SECRET_KEY=<你本地 .env 的 SESSION_SECRET_KEY>
 set LLM_MODE=STUB
 .venv\Scripts\uvicorn app.main:create_app --factory --reload --workers 1 --port 8000
 ```
+
+> 这两句 `set` 会**覆盖** `.env` 里的同名值。要么填成与 `.env` 完全一致的值，要么整段删掉
+> 这两句、直接沿用 `.env`（推荐：从 `backend/` 启动时 `app/settings.py` 会自动读取仓库根的
+> `.env`）。覆盖成别的值以后，第五步的口令与第七步登录用的口令就对不上了。
 
 看到以下输出即启动成功，**保持此窗口不关**：
 
@@ -158,7 +167,7 @@ Local:   http://localhost:5173/
 | 步骤 | 操作 | 预期结果 |
 |------|------|----------|
 | 1 | 打开首页 | 状态看板显示订单、物料、机器、工人、计划五类卡片 |
-| 2 | 点击「生成计划」 | 弹出登录框，输入密码 `demo-password-2026` |
+| 2 | 点击「生成计划」 | 弹出登录框，输入你本地 `.env` 的 `SESSION_SHARED_PASSWORD`（见第二步的说明） |
 | 3 | 登录后生成计划 | 返回甘特图 + 基线对比，60 秒内完成 |
 | 4 | 查看计划解释 | 显示结构化解释，含 7 个目标分量 |
 | 5 | 进入审批页面，点 APPROVE | 计划状态变为 ACTIVE |
@@ -202,15 +211,37 @@ $env:DATABASE_URL="sqlite:///./var/planning.db"
 
 > **关于 Bedrock Gateway**：项目通过一个 HTTP 代理网关访问 Bedrock，而不是直接使用 AWS SDK。网关负责签名和转发请求。你可以使用团队内部部署的网关，或自行搭建（参考 AWS 官方的 Bedrock API Gateway 方案）。
 
+> **网关的接口形态**：`Bedrock_Adapter` 按 **Ollama 兼容** 的 `POST /api/chat` 协议收发
+> （请求体字段为 `model` / `messages` / `stream` / `options`，响应取 `message.content`
+> 与 `prompt_eval_count` / `eval_count`）。因此 `BEDROCK_GATEWAY_URL` 要填**完整端点**
+> （含 `/api/chat`）。若网关返回其他常见形态（`content`、`choices[0].message.content`
+> 等），解析器同样认得；正文取不出来时会显式报错并降级，而不是发布空解释。
+
 ### 配置步骤
 
-**第一步**：编辑 `.env` 文件，修改以下三项：
+**第一步**：编辑 `.env` 文件，修改以下几项（`BEDROCK_MODEL` 可选，默认 `sonnet4.5:latest`）：
 
 ```
 LLM_MODE=LIVE
-BEDROCK_GATEWAY_URL=https://你的网关地址
+BEDROCK_GATEWAY_URL=https://你的网关地址/api/chat
 BEDROCK_API_KEY=你的API密钥
+BEDROCK_MODEL=sonnet4.5:latest
+LLM_API_STYLE=OLLAMA
 ```
+
+> **OpenAI 兼容服务（例如 DeepSeek）**：把地址换成对方的完整 chat 端点、模型换成对方的
+> 模型 id，并把请求体形态切到 `OPENAI`（顶层 `temperature` / `max_tokens`，不发 Ollama 的
+> `options`）。其余一切不变——认证头、重试/降级与响应解析两种形态共用同一套实现：
+>
+> ```
+> LLM_MODE=LIVE
+> BEDROCK_GATEWAY_URL=https://api.deepseek.com/chat/completions
+> BEDROCK_API_KEY=你的DeepSeek密钥
+> BEDROCK_MODEL=deepseek-chat
+> LLM_API_STYLE=OPENAI
+> ```
+>
+> `BEDROCK_*` 只是历史变量名，含义是「配置的 LLM 端点 / 凭证 / 模型」，不限定供应商。
 
 **第二步**：验证配置是否生效，启动后端后访问健康检查接口：
 

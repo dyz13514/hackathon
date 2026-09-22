@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import axe from 'axe-core';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiError } from '../api/client';
@@ -75,6 +76,18 @@ function mockLoaded() {
   vi.mocked(getPlan).mockResolvedValue(PLAN);
 }
 
+/**
+ * 审批视图现在读取 `?plan_id=`（风险面板的「查看缓解提案」入口会带上它），因此渲染时必须
+ * 像真实应用那样处在 Router 上下文里（`main.tsx` 用 `BrowserRouter`，测试用 `MemoryRouter`）。
+ */
+function renderApproval(path = '/approval') {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <Approval />
+    </MemoryRouter>,
+  );
+}
+
 afterEach(() => {
   vi.clearAllMocks();
 });
@@ -82,20 +95,21 @@ afterEach(() => {
 describe('Approval 视图', () => {
   it('渲染计划摘要、目标评分全分量表与总分（R7.3）', async () => {
     mockLoaded();
-    render(<Approval />);
+    renderApproval();
 
     expect(await screen.findByRole('heading', { name: 'Plan summary' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Objective score breakdown' })).toBeInTheDocument();
     // 全分量逐行
-    expect(screen.getByRole('rowheader', { name: 'total_tardiness' })).toBeInTheDocument();
-    expect(screen.getByRole('rowheader', { name: 'on_time_rate' })).toBeInTheDocument();
+    // 显示名读作人话（原样字段名仅出现在 API 契约里）
+    expect(screen.getByRole('rowheader', { name: 'Total tardiness' })).toBeInTheDocument();
+    expect(screen.getByRole('rowheader', { name: 'On time rate' })).toBeInTheDocument();
     // 权重覆盖标注
     expect(screen.getByText(/rule-1/)).toBeInTheDocument();
   });
 
   it('醒目标注不可排产作业数与受影响订单（R8.6）', async () => {
     mockLoaded();
-    render(<Approval />);
+    renderApproval();
     expect(await screen.findByRole('heading', { name: /Unschedulable jobs: 1/ })).toBeInTheDocument();
     expect(screen.getByText(/ORD-009/)).toBeInTheDocument();
   });
@@ -103,7 +117,7 @@ describe('Approval 视图', () => {
   it('APPROVE 调用后端并显示成功', async () => {
     mockLoaded();
     vi.mocked(approvePlan).mockResolvedValue({ plan_id: 'PLAN-abc', status: 'ACTIVE' });
-    render(<Approval />);
+    renderApproval();
 
     fireEvent.click(await screen.findByRole('button', { name: 'Approve plan PLAN-abc' }));
     await waitFor(() => expect(approvePlan).toHaveBeenCalledWith('PLAN-abc', 2));
@@ -112,7 +126,7 @@ describe('Approval 视图', () => {
 
   it('REJECT 按钮在理由少于 5 字符时禁用（R11.4）', async () => {
     mockLoaded();
-    render(<Approval />);
+    renderApproval();
     const rejectBtn = await screen.findByRole('button', { name: 'Reject plan PLAN-abc' });
     expect(rejectBtn).toBeDisabled();
 
@@ -127,7 +141,7 @@ describe('Approval 视图', () => {
       source_plan_id: 'PLAN-abc',
       status: 'PENDING_APPROVAL',
     });
-    render(<Approval />);
+    renderApproval();
 
     await screen.findByRole('heading', { name: 'Approval actions' });
     fireEvent.change(screen.getByLabelText('Modification type'), { target: { value: 'LOCK_JOB' } });
@@ -150,7 +164,7 @@ describe('Approval 视图', () => {
         current_version: 5,
       }),
     );
-    render(<Approval />);
+    renderApproval();
 
     fireEvent.click(await screen.findByRole('button', { name: 'Approve plan PLAN-abc' }));
     const alert = await screen.findByText(/The input data this proposal relies on has changed/);
@@ -165,13 +179,46 @@ describe('Approval 视图', () => {
 
   it('没有待审批计划时给出空态', async () => {
     vi.mocked(listPending).mockResolvedValue([]);
-    render(<Approval />);
+    renderApproval();
     expect(await screen.findByText('There are no plans pending approval.')).toBeInTheDocument();
+  });
+
+  it('带 ?plan_id= 时选中那一份提案（风险面板「查看缓解提案」的入口）', async () => {
+    // 列表首项故意不是点进来的那一份：选中必须按 plan_id，而不是「取列表第一项」。
+    const mitigationSummary: PlanSummary = {
+      ...SUMMARY,
+      plan_id: 'PLAN-mit',
+      origin: 'RISK_MITIGATION',
+    };
+    const mitigationDetail: PlanDetail = {
+      ...PLAN,
+      plan_id: 'PLAN-mit',
+      origin: 'RISK_MITIGATION',
+    };
+    vi.mocked(listPending).mockResolvedValue([SUMMARY, mitigationSummary]);
+    vi.mocked(getPlan).mockResolvedValue(mitigationDetail);
+
+    renderApproval('/approval?plan_id=PLAN-mit');
+
+    await waitFor(() => expect(getPlan).toHaveBeenCalledWith('PLAN-mit'));
+    const summary = await screen.findByRole('heading', { name: 'Plan summary' });
+    expect(summary.closest('section')).toHaveTextContent('PLAN-mit');
+  });
+
+  it('?plan_id= 指向已处置的提案时给出说明，不静默展示另一份（R14.7）', async () => {
+    vi.mocked(listPending).mockResolvedValue([SUMMARY]);
+    vi.mocked(getPlan).mockResolvedValue(PLAN);
+
+    renderApproval('/approval?plan_id=PLAN-gone');
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      /PLAN-gone is not awaiting approval/,
+    );
   });
 
   it('无严重可访问性违规（axe-core）', async () => {
     mockLoaded();
-    const { container } = render(<Approval />);
+    const { container } = renderApproval();
     await screen.findByRole('heading', { name: 'Approval actions' });
 
     const results = await axe.run(container, {

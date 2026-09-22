@@ -23,12 +23,59 @@ function formatRate(rate: number): string {
   return `${(rate * 100).toFixed(1)}%`;
 }
 
+/** 数值：去掉 `16.00000000000000000000` 这类长尾零，最多保留 2 位小数（值本身不变）。 */
+function formatNumber(value: unknown): string {
+  if (typeof value === 'number' || (typeof value === 'string' && value.trim() !== '')) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed.toLocaleString(undefined, {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+      });
+    }
+  }
+  return String(value);
+}
+
+/** ISO 时间戳 → 本地可读时间；解析不出来就原样显示。 */
+function formatTimestamp(value: unknown): string {
+  const raw = String(value);
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? raw : parsed.toLocaleString();
+}
+
+/** `shortfall_quantity` → 「Shortfall」这类人读标签；未知键退化为「去下划线 + 首字母大写」。 */
+function humanizeKey(key: string): string {
+  const spaced = key.replace(/_/g, ' ').trim();
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
 function formatSuggestion(suggestion: Record<string, unknown>): string {
   const entries = Object.entries(suggestion);
   if (entries.length === 0) {
     return '(no quantified conditions)';
   }
-  return entries.map(([key, value]) => `${key}=${String(value)}`).join(', ');
+  // 已知的组合字段先说人话：缺料 → 「Shortfall: 16 kg」+「Material: MAT-…」+「Needed before: …」。
+  // 其余键按「人读标签: 值」渲染；下层的数值与时间一个都不改，只改呈现。
+  const { material_id: materialId, shortfall_quantity: shortfall, unit } = suggestion;
+  const parts: string[] = [];
+  if (shortfall !== undefined) {
+    parts.push(`Shortfall: ${formatNumber(shortfall)}${unit ? ` ${String(unit)}` : ''}`);
+  }
+  if (materialId !== undefined) {
+    parts.push(`Material: ${String(materialId)}`);
+  }
+  for (const [key, value] of entries) {
+    const consumed =
+      key === 'shortfall_quantity' || key === 'material_id' || (key === 'unit' && shortfall !== undefined);
+    if (consumed) {
+      continue;
+    }
+    parts.push(
+      `${humanizeKey(key)}: ${key === 'needed_before' ? formatTimestamp(value) : formatNumber(value)}`,
+    );
+  }
+  return parts.join(' · ');
 }
 
 export function Schedule() {

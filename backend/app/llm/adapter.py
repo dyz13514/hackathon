@@ -19,12 +19,28 @@ design.md §2.1 把这里定成「唯一出口」。这不是组织上的偏好�
 
 ## 静态前缀优先的装配（这条不变量的价值）
 
-`assemble_body` 把 `system` 数组分成两个块：提示词段 1–3 + 段 5 在前，工具 schema
-段 4 在后；一切变化的内容都在 `messages` 里，`temperature = 0`。design.md §2.1 说明
-这**与 prompt caching 无关**（caching 已移出范围）——保留它是因为前缀是常量使
-`Context_Manager.assemble_messages` 成为纯函数，其输出可被逐字节断言。本模块的
-`assemble_body` 是同一个不变量在出口侧的落点：给定同一个 `LlmRequest`，请求体逐字节
-确定，因此 `content_hash` 稳定，缓存与 cassette 才能按哈希命中。
+`assemble_body` 按网关实际接受的 **Ollama `/api/chat`** 形态装配请求体：`system` 块按序
+用空行拼成**第一条 `role="system"` 消息**（提示词段 + 工具 schema 段都在这里，静态前缀
+因此在最前），`user` 作为**唯一一条 `role="user"` 消息**在后，采样参数进 `options`、
+`temperature = 0`。变化的内容只发生在最后一条消息里。
+
+该形态由 `LLM_API_STYLE` 选择（`LlmApiStyle`）：`OLLAMA`（默认，向后兼容）把
+`temperature` / `num_predict` 放进 `options`；`OPENAI` 供 OpenAI 兼容服务使用（例如
+DeepSeek 的 `POST /chat/completions`）——`messages` 逐字节相同，只把采样参数升到顶层
+`temperature` / `max_tokens` 并去掉 `options`（`num_predict` 是 Ollama 专有字段）。
+两种形态因此共享同一条 **messages 不变量**，`content_hash` 也不含形态，cassette 与缓存
+跨形态同样有效。
+
+这里真正 load-bearing 的是**顺序不变量**（静态前缀在前、变化内容集中在末尾、
+`temperature = 0`），而不是具体的传输字段名：`Context_Manager.assemble_messages` 是纯函数，
+其输出可被逐字节断言；请求体也因此逐字节确定，`content_hash` 稳定，缓存与 cassette 才能
+按哈希命中。
+
+> design.md §2.1 的 JSON 草图记的是早期设想的 `system` 数组形态。团队实际接入的是
+> Ollama 兼容网关（`POST /api/chat`，模型 `sonnet4.5:latest`），因此**实现以网关的真实
+> 契约**为准；`tests/unit/test_llm_adapter_cache.py` 与 `test_context_manager.py` 按该契约
+> 断言。响应解析见 `_parse_response`：认得的不止一种形态，且认不出来会显式报错而不是
+> 悄悄返回空文本。
 
 ## 预算记账是一条注入的接缝
 
@@ -43,6 +59,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import time
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Final, Protocol
@@ -52,10 +69,13 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.db import audit
 from app.llm.pricing import PRICE
+from app.logging_config import log_event
+from app.settings import DEFAULT_BEDROCK_MODEL, Settings
 
 if TYPE_CHECKING:
     from app.llm.cassette import Cassette
-    from app.settings import Settings
+
+logger = logging.getLogger(__name__)
 
 
 # --------------------------------------------------------------------------
@@ -76,6 +96,24 @@ class LlmMode(str, Enum):
     DISABLED = "DISABLED"
 
 
+class LlmApiStyle(str, Enum):
+    """请求体的接口形态。**不改变**响应解析、认证与重试/降级逻辑，只决定采样参数放在哪。
+
+    - `OLLAMA`（默认，向后兼容）：团队既有网关的 `POST /api/chat` 契约——`temperature` 与
+      `num_predict` 放在 `options` 里。
+    - `OPENAI`：OpenAI 兼容服务（例如 DeepSeek 的 `POST /chat/completions`）——同样的
+      `model` / `messages` / `stream`，但 `temperature` 与 `max_tokens` 在**顶层**，且不发
+      `options`（`num_predict` 是 Ollama 专有字段，对方不认识它，最坏情况会整条请求 400）。
+
+    两种形态的 `messages` 完全一致（静态前缀在前、唯一一条 user 在后），因此 `content_hash`
+    不受本枚举影响——cassette 与缓存跨形态仍然有效（`content_hash` 只覆盖 agent/system/
+    user/max_tokens/temperature）。
+    """
+
+    OLLAMA = "OLLAMA"
+    OPENAI = "OPENAI"
+
+
 class LlmDisabledError(RuntimeError):
     """`DISABLED` 模式下有人调用了 `invoke`。
 
@@ -94,6 +132,24 @@ class BedrockUnavailableError(RuntimeError):
     只在 `LIVE` 模式下可能抛出。抛出时 adapter 已把 `mode` 置为 `DISABLED` 并写了
     `DEGRADED_MODE_SWITCH` 审计——因此这是「本次失败」的信号，后续调用会直接以
     `LlmDisabledError` 拒绝，调用方两种异常都应回退到模板。
+    """
+
+
+class LlmResponseFormatError(BedrockUnavailableError):
+    """网关回了 200，但响应体里找不到可用的正文。
+
+    为什么是 `BedrockUnavailableError` 的子类而不是一个新的并列异常：调用方
+    （`explanation` / 各 Agent 驱动）已经 catch 了这个类型并各自实现模板回退，
+    这是**同一个处置**——「本次 LLM 输出不可用，走确定性回退」。做成子类，那些
+    回退一律自动生效，不存在「新异常类型没人接住 → 500」的缺口。
+
+    为什么必须抛而不是返回空串（R25.8「返回不可重试错误 → 切 `DETERMINISTIC_ONLY`」）：
+    空正文在这个项目里是**静默的错**——`guard_explanation_numeric_consistency("")` 找不到
+    任何数字，因此判定一致，计划解释会以 `numeric_check = PASS` 发布一段空文本。宁可
+    回退到确定性模板，也不要把「解析不出来」伪装成「模型说了空话」。
+
+    与 `_post_with_retry` 遇到不可重试 HTTP 状态一样，抛出前已 `_degrade()`，因此基类
+    「抛出时已切 `DETERMINISTIC_ONLY`」的承诺对子类同样成立。
     """
 
 
@@ -159,26 +215,46 @@ class LlmRequest(BaseModel):
         )
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
-    def assemble_body(self, model: str = "sonnet4.5:latest") -> dict[str, Any]:
-        """Ollama /api/chat 格式请求体。
+    def assemble_body(
+        self,
+        model: str = DEFAULT_BEDROCK_MODEL,
+        *,
+        style: LlmApiStyle = LlmApiStyle.OLLAMA,
+    ) -> dict[str, Any]:
+        """按 `style` 装配请求体（默认 `OLLAMA`，与既有网关逐字节兼容）。
 
-        Ollama 不支持独立的 `system` 数组，改用标准的 messages 列表：
-        system 块合并为一条 role=system 消息，user 内容作为 role=user 消息。
-        给定同一个 `LlmRequest` 与 `model`，返回逐字节确定。
+        两种形态共享三条不变量：`system` 块**按原序**拼成第一条 `role="system"` 消息
+        （静态前缀因此永远在最前）；`user` 是唯一一条 `role="user"` 消息且在最后；
+        `stream=False`，采样参数由本对象给出（`temperature` 默认 0，确定性要求）。
+        唯一的差别是采样参数的位置：
+
+        - `OLLAMA`：`options.{temperature,num_predict}`（本项目网关的契约）；
+        - `OPENAI`：顶层 `temperature` / `max_tokens`，**不带** `options`（OpenAI 兼容服务
+          如 DeepSeek 的 `POST /chat/completions`；`num_predict` 对方不认识）。
+
+        给定同一个 `LlmRequest`、`model` 与 `style`，返回逐字节确定。
+
+        注意 `user` 这里承载的是 `Context_Manager` 拼好的四块文本；设计契约中的「恰好一条
+        user 消息」说的是它——`role="system"` 只是同一份静态前缀的传输载体，不是历史消息。
         """
         system_text = "\n\n".join(self.system)
-        return {
+        body: dict[str, Any] = {
             "model": model,
             "messages": [
                 {"role": "system", "content": system_text},
                 {"role": "user", "content": self.user},
             ],
             "stream": False,
-            "options": {
-                "temperature": self.temperature,
-                "num_predict": self.max_tokens,
-            },
         }
+        if style is LlmApiStyle.OPENAI:
+            body["temperature"] = self.temperature
+            body["max_tokens"] = self.max_tokens
+            return body
+        body["options"] = {
+            "temperature": self.temperature,
+            "num_predict": self.max_tokens,
+        }
+        return body
 
 
 class LlmResponse(BaseModel):
@@ -274,7 +350,8 @@ class BedrockAdapter:
         cassette: Cassette,
         gateway_url: str | None = None,
         api_key: str | None = None,
-        model: str = "sonnet4.5:latest",
+        model: str = DEFAULT_BEDROCK_MODEL,
+        style: LlmApiStyle = LlmApiStyle.OLLAMA,
         cache: ResponseCache | None = None,
         budget: BudgetRecorder | None = None,
         http_client: httpx.Client | None = None,
@@ -286,6 +363,7 @@ class BedrockAdapter:
         self._gateway_url = gateway_url
         self._api_key = api_key
         self._model = model
+        self._style = style
         self._cache: ResponseCache = cache if cache is not None else InMemoryResponseCache()
         self._budget: BudgetRecorder = budget if budget is not None else _NullBudget()
         self._http_client = http_client
@@ -313,6 +391,7 @@ class BedrockAdapter:
             gateway_url=settings.bedrock_gateway_url,
             api_key=api_key,
             model=settings.bedrock_model,
+            style=LlmApiStyle(settings.llm_api_style),
             cache=cache,
             budget=budget,
             http_client=http_client,
@@ -345,14 +424,48 @@ class BedrockAdapter:
 
     def _invoke_live(self, req: LlmRequest) -> LlmResponse:
         """真实调用网关，含超时、重试与降级。仅 `LIVE` 模式下走到这里。"""
-        body = req.assemble_body(model=self._model)
+        body = req.assemble_body(model=self._model, style=self._style)
         try:
             payload = self._post_with_retry(body)
         except _RetryExhaustedError as exc:
             self._degrade(reason=exc.reason, trace_id=None)
             raise BedrockUnavailableError(exc.reason) from exc
+
+        try:
+            response = self._parse_response(payload)
+        except LlmResponseFormatError as exc:
+            # 「答了但答不可用」与 HTTP 失败同类：不可重试 → 立即降级（R25.8），
+            # 并把原因留在 `DEGRADED_MODE_SWITCH` 审计里便于定位是哪个网关形态变了。
+            self._degrade(reason=str(exc), trace_id=None)
+            raise
+
+        # 只有走完整条通路（HTTP 成功 **且** 响应可用）才算成功，因此计数器在这里清零：
+        # 把「网关一直回不可解析的体」也算进连续失败，才能真正触发降级。
         self._consecutive_failures = 0
-        return self._parse_response(payload)
+        self._record_cassette(req, response)
+        return response
+
+    def _record_cassette(self, req: LlmRequest, response: LlmResponse) -> None:
+        """把一次真实的 LIVE 响应录进 cassette，供日后 `REPLAY` 回放。
+
+        `cassette.py` 的模块 docstring 与 `Cassette.record` 都把「LIVE 响应由 adapter 录制」
+        写成约定；在此之前这段接线缺失，后果是 `LLM_MODE=LIVE` 跑完什么都不会留下，
+        `REPLAY` 永远缺录制（`CassetteMiss`）——即真实额度花了、回放素材却没攒下。
+
+        **尽力而为**：生产部署里 `tests/cassettes/` 可能不可写（systemd 的
+        `ProtectSystem=strict`），而录制失败绝不能把一次成功的 LLM 调用变成失败。
+        写失败只记一条告警，调用照常返回。
+        """
+        try:
+            self._cassette.record(req.content_hash(), req, response)
+        except OSError as exc:
+            log_event(
+                logger,
+                "LLM_CASSETTE_RECORD_FAILED",
+                level=logging.WARNING,
+                message="LIVE 响应未能写入 cassette；本次调用不受影响，但该请求无法离线回放。",
+                error=type(exc).__name__,
+            )
 
     def _post_with_retry(self, body: dict[str, Any]) -> dict[str, Any]:
         """POST 到网关，30s 超时 + 最多 2 次重试（1s / 4s）。
@@ -416,25 +529,38 @@ class BedrockAdapter:
 
     @staticmethod
     def _parse_response(payload: dict[str, Any]) -> LlmResponse:
-        """把 Ollama /api/chat 网关 JSON 解析成 `LlmResponse`。
+        """网关 JSON → `LlmResponse`：正文必须解析得出来，用量尽力而为。
 
-        Ollama 响应格式：
-          {
-            "message": {"role": "assistant", "content": "..."},
-            "prompt_eval_count": 100,   # 输入 token 数
-            "eval_count": 50,           # 输出 token 数
-          }
-        缺字段按 0 计，宁可低估用量也不让解析崩掉。
+        两条非对称的严格度，都是有意的：
+
+        - **正文必须有。** 认不出正文（或正文只有空白）→ 抛
+          `LlmResponseFormatError`，由 `_invoke_live` 降级。原实现取不到字段时返回空串，
+          那会让计划解释以 `numeric_check = PASS` 发布一段空文本——见该异常的 docstring。
+        - **用量可以缺。** 用量的用途是告警阈值与台账，缺了按 0 计（宁可低估，也不因为
+          网关少给一个计数字段就让整次调用失败）。这里只保证**认得的形态**都被取到，
+          不会把一份带用量的响应记成零 —— 那正是本次要修的另一半。
+
+        支持的正文形态（按序尝试，首个命中者胜出，见 `_CONTENT_PATHS`）：
+
+        - `{"message": {"content": "..."}}` —— Ollama `/api/chat`（本项目的网关形态）；
+        - `{"response": "..."}` —— Ollama `/api/generate`；
+        - `{"content": "..."}` 或 `{"content": [{"type": "text", "text": "..."}]}` ——
+          Anthropic / Bedrock `invoke-model` 的 Messages 形态；
+        - `{"output_text": "..."}` —— OpenAI Responses；
+        - `{"choices": [{"message": {"content": "..."}}]}` / `{"choices": [{"text": ...}]}`
+          —— OpenAI Chat Completions / legacy。
+
+        用量形态：Ollama 的 `prompt_eval_count` / `eval_count`、Anthropic 与 OpenAI 共有的
+        `usage.input_tokens` / `output_tokens`、OpenAI 的 `usage.prompt_tokens` /
+        `completion_tokens`。
+
+        多认几种形态不是「猜」：它让网关换一个前端（或团队换一家代理实现）时不会**静默**
+        退化成空解释，而认不出来时一定会留下一条可定位的错误。
         """
-        message = payload.get("message") or {}
-        content = str(message.get("content", ""))
-        return LlmResponse(
-            content=content,
-            usage=LlmUsage(
-                input_tokens=int(payload.get("prompt_eval_count", 0)),
-                output_tokens=int(payload.get("eval_count", 0)),
-            ),
-        )
+        content = _extract_content(payload)
+        if content is None or not content.strip():
+            raise LlmResponseFormatError(_format_error_message(payload, content))
+        return LlmResponse(content=content, usage=_extract_usage(payload))
 
 
 class _RetryExhaustedError(RuntimeError):
@@ -454,3 +580,125 @@ def _json_of(response: httpx.Response) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise _RetryExhaustedError(reason="网关返回的 JSON 不是对象")
     return data
+
+
+# --------------------------------------------------------------------------
+# 响应形态识别：把「认得哪些网关方言」集中成两张表，而不是散在解析逻辑里
+# --------------------------------------------------------------------------
+
+#: 正文候选路径（按序尝试，首个命中者胜出）。路径元素是 dict 键，或是 list 下标。
+_CONTENT_PATHS: Final[tuple[tuple[str | int, ...], ...]] = (
+    ("message", "content"),  # Ollama /api/chat —— 本项目网关的形态
+    ("response",),  # Ollama /api/generate
+    ("content",),  # 简化 JSON 网关 / Anthropic 的 content 字段
+    ("output_text",),  # OpenAI Responses
+    ("choices", 0, "message", "content"),  # OpenAI Chat Completions
+    ("choices", 0, "text"),  # OpenAI legacy completions
+)
+
+#: 用量候选路径：`(输入 token 路径, 输出 token 路径)`，首个命中者胜出。
+_USAGE_PATHS: Final[tuple[tuple[tuple[str | int, ...], tuple[str | int, ...]], ...]] = (
+    (("prompt_eval_count",), ("eval_count",)),  # Ollama
+    (("usage", "input_tokens"), ("usage", "output_tokens")),  # Anthropic / Bedrock
+    (("usage", "prompt_tokens"), ("usage", "completion_tokens")),  # OpenAI
+)
+
+
+def _dig(payload: Any, path: tuple[str | int, ...]) -> Any:
+    """按路径取值；任一层缺失或类型不符即返回 `None`（不抛异常）。"""
+    current: Any = payload
+    for key in path:
+        if isinstance(key, int):
+            if not isinstance(current, list) or key >= len(current):
+                return None
+            current = current[key]
+        else:
+            if not isinstance(current, dict) or key not in current:
+                return None
+            current = current[key]
+    return current
+
+
+def _as_text(value: Any) -> str | None:
+    """把候选值规整成文本：字符串原样，文本块列表拼接；其余返回 `None`。
+
+    Anthropic 的 `content` 是块列表（`[{"type": "text", "text": "..."}]`），因此需要
+    这一层规整；空列表返回 `None` 而不是空串，好让解析继续尝试下一种形态。
+    """
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        parts: list[str] = []
+        for block in value:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict):
+                text = block.get("text", block.get("content"))
+                if isinstance(text, str):
+                    parts.append(text)
+        return "\n".join(parts) if parts else None
+    return None
+
+
+def _as_int(value: Any) -> int | None:
+    """尽力解析非负整数；`bool` 不算（`True` 是 `int` 子类，会悄悄变成 1）。"""
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 0 else None
+
+
+def _extract_content(payload: dict[str, Any]) -> str | None:
+    """按 `_CONTENT_PATHS` 取正文；一处都取不到返回 `None`。"""
+    for path in _CONTENT_PATHS:
+        text = _as_text(_dig(payload, path))
+        if text is not None:
+            return text
+    return None
+
+
+def _extract_usage(payload: dict[str, Any]) -> LlmUsage:
+    """按 `_USAGE_PATHS` 取用量；一个计数都认不出时按 0 计（正文仍然可用）。"""
+    for input_path, output_path in _USAGE_PATHS:
+        input_tokens = _as_int(_dig(payload, input_path))
+        output_tokens = _as_int(_dig(payload, output_path))
+        if input_tokens is not None or output_tokens is not None:
+            return LlmUsage(
+                input_tokens=input_tokens or 0, output_tokens=output_tokens or 0
+            )
+    return LlmUsage.zero()
+
+
+def _error_hint(payload: dict[str, Any]) -> str | None:
+    """从错误信封里取一句人类可读说明（截断，绝不回显整包）。"""
+    error = payload.get("error")
+    if isinstance(error, dict):
+        for key in ("message", "type", "code"):
+            value = error.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()[:200]
+    if isinstance(error, str) and error.strip():
+        return error.strip()[:200]
+    detail = payload.get("detail")
+    if isinstance(detail, str) and detail.strip():
+        return detail.strip()[:200]
+    return None
+
+
+def _format_error_message(payload: dict[str, Any], content: str | None) -> str:
+    """格式错误的人读信息：给出可定位的线索，但不把整包响应塞进日志/审计。"""
+    hint = _error_hint(payload)
+    if hint is not None:
+        detail = f"网关错误信息：{hint}"
+    elif content is not None:
+        detail = "正文只有空白字符"
+    else:
+        detail = f"顶层键={sorted(payload)[:12]}"
+    return (
+        f"网关响应解析不出正文（{detail}）。"
+        "已识别的正文形态：message.content / response / content / output_text / "
+        "choices[0].message.content。"
+    )

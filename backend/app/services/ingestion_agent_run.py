@@ -27,10 +27,18 @@ Agent 的 `final` 只是**提案**，写入 `proposed_mapping` 供人工确认�
 走不到合法 `final`（`outcome != OK`）。此时本服务**回退**到确定性提议（`propose_mapping`）作为
 `proposed_mapping`，并在返回结果里标注 `agent_outcome`——既不伪造 LIVE cassette，也不谎称
 Agent 成功。测试用 `ScriptedIngestionDriver` 注入合法 `final`，证明 Agent 路径端到端被执行。
+
+`REPLAY` 且**缺录制**时是同一件事的另一种到达方式：`BedrockAdapter` 抛 `CassetteMiss`
+（而不是像 `STUB` 那样返回占位文本），异常从驱动冒到 `Orchestrator._react_loop`。循环只管
+工具调用与输出契约的错误，不接住驱动自身的异常，因此该异常原本会一路冒到 API 层变成
+**HTTP 500**。本服务按 `explanation.py` / `whatif_translate.py` 的同一处置把它接住并回退
+到确定性提议——两个入口（`GET /imports/{id}/proposal`、`POST /imports/{id}/confirm`）因此
+都不会因为「这次没有 LLM 输出」而 500。
 """
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 from pydantic import BaseModel, ConfigDict
@@ -39,8 +47,10 @@ from app.agents.ingestion_agent import (
     IngestionAgentDriver,
     ingestion_contracts,
 )
-from app.llm.adapter import BedrockAdapter
+from app.llm.adapter import BedrockAdapter, LlmDisabledError
 from app.llm.budget import TokenBudgetManager
+from app.llm.cassette import CassetteMiss
+from app.logging_config import log_event
 from app.orchestrator.orchestrator import AgentDriver, Orchestrator
 from app.orchestrator.routing import Intent
 from app.orchestrator.tracing import InMemoryTracer
@@ -49,7 +59,18 @@ from app.services.spreadsheet import ParsedFile
 from app.tools.build import build_registry
 from app.tools.registry import InMemoryToolCallRecorder
 
-__all__ = ["IngestionRunResult", "MappingToolSession", "run_ingestion_mapping"]
+__all__ = [
+    "LLM_UNAVAILABLE_OUTCOME",
+    "IngestionRunResult",
+    "MappingToolSession",
+    "run_ingestion_mapping",
+]
+
+logger = logging.getLogger(__name__)
+
+#: LLM 侧不可用时 `agent_outcome` 的取值。与 `whatif_translate.TranslationOutcome.LLM_UNAVAILABLE`
+#: 用同一个词，便于按结局筛选 Trace；前端只据 `from_agent=False` 显示「确定性提议」。
+LLM_UNAVAILABLE_OUTCOME = "LLM_UNAVAILABLE"
 
 
 class _IngestMappingPayload(BaseModel):
@@ -85,12 +106,31 @@ class IngestionRunResult:
     `proposed_mapping` 是要写进 `import_batches.proposed_mapping` 的 dict。`agent_outcome` 是
     `OrchestratorResult.outcome`（`OK` 表示 Agent 真的产出了合法 `final`）。`from_agent` 为
     True 表示提案来自 Agent 的 `final`；False 表示 STUB 无 cassette 时回退到确定性提议。
+
+    `trace_id` 在回退路径上可能是 `None`：LLM 侧异常（`CassetteMiss` / `LlmDisabledError`）
+    在 `Orchestrator.run` 返回之前抛出，因此那次运行没有可回传的 `trace_id`。
     """
 
     proposed_mapping: dict
     agent_outcome: str
-    trace_id: str
+    trace_id: str | None
     from_agent: bool
+
+
+def _deterministic_result(
+    parsed: ParsedFile,
+    entity_type_hint: str | None,
+    *,
+    outcome: str,
+    trace_id: str | None = None,
+) -> IngestionRunResult:
+    """回退到确定性提议。`from_agent=False` 是这条路径的全部诚实性所在：不谎称 Agent 成功。"""
+    return IngestionRunResult(
+        proposed_mapping=ingestion_svc.propose_mapping(parsed, entity_type_hint=entity_type_hint),
+        agent_outcome=outcome,
+        trace_id=trace_id,
+        from_agent=False,
+    )
 
 
 def run_ingestion_mapping(
@@ -121,7 +161,30 @@ def run_ingestion_mapping(
         tool_session=tool_session,
     )
     payload = _IngestMappingPayload(upload_id=upload_id, entity_type_hint=entity_type_hint)
-    result = orch.run(Intent.INGEST_MAPPING, payload, session_id=session_id)
+    try:
+        result = orch.run(Intent.INGEST_MAPPING, payload, session_id=session_id)
+    except (LlmDisabledError, CassetteMiss) as exc:
+        # LLM 侧不可用**不升级为 500**：与 `explanation.py`（回退模板解释）和
+        # `whatif_translate.py`（回退结构化表单）同一处置——回退到确定性提议，并如实标注
+        # `agent_outcome` / `from_agent=False`。
+        #
+        # 只接住这两个类型，`LIVE` 行为因此不变：网关失败抛的是 `BedrockUnavailableError`
+        # （adapter 已切 `DETERMINISTIC_ONLY`），仍按原样上抛，由上游的降级守卫处置
+        # （R25.10：降级下 `GET /imports/{id}/proposal` 返回 409 手工列映射）。
+        log_event(
+            logger,
+            "INGESTION_LLM_UNAVAILABLE",
+            level=logging.WARNING,
+            message=(
+                "LLM column mapping is unavailable for this run; "
+                "fell back to the deterministic proposal."
+            ),
+            reason=type(exc).__name__,
+            upload_id=upload_id,
+        )
+        return _deterministic_result(
+            parsed, entity_type_hint, outcome=LLM_UNAVAILABLE_OUTCOME
+        )
 
     if result.outcome == "OK" and result.final is not None:
         proposed = _agent_final_to_proposed(result.final, parsed, entity_type_hint)
@@ -133,12 +196,8 @@ def run_ingestion_mapping(
         )
 
     # 诚实降级：STUB 无 cassette 时 Agent 走不到合法 final。用确定性提议，不伪造 Agent 成功。
-    fallback = ingestion_svc.propose_mapping(parsed, entity_type_hint=entity_type_hint)
-    return IngestionRunResult(
-        proposed_mapping=fallback,
-        agent_outcome=result.outcome,
-        trace_id=result.trace_id,
-        from_agent=False,
+    return _deterministic_result(
+        parsed, entity_type_hint, outcome=result.outcome, trace_id=result.trace_id
     )
 
 

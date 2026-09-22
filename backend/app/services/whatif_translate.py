@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
@@ -179,14 +180,26 @@ def _build_request(system: tuple[str, ...], user: str) -> LlmRequest:
     )
 
 
-def _user_block(wrapped_query: str, error_feedback: str | None) -> str:
-    """本轮的 user 段：包裹后的查询 + （若有）上一轮的校验错误反馈。
+def _user_block(wrapped_query: str, error_feedback: str | None, *, now: datetime) -> str:
+    """本轮的 user 段：**参考时间** + 包裹后的查询 + （若有）上一轮的校验错误反馈。
 
     第 1 轮 `error_feedback` 为 None；第 2、3 轮把上一轮不合规的原因回给模型让它自我修正。
     包裹后的查询逐字节稳定，因此第 1 轮请求的哈希稳定、cassette 可命中。
+
+    **参考时间是必需输入，不是可选提示。** `today` / `tomorrow` / `next Friday` 这类相对表达
+    只有对着一个明确的「现在」才有意义，而本系统的「现在」是**注入的**（design.md §3：内核
+    没有 `datetime.now()`；演示口径下是 `DEMO_ANCHOR`）。没有它，模型只能凭空编一个日期——
+    实测就是这样：同一句「... 3 PM today」被翻成 `2023-10-04`，而沙箱随后用 `DEMO_ANCHOR`
+    （2026-03-02）评估，两边对「今天」的理解不一致，推演结果因此**静默失真**（一个 2023 年的
+    停机窗与 2026 年的排产永不相交，看起来像「没有影响」）。调用方必须传入**与
+    `run_scenario(now=...)` 相同的那个 `now`**，翻译与执行才会对同一天说话。
     """
     lines = [
         "Translate the natural-language What-if question below into a structured list of scenario changes:",
+        f"Reference time (this system's current production day): {now.isoformat()}",
+        "Resolve every relative date/time expression (today, tomorrow, this afternoon, next "
+        "Friday, in 3 hours, next week, ...) against that reference time, and output absolute "
+        "ISO8601 timestamps only - never echo a relative expression, and never guess a date.",
         wrapped_query,
     ]
     if error_feedback is not None:
@@ -232,10 +245,16 @@ def translate_whatif_query(
     adapter: BedrockAdapter,
     query: str,
     *,
+    now: datetime,
     actor: str = "PLANNER",
     trace_id: str | None = None,
 ) -> TranslationResult:
     """把一句自然语言 What-if 提问翻译成结构化场景变更（≤3 步 ReAct，不执行）。
+
+    `now` 是**必填**关键字参数：本系统「现在」永远是注入的（design.md §3），它既进提示词
+    （供模型解析 `today` / `tomorrow` 这类相对表达），也必须与随后执行场景的
+    `run_scenario(now=...)` 取同一个值，否则翻译与执行会对不同的日子说话。
+    调用方（`POST /api/scenarios/translate`）传 `DEMO_ANCHOR`，与 `run_scenario` 的缺省口径一致。
 
     步骤：
     1. `wrap_untrusted("whatif.query", query)` 包裹 + `scan_injection` 留痕（R16.10）。
@@ -262,7 +281,7 @@ def translate_whatif_query(
     error_feedback: str | None = None
 
     for _step in range(MAX_TRANSLATE_STEPS):
-        request = _build_request(system, _user_block(wrapped, error_feedback))
+        request = _build_request(system, _user_block(wrapped, error_feedback, now=now))
         try:
             response = adapter.invoke(request)
         except (LlmDisabledError, CassetteMiss):

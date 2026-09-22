@@ -99,6 +99,10 @@ def test_contract_1_system_equals_prefix_verbatim() -> None:
     assert req_few.system == PREFIX.blocks
     # 观察条数从 1 涨到 20，system 一字不变——变化只在 messages。
     assert req_many.system == req_few.system == PREFIX.blocks
+    # 出口侧：静态前缀是请求体的**第一条 system 消息**，且逐字节等于块的按序拼接。
+    body = req_many.assemble_body(model="test-model")
+    assert body["messages"][0]["role"] == "system"
+    assert body["messages"][0]["content"] == "\n\n".join(PREFIX.blocks)
 
 
 # --------------------------------------------------------------------------
@@ -107,12 +111,18 @@ def test_contract_1_system_equals_prefix_verbatim() -> None:
 
 
 def test_contract_2_single_user_message_with_four_blocks_in_order() -> None:
-    """messages 恰 1 条 role=user，由四块按固定顺序拼接。"""
-    body = assemble_messages(_ctx(5), prefix=PREFIX).assemble_body()
-    assert len(body["messages"]) == 1
-    assert body["messages"][0]["role"] == "user"
+    """请求体恰 1 条 role=user（四块按固定顺序拼接），外加 1 条承载静态前缀的 system。
 
-    user = body["messages"][0]["content"]
+    网关契约是 Ollama `/api/chat`，静态前缀必须作为 system 消息传输（见
+    `adapter.py` 模块 docstring）。设计契约 R21.8 关心的「恰一条 user 消息」即
+    `role="user"` 那一条，因此这里断言**角色恰好两种、user 恰一条**。
+    """
+    body = assemble_messages(_ctx(5), prefix=PREFIX).assemble_body()
+    assert [message["role"] for message in body["messages"]] == ["system", "user"]
+    user_messages = [m for m in body["messages"] if m["role"] == "user"]
+    assert len(user_messages) == 1
+
+    user = user_messages[0]["content"]
     # 四块的开标签按固定顺序出现，且各恰好一次。
     order = [
         user.index("<running_state>"),
@@ -123,6 +133,10 @@ def test_contract_2_single_user_message_with_four_blocks_in_order() -> None:
     assert order == sorted(order), "四块顺序必须是 running_state → history → recent → task"
     for tag in ("<running_state>", "<history>", "<recent_observations>", "<task>"):
         assert user.count(tag) == 1, f"{tag} 应恰好出现一次"
+    # 四块只出现在 user 消息里：system 消息承载静态前缀，不掺入运行期内容。
+    system = body["messages"][0]["content"]
+    for tag in ("<running_state>", "<history>", "<recent_observations>", "<task>"):
+        assert tag not in system
 
 
 def test_contract_2_running_state_block_has_fixed_field_order() -> None:
@@ -218,10 +232,10 @@ def test_contract_4_missing_key_identifier_uses_dash() -> None:
 
 
 def test_contract_5_no_historical_assistant_or_tool_messages() -> None:
-    """装配后 messages 里只有一条 user，绝无 assistant / tool 角色（无原始历史）。"""
+    """请求体里只有静态前缀 system + 一条 user，绝无 assistant / tool（无原始历史）。"""
     body = assemble_messages(_ctx(20), prefix=PREFIX).assemble_body()
     roles = [m["role"] for m in body["messages"]]
-    assert roles == ["user"]
+    assert roles == ["system", "user"]
     assert "assistant" not in roles
     assert "tool" not in roles
 

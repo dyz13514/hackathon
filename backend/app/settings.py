@@ -25,8 +25,20 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # 此处只做取值校验，避免 settings 反向依赖 llm 层。
 LlmModeName = Literal["LIVE", "REPLAY", "STUB", "DISABLED"]
 
+# LLM 请求体的接口形态取值域。规范的 `LlmApiStyle` 枚举同样归 `llm/adapter.py`，此处只做
+# 取值校验。`OLLAMA` 是历史默认（团队接入的 Ollama 兼容网关），`OPENAI` 供 OpenAI 兼容的
+# 服务使用（例如 DeepSeek：同一份 `messages`，但采样参数在顶层而不是 `options` 里）。
+LlmApiStyleName = Literal["OLLAMA", "OPENAI"]
+
 #: 会话签名密钥的最小长度。短密钥在演示环境同样不可接受。
 MIN_SECRET_KEY_LENGTH = 32
+
+#: `LLM_MODE=LIVE` 下默认调用的模型名。
+#:
+#: 网关是可配置的 HTTP 端点（`BEDROCK_GATEWAY_URL`），团队接入的是 **Ollama 兼容网关**
+#: （`POST /api/chat`），模型名因此用 Ollama 的 tag 形态。默认值只在这里出现一次：
+#: `Bedrock_Adapter` 从本模块 import 它，避免同一字面量在多处漂移。
+DEFAULT_BEDROCK_MODEL = "sonnet4.5:latest"
 
 
 class ConfigurationError(RuntimeError):
@@ -79,7 +91,15 @@ class Settings(BaseSettings):
     # --- 仅 LLM_MODE=LIVE 时必需 ---
     bedrock_gateway_url: str | None = None
     bedrock_api_key: SecretStr | None = None
-    bedrock_model: str = "sonnet4.5:latest"
+    bedrock_model: str = DEFAULT_BEDROCK_MODEL
+
+    # --- 请求体形态（决定采样参数放在哪里）---
+    # 缺省 `OLLAMA`：与既有网关逐字节兼容（向后兼容，不改任何既有行为）。
+    # 换成 `OPENAI` 时，`temperature` / `max_tokens` 升到顶层、不再发 `options`。
+    llm_api_style: LlmApiStyleName = Field(
+        default="OLLAMA",
+        description="LLM 请求体形态：OLLAMA（默认）或 OPENAI（OpenAI 兼容服务，如 DeepSeek）",
+    )
 
     @property
     def cors_origins(self) -> tuple[str, ...]:
@@ -122,6 +142,9 @@ class Settings(BaseSettings):
             for name, value in (
                 ("BEDROCK_GATEWAY_URL", self.bedrock_gateway_url),
                 ("BEDROCK_API_KEY", api_key),
+                # 有默认值，因此只有被显式置空时才会缺——那同样是一个必须在启动期暴露的
+                # 配置错误：模型名为空会让网关每次调用都失败。
+                ("BEDROCK_MODEL", self.bedrock_model),
             )
             if value is None or not value.strip()
         ]

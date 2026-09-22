@@ -17,7 +17,11 @@ cassette），而不是绕过 Agent 直接返回：
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from pathlib import Path
+
 import pytest
+from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
 from app.agents.contracts import ColumnMappingProposal
@@ -28,12 +32,21 @@ from app.agents.ingestion_agent import (
     scripted_action,
     scripted_mapping_final,
 )
+from app.db.models import Base
+from app.llm.adapter import BedrockAdapter, LlmMode
 from app.llm.budget import TokenBudgetManager
+from app.llm.cassette import Cassette
+from app.main import create_app
 from app.orchestrator.orchestrator import Orchestrator, RouteNotWiredError
 from app.orchestrator.routing import Intent
 from app.orchestrator.tracing import InMemoryTracer
-from app.services.ingestion_agent_run import MappingToolSession, run_ingestion_mapping
+from app.services.ingestion_agent_run import (
+    LLM_UNAVAILABLE_OUTCOME,
+    MappingToolSession,
+    run_ingestion_mapping,
+)
 from app.services.spreadsheet import ParsedFile
+from app.settings import Settings
 from app.tools.build import build_registry
 from app.tools.registry import InMemoryToolCallRecorder
 
@@ -187,3 +200,72 @@ def test_run_ingestion_mapping_low_confidence_flags_needs_confirmation() -> None
     fms = result.proposed_mapping["field_mappings"]
     mid = next(fm for fm in fms if fm["target_field"] == "material_id")
     assert mid["status"] == "NEEDS_CONFIRMATION"
+
+
+# --------------------------------------------------------------------------
+# REPLAY 缺录制：回退确定性提议，不得变成 HTTP 500（回归）
+# --------------------------------------------------------------------------
+
+
+@pytest.fixture
+def replay_app_client(valid_env: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[TestClient]:
+    """`LLM_MODE=REPLAY` 且 cassette 目录里**没有** INGESTION_AGENT 录制的应用。
+
+    与演示配置（`LLM_MODE=REPLAY`）同形：`BedrockAdapter` 找不到录制就抛 `CassetteMiss`。
+    `valid_env` 默认把模式钉在 `STUB`，这里显式改成 `REPLAY`——两者到达回退的方式不同
+    （STUB 返回占位文本 → `outcome != OK`；REPLAY 抛异常），回退结果必须一致。
+    """
+    valid_env.setenv("DATABASE_URL", f"sqlite:///{(tmp_path / 'import_replay.db').as_posix()}")
+    valid_env.setenv("LLM_MODE", "REPLAY")
+    settings = Settings()  # type: ignore[call-arg]
+    application = create_app(settings)
+    Base.metadata.create_all(application.state.engine)
+    with TestClient(application) as client:
+        client.post(
+            "/api/auth/login",
+            json={"password": settings.session_shared_password.get_secret_value()},
+        )
+        yield client
+
+
+def test_run_ingestion_mapping_falls_back_when_replay_recording_is_missing(
+    tmp_path: Path,
+) -> None:
+    """真实驱动 + REPLAY 缺录制 → 确定性提议（from_agent=False），**不抛异常**。"""
+    adapter = BedrockAdapter(mode=LlmMode.REPLAY, cassette=Cassette(directory=tmp_path))
+
+    result = run_ingestion_mapping(parsed=_parsed(), upload_id="UP-1", adapter=adapter)
+
+    assert result.from_agent is False
+    assert result.agent_outcome == LLM_UNAVAILABLE_OUTCOME
+    # 异常在 `Orchestrator.run` 返回之前抛出，因此这次运行没有可回传的 trace_id。
+    assert result.trace_id is None
+    # 回退的是**可用**的提案（识别出实体类型与逐字段映射），不是空壳。
+    assert result.proposed_mapping["entity_type"]
+    assert result.proposed_mapping["field_mappings"]
+
+
+def test_import_proposal_endpoint_returns_200_when_replay_recording_is_missing(
+    replay_app_client: TestClient,
+) -> None:
+    """`GET /api/imports/{id}/proposal` 在 REPLAY 缺录制时返回 200 + 确定性提议。
+
+    回归断言：该路径曾经因为 `CassetteMiss` 冒到 API 层而返回 500（Import 页第一个
+    步骤即失败）。修好后规划员仍能拿到可人工确认的提案（R2.6/R3.1 的入口不被掐断），
+    并且 `from_agent=False` 如实标注这不是 Agent 的输出。
+    """
+    csv_bytes = b"material_id,name,quantity_available,unit\nMAT-1,Steel,100,pcs\n"
+    upload = replay_app_client.post(
+        "/api/imports/upload",
+        files={"file": ("materials.csv", csv_bytes, "text/csv")},
+    )
+    assert upload.status_code == 200, upload.text
+    upload_id = upload.json()["upload_id"]
+
+    response = replay_app_client.get(f"/api/imports/{upload_id}/proposal")
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["from_agent"] is False
+    assert body["agent_outcome"] == LLM_UNAVAILABLE_OUTCOME
+    assert body["proposal"]["field_mappings"]

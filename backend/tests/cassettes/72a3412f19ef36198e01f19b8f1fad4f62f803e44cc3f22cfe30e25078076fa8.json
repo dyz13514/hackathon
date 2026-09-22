@@ -1,0 +1,15 @@
+{
+  "content_hash": "72a3412f19ef36198e01f19b8f1fad4f62f803e44cc3f22cfe30e25078076fa8",
+  "request": {
+    "agent": "PLANNING_AGENT",
+    "max_tokens": 512,
+    "user": "Translate the natural-language What-if question below into a structured list of scenario changes:\nReference time (this system's current production day): 2026-03-02T08:00:00\nResolve every relative date/time expression (today, tomorrow, this afternoon, next Friday, in 3 hours, next week, ...) against that reference time, and output absolute ISO8601 timestamps only - never echo a relative expression, and never guess a date.\n<untrusted source=\"whatif.query\">\n把订单 ORD-009 的优先级改为 URGENT\n</untrusted>"
+  },
+  "response": {
+    "content": "{\"final\": {\"mutations\": [{\"kind\": \"CHANGE_ORDER_PRIORITY\", \"order_id\": \"ORD-009\", \"priority\": \"URGENT\"}]}}",
+    "usage": {
+      "input_tokens": 672,
+      "output_tokens": 40
+    }
+  }
+}

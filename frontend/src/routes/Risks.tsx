@@ -3,8 +3,12 @@
  *
  * 按 severity 分组的卡片（R14.6），每条含：度量值、阈值、`last_seen_at`、叙述与
  * `narrative_source` 徽章（`TEMPLATE`/`LLM` 可区分，R14.11），以及受影响订单。CRITICAL 项额外
- * 显示「查看缓解提案」入口（R14.7，链到该风险的 `mitigation_plan_id`）——INFO/WARNING 仅入
- * 面板、无缓解入口（R14.6）。
+ * 显示「查看缓解提案」入口（R14.7）——INFO/WARNING 仅入面板、无缓解入口（R14.6）。
+ *
+ * **缓解提案是走审批流的 `PENDING_APPROVAL` 计划**（`origin = RISK_MITIGATION`，design.md
+ * 1618：CRITICAL 的缓解提案同样受 L5 约束、不会自动生效）。因此该入口指向**既有的审批视图**
+ * 并带上该计划的 `plan_id`（`/approval?plan_id=…`），由它选中并处置这一份提案——design.md §6
+ * 的视图清单里没有「计划详情页」，不需要为此新建一个视图。
  *
  * 数据来自 `GET /api/risks`（只读）；「重新扫描」按钮触发 `POST /api/risks/scan`（确定性、无
  * LLM）。加载态、错误态、空态都显式呈现。
@@ -71,7 +75,9 @@ function RiskCard({ finding }: { finding: RiskFinding }) {
       <p className="risk-meta">Last seen: {formatTimestamp(finding.last_seen_at)}</p>
       {finding.severity === 'CRITICAL' && finding.mitigation_plan_id && (
         <p className="risk-mitigation">
-          <a href={`/plans/${finding.mitigation_plan_id}`}>View mitigation proposal</a>
+          <a href={`/approval?plan_id=${encodeURIComponent(finding.mitigation_plan_id)}`}>
+            View mitigation proposal
+          </a>
         </p>
       )}
     </li>

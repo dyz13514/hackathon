@@ -266,6 +266,7 @@ def test_eval_203_rejection_reason_injection_does_not_activate(
     # Approval_Service.approve，属性 15）。这里用一个确定性假 adapter（判定 unsupported）驱动
     # 翻译，断言：注入被 scan_injection 识别并写审计、ACTIVE 集合一动没动。
     from app.llm.adapter import LlmResponse, LlmUsage
+    from app.seed.dataset import DEMO_ANCHOR
     from app.services.whatif_translate import TranslationOutcome, translate_whatif_query
 
     class _WhatifStubAdapter:
@@ -279,6 +280,7 @@ def test_eval_203_rejection_reason_injection_does_not_activate(
     translation = translate_whatif_query(
         _WhatifStubAdapter(),  # type: ignore[arg-type]
         whatif_injection,
+        now=DEMO_ANCHOR,
         actor="PLANNER",
     )
     # 翻译不执行、且注入被识别（injection_suspected=True）。

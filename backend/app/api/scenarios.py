@@ -267,7 +267,11 @@ def translate_scenario_endpoint(
     )
 
     adapter = request.app.state.llm_adapter
-    result = translate_whatif_query(adapter, body.query, actor="PLANNER")
+    # `now=DEMO_ANCHOR`：与下方 `run_scenario(now=body.now or DEMO_ANCHOR)` 同一口径——翻译阶段
+    # 解析「today / tomorrow」用的参考时间，必须与执行该场景时的「现在」是同一个值。
+    result = translate_whatif_query(
+        adapter, body.query, now=DEMO_ANCHOR, actor="PLANNER"
+    )
 
     if result.outcome is TranslationOutcome.LLM_UNAVAILABLE:
         return error_response(

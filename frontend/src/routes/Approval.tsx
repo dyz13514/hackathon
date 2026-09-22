@@ -18,6 +18,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 
 import { ApiError } from '../api/client';
 import {
@@ -44,6 +45,48 @@ type ModificationKind = (typeof MODIFICATION_KINDS)[number]['value'];
 interface StaleInfo {
   readonly proposalVersion: number | null;
   readonly currentVersion: number | null;
+}
+
+/** 目标分量的可读名（只影响显示；未知名字退化为「去下划线 + 首字母大写」）。 */
+const COMPONENT_LABELS: Record<string, string> = {
+  late_order_count: 'Late order count',
+  total_tardiness_minutes: 'Total tardiness (min)',
+  urgent_order_lateness: 'Urgent order lateness (min)',
+  churn_ratio: 'Churn ratio',
+  machine_utilisation: 'Machine utilisation',
+  total_changeover_minutes: 'Total changeover (min)',
+  preference_penalty: 'Preference penalty',
+};
+
+function componentLabel(name: string): string {
+  const known = COMPONENT_LABELS[name];
+  if (known) {
+    return known;
+  }
+  const spaced = name.replace(/_/g, ' ').trim();
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/** 比率类分量（`churn_ratio` / `machine_utilisation` / `on_time_rate`…）按百分比显示。 */
+function isRatioComponent(name: string): boolean {
+  return /ratio|rate|utilisation/.test(name);
+}
+
+/** 分数/贡献值：千分位 + 固定两位小数（14362.716666666667 → 14,362.72，-4.2833… → -4.28）。 */
+function formatScore(value: number): string {
+  return value.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function formatComponentRaw(name: string, value: number): string {
+  return isRatioComponent(name) ? `${(value * 100).toFixed(2)}%` : formatScore(value);
+}
+
+/** 权重：两位小数以内，且不补零（100 / 1 / -50 原样可读）。 */
+function formatWeight(value: number): string {
+  return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
 function affectedOrderIds(plan: PlanDetail): string[] {
@@ -78,6 +121,12 @@ function buildModification(
 }
 
 export function Approval() {
+  // 从风险面板等入口进来时带 `?plan_id=<计划 id>`（例如 CRITICAL 风险的「查看缓解提案」——
+  // 缓解提案就是一份 PENDING_APPROVAL 计划）。它只影响**选中哪一份提案**，不影响任何审批规则：
+  // 授权判定全在服务端（R11.2 / R23.12）。
+  const [searchParams] = useSearchParams();
+  const requestedPlanId = searchParams.get('plan_id');
+
   const [pending, setPending] = useState<readonly PlanSummary[]>([]);
   const [plan, setPlan] = useState<PlanDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -110,8 +159,20 @@ export function Approval() {
     try {
       const list = await listPending();
       setPending(list);
-      if (list.length > 0) {
-        await loadPlanDetail(list[0]!.plan_id);
+      // 指定了 plan_id 就优先选中它（必须仍在待审列表里——审批规则只认 PENDING_APPROVAL）；
+      // 否则退回「列表首项」这一默认行为，无参数时与改动前逐字段一致。
+      const requested = requestedPlanId
+        ? list.find((row) => row.plan_id === requestedPlanId)
+        : undefined;
+      const selected = requested ?? list[0];
+      if (requestedPlanId && !requested) {
+        // 那份提案已被批准/拒绝/取代，不再待审。明说，避免规划员误以为页面上另一份提案就是它。
+        setNotice(
+          `Plan ${requestedPlanId} is not awaiting approval — it may have been approved, rejected or superseded.`,
+        );
+      }
+      if (selected) {
+        await loadPlanDetail(selected.plan_id);
       } else {
         setPlan(null);
       }
@@ -124,7 +185,7 @@ export function Approval() {
     } finally {
       setLoading(false);
     }
-  }, [loadPlanDetail]);
+  }, [loadPlanDetail, requestedPlanId]);
 
   useEffect(() => {
     void loadPending();
@@ -308,10 +369,10 @@ export function Approval() {
                   <tbody>
                     {breakdown.components.map((component) => (
                       <tr key={component.name}>
-                        <th scope="row">{component.name}</th>
-                        <td>{component.raw_value}</td>
-                        <td>{component.weight}</td>
-                        <td>{component.weighted_contribution}</td>
+                        <th scope="row">{componentLabel(component.name)}</th>
+                        <td>{formatComponentRaw(component.name, component.raw_value)}</td>
+                        <td>{formatWeight(component.weight)}</td>
+                        <td>{formatScore(component.weighted_contribution)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -320,7 +381,7 @@ export function Approval() {
                       <th scope="row" colSpan={3}>
                         Total score
                       </th>
-                      <td>{breakdown.total_score}</td>
+                      <td>{formatScore(breakdown.total_score)}</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -328,7 +389,10 @@ export function Approval() {
                   <p className="approval-overrides">
                     Weight overrides applied:{' '}
                     {breakdown.weight_overrides_applied
-                      .map((o) => `${o.component} ×${o.multiplier} (${o.rule_id})`)
+                      .map(
+                        (o) =>
+                          `${componentLabel(o.component)} ×${formatWeight(o.multiplier)} (${o.rule_id})`,
+                      )
                       .join(', ')}
                   </p>
                 )}
@@ -340,7 +404,7 @@ export function Approval() {
                         <li key={c.rule_id}>
                           <span className="pref-rule-text">{c.human_text}</span> ({c.rule_id}):{' '}
                           affected jobs {c.violating_job_ids.join(', ') || '—'}, penalty{' '}
-                          {c.weighted_contribution} min-equivalent
+                          {formatScore(c.weighted_contribution)} min-equivalent
                         </li>
                       ))}
                     </ul>

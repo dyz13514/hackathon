@@ -54,7 +54,13 @@ const PLAN: PlanDetail = {
       job_id: 'ORD-009-OP1',
       order_id: 'ORD-009',
       blocking_reason: 'MATERIAL_INSUFFICIENT',
-      unblock_suggestion: { material_id: 'MAT-STEEL-01', shortfall_quantity: 40 },
+      // 与线上真实载荷同形：数量是长尾零字符串，单位单独一列
+      unblock_suggestion: {
+        material_id: 'MAT-STEEL-01',
+        shortfall_quantity: '40.00000000000000000000',
+        unit: 'kg',
+        needed_before: '2026-03-04T17:00:00',
+      },
     },
   ],
   objective_breakdown: {
@@ -114,7 +120,9 @@ describe('Schedule 视图', () => {
     // 不可排产抽屉列出作业与量化解锁条件（R8.6）
     expect(screen.getByRole('heading', { name: /Unschedulable jobs/ })).toBeInTheDocument();
     expect(screen.getByText(/MATERIAL_INSUFFICIENT/)).toBeInTheDocument();
-    expect(screen.getByText(/shortfall_quantity=40/)).toBeInTheDocument();
+    expect(screen.getByText(/Shortfall: 40 kg/)).toBeInTheDocument();
+    expect(screen.getByText(/Material: MAT-STEEL-01/)).toBeInTheDocument();
+    expect(screen.getByText(/Needed before: /)).toBeInTheDocument();
   });
 
   it('生成失败时显示错误而不是空白', async () => {

@@ -89,6 +89,248 @@ def test_generate_returns_pending_plan_with_all_six_fields(client: TestClient) -
     assert body["generated_by_trace_id"].startswith("TRACE-")
 
 
+def _plan_ids_for_date(app_settings: Settings, production_date: str) -> list[str]:
+    """该生产日上全部计划 ID（按 ID 排序）。用于断言「拒绝发生在进入流水线之前」。"""
+    engine = create_db_engine(app_settings)
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(
+                text(
+                    "SELECT plan_id FROM production_plans "
+                    "WHERE production_date = :pd ORDER BY plan_id"
+                ),
+                {"pd": production_date},
+            ).all()
+        return [str(row[0]) for row in rows]
+    finally:
+        engine.dispose()
+
+
+def _status_counts(app_settings: Settings, production_date: str) -> dict[str, int]:
+    """该生产日上各状态的计划数。用于断言「一日至多一个 ACTIVE / PENDING」的不变量。"""
+    engine = create_db_engine(app_settings)
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(
+                text(
+                    "SELECT status, COUNT(*) FROM production_plans "
+                    "WHERE production_date = :pd GROUP BY status"
+                ),
+                {"pd": production_date},
+            ).all()
+        return {str(row[0]): int(row[1]) for row in rows}
+    finally:
+        engine.dispose()
+
+
+def _count_rows(app_settings: Settings, sql: str, params: dict[str, object]) -> int:
+    """执行一条 COUNT 查询（供「历史记录没被删除」这类断言）。"""
+    engine = create_db_engine(app_settings)
+    try:
+        with engine.connect() as conn:
+            return int(conn.execute(text(sql), params).scalar_one())
+    finally:
+        engine.dispose()
+
+
+def _jobs_per_plan(app_settings: Settings, production_date: str) -> dict[str, int]:
+    """该生产日每个计划的 `scheduled_jobs` 行数（「历史计划没有被掏空」的证据）。"""
+    engine = create_db_engine(app_settings)
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(
+                text(
+                    "SELECT p.plan_id, COUNT(sj.job_id) FROM production_plans p "
+                    "LEFT JOIN scheduled_jobs sj ON sj.plan_id = p.plan_id "
+                    "WHERE p.production_date = :pd GROUP BY p.plan_id"
+                ),
+                {"pd": production_date},
+            ).all()
+        return {str(row[0]): int(row[1]) for row in rows}
+    finally:
+        engine.dispose()
+
+
+def _mitigation_plan_links(app_settings: Settings) -> list[str]:
+    """全部非空 `risk_findings.mitigation_plan_id`（外键仍指向活着的计划的证据）。"""
+    engine = create_db_engine(app_settings)
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(
+                text(
+                    "SELECT mitigation_plan_id FROM risk_findings "
+                    "WHERE mitigation_plan_id IS NOT NULL"
+                )
+            ).all()
+        return sorted(str(row[0]) for row in rows)
+    finally:
+        engine.dispose()
+
+
+def test_second_generate_with_the_ui_request_shape_returns_pending_plan_exists(
+    client: TestClient, app_settings: Settings
+) -> None:
+    """UI 的请求形状（空 body）下，重复生成必须返回 409 `PENDING_PLAN_EXISTS`。
+
+    **回归**：前端 `generatePlan()` 不带日期时发送 `{}`，因此 `GeneratePlanIn.production_date`
+    为 `None`，而前置检查原先直接拿它查库——`production_date == None` 渲染成 `IS NULL`，恒不
+    命中，守卫被绕过；第二次点击于是进入流水线，在按生产日清理旧计划时撞外键
+    （`plan_approvals` / `risk_findings` 仍引用它们）或撞 `ux_pending_per_day`，对外表现为
+    500 而不是文档化的业务错误。
+
+    三处断言：① 拿到 `PENDING_PLAN_EXISTS` 而不是数据库错误；② 拒绝发生在**进入流水线之前**
+    （该生产日的计划集合逐字段不变：既没有新增，也没有被清理）；③ 带可执行的下一步入口。
+    """
+    first = client.post(GENERATE, json={})
+    assert first.status_code == 200, first.text
+    first_body = first.json()
+    first_plan_id = first_body["plan_id"]
+    baseline_plan_id = first_body["baseline_comparison"]["baseline_plan_id"]
+    production_date = first_body["production_date"]
+
+    before = _plan_ids_for_date(app_settings, production_date)
+    assert first_plan_id in before
+    assert baseline_plan_id in before
+
+    # 前端 `generatePlan()` 未选日期时的真实请求体就是 `{}`。
+    second = client.post(GENERATE, json={})
+
+    assert second.status_code == 409, second.text
+    error = second.json()["error"]
+    assert error["code"] == "PENDING_PLAN_EXISTS"
+    assert error["details"]["existing_plan_id"] == first_plan_id
+    assert any(action["action"] == "approve" for action in error["next_actions"])
+    # 被拒绝且没有进入流水线：该生产日的计划集合完全不变。
+    assert _plan_ids_for_date(app_settings, production_date) == before
+
+
+def test_second_generate_with_explicit_date_also_returns_pending_plan_exists(
+    client: TestClient,
+) -> None:
+    """显式传 `production_date` 时同样返回 409——守卫对两种请求形状都生效。"""
+    first = client.post(GENERATE, json={})
+    assert first.status_code == 200, first.text
+
+    second = client.post(
+        GENERATE, json={"production_date": first.json()["production_date"]}
+    )
+
+    assert second.status_code == 409, second.text
+    assert second.json()["error"]["code"] == "PENDING_PLAN_EXISTS"
+
+
+
+def test_generate_after_approval_succeeds_and_keeps_history(
+    client: TestClient, app_settings: Settings
+) -> None:
+    """生命周期回归：**生成 → 批准 → 再生成**，且历史计划与相关记录原样保留。
+
+    **回归的失败形态**：流水线落库前先 `DELETE FROM production_plans WHERE production_date
+    = :pd`（连带删 `scheduled_jobs` / `objective_breakdowns` / `baseline_comparisons`）。批准
+    之后该生产日已有被 `plan_approvals`、`risk_findings` 等引用的计划，这条 DELETE 当场撞外键
+    → `FOREIGN KEY constraint failed` → 生成接口 500，只能靠重置演示数据绕开。
+
+    修复后的语义：旧计划原地留作历史（仍是 `ACTIVE`，作业行 / 基线 / 审批记录都还在），新计划
+    以 `PENDING_APPROVAL` 落库；一日至多一个 `ACTIVE` 与一个 `PENDING` 的不变量照旧成立。
+    """
+    # ① 生成
+    first = client.post(GENERATE, json={})
+    assert first.status_code == 200, first.text
+    first_body = first.json()
+    first_id = first_body["plan_id"]
+    baseline_id = first_body["baseline_comparison"]["baseline_plan_id"]
+    production_date = first_body["production_date"]
+    scheduled_job_ids = [job["job_id"] for job in first_body["scheduled_jobs"]]
+    assert scheduled_job_ids, "seed 数据下应能排出作业"
+
+    # ② 批准（`Approval_Service` 是唯一能置 ACTIVE 的路径）
+    approved = client.post(
+        f"/api/plans/{first_id}/approve",
+        json={"expected_version": first_body["plan_version"]},
+    )
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["status"] == "ACTIVE"
+
+    # 批准会触发风险扫描，可能自动开出一个待审的缓解提案（R14.7）。R12.6 要求同一生产日先
+    # 处置既有 PENDING 才能再生成，因此按正常流程把它拒掉、腾出待审位——这是业务动作而不是
+    # 数据清理：被拒的提案依然是可查询的历史（status=REJECTED）。
+    for row in client.get("/api/plans/pending").json():
+        rejected = client.post(
+            f"/api/plans/{row['plan_id']}/reject",
+            json={"rejection_reason": "Auto-proposed mitigation not needed for this run."},
+        )
+        assert rejected.status_code == 200, rejected.text
+        assert rejected.json()["status"] == "REJECTED"
+
+    # 两个「既有历史」快照：这正是线上那次失败的现场条件——同一生产日已经躺着多份历史计划
+    # （一份 ACTIVE、一份被拒的提案、若干 DRAFT 基线），且它们被 `plan_approvals` /
+    # `risk_findings.mitigation_plan_id` 引用。旧的「清理当日计划」在这种现场必撞外键。
+    plans_before = _plan_ids_for_date(app_settings, production_date)
+    jobs_before = _jobs_per_plan(app_settings, production_date)
+    links_before = _mitigation_plan_links(app_settings)
+    statuses_before = _status_counts(app_settings, production_date)
+    assert len(plans_before) >= 4, plans_before
+    assert statuses_before.get("ACTIVE") == 1, statuses_before
+    assert statuses_before.get("DRAFT", 0) >= 2, statuses_before  # 基线计划
+    assert links_before, "批准触发的风险扫描应把 CRITICAL 链到缓解提案上"
+
+    # ③ 再生成：修复前这里就是那记 500（FOREIGN KEY constraint failed）
+    second = client.post(GENERATE, json={})
+    assert second.status_code == 200, second.text
+    second_body = second.json()
+    assert second_body["plan_id"] != first_id
+    assert second_body["production_date"] == production_date
+    assert second_body["status"] == "PENDING_APPROVAL"
+
+    # ④ 历史计划一份都没少（新计划只增不减）
+    plans_after = _plan_ids_for_date(app_settings, production_date)
+    assert set(plans_before) <= set(plans_after), (
+        f"既有计划被删掉了：{sorted(set(plans_before) - set(plans_after))}"
+    )
+    assert sorted(set(plans_after) - set(plans_before)) == sorted(
+        [second_body["plan_id"], second_body["baseline_comparison"]["baseline_plan_id"]]
+    ), "新生成应当且只应当新增「提案 + 基线」两份计划"
+
+    # ⑤ 历史行没有被掏空：每个既有计划的 `scheduled_jobs` 行数逐份不变
+    jobs_after = _jobs_per_plan(app_settings, production_date)
+    for plan_id, count in jobs_before.items():
+        assert jobs_after.get(plan_id) == count, (
+            f"计划 {plan_id} 的作业行被改动了：{count} → {jobs_after.get(plan_id)}"
+        )
+
+    # ⑥ 被外键引用的记录仍然有效：风险发现的缓解提案链接原样指向仍存在的计划
+    links_after = _mitigation_plan_links(app_settings)
+    assert links_after == links_before
+    assert set(links_after) <= set(plans_after), "缓解提案链接指向了不存在的计划"
+
+    # ⑦ 旧计划仍可读、仍是 ACTIVE、作业行齐全、基线仍可读
+    old = client.get(f"/api/plans/{first_id}")
+    assert old.status_code == 200, old.text
+    old_body = old.json()
+    assert old_body["status"] == "ACTIVE"
+    # 逐作业仍齐全（生成响应按排产顺序、回读端点按 job_id 排序，故比对集合而非顺序）
+    assert sorted(job["job_id"] for job in old_body["scheduled_jobs"]) == sorted(
+        scheduled_job_ids
+    )
+    assert old_body["baseline_comparison"]["baseline_plan_id"] == baseline_id
+    assert client.get(f"/api/plans/{baseline_id}").status_code == 200
+
+    # ⑧ 审批记录仍可查：`plan_approvals` 行没被「清理当日计划」连带删掉
+    assert (
+        _count_rows(
+            app_settings,
+            "SELECT COUNT(*) FROM plan_approvals WHERE plan_id = :pid",
+            {"pid": first_id},
+        )
+        == 1
+    )
+
+    # ⑨ 不变量：该生产日恰一个 ACTIVE、恰一个 PENDING
+    counts = _status_counts(app_settings, production_date)
+    assert counts.get("ACTIVE") == 1, counts
+    assert counts.get("PENDING_APPROVAL") == 1, counts
+
+
 def test_generate_scheduled_jobs_carry_operation_and_changeover(client: TestClient) -> None:
     """已排产作业带工序号与换型分钟（供甘特图，R5.5 / R4.4）。"""
     body = client.post(GENERATE, json={}).json()

@@ -27,10 +27,12 @@ design.md §3 的确定性/LLM 归属总表把这一行写死：`Approval_Servic
    WHERE plan_id=? AND version=?`。`rowcount == 0` 表示另一线程已抢先推进了行版本 →
    `CONCURRENT_MODIFICATION`。这是「两个规划员同时点批准，恰好一个成功」的结构性保证
    （属性 17）。
-5. **收尾**：同一事务内 `supersede_previous_active`（把该生产日上原来的 `ACTIVE` 计划置
-   `SUPERSEDED`，维持 `ux_active_per_day` 部分唯一索引所要求的「每日至多一个 ACTIVE」）、
-   写 `plan_approvals`（含 `revalidation_result` 完整结果，R11.9），提交，最后 `emit`
-   `PlanActivated`（任务 8.5 的风险扫描触发器消费，R14.1）。
+5. **让位 → 就位 → 收尾（顺序敏感）**：同一事务内 `supersede_previous_active`（把该生产日
+   上原来的 `ACTIVE` 计划置 `SUPERSEDED`）**必须先于**步 4 的状态 UPDATE 执行。
+   `ux_active_per_day` 是 `WHERE status='ACTIVE'` 的部分唯一索引且 SQLite 逐语句校验，
+   先就位会让新旧两个 `ACTIVE` 短暂并存而撞索引——这正是「同一生产日第二次审批必 500」的
+   根因。让位、就位之后写 `plan_approvals`（含 `revalidation_result` 完整结果，R11.9），
+   提交，最后 `emit` `PlanActivated`（任务 8.5 的风险扫描触发器消费，R14.1）。
 
 ## 事务边界与副作用的顺序
 
@@ -611,11 +613,22 @@ class ApprovalService:
 
         # ---- ③ 乐观并发 + 原子状态迁移（R12.7）----
         try:
+            # 先 supersede 旧 ACTIVE，再把目标置 ACTIVE——顺序是 load-bearing 的：
+            # `ux_active_per_day` 是 `WHERE status='ACTIVE'` 的部分唯一索引，SQLite 逐语句
+            # 校验，因此「先就位、后让位」会让新计划与仍为 ACTIVE 的旧计划在同一生产日短暂
+            # 并存，UPDATE 当场撞索引（`UNIQUE constraint failed:
+            # production_plans.production_date`）→ 审批 500。反过来（先让位、后就位）避免这一
+            # 瞬时冲突。此处与 `activate_internal()` 的 ③ 段同口径。
+            supersede_previous_active(
+                self.session, plan.production_date, except_id=plan_id
+            )
+            self.session.flush()
             affected = update_plan_status_if_version(
                 self.session, plan_id, ACTIVE_STATUS, expected_version
             )
             if affected == 0:
-                # 另一线程抢先推进了行版本。回滚本事务里可能已发出的语句，不激活。
+                # 另一线程抢先推进了行版本。回滚本事务里已发出的语句（含上面的让位 UPDATE，
+                # 因此原 ACTIVE 计划仍是 ACTIVE），不激活本计划。
                 self.session.rollback()
                 return ApprovalResult(
                     status=ApprovalStatus.CONCURRENT_MODIFICATION,
@@ -623,10 +636,7 @@ class ApprovalService:
                     current_status=plan.status,
                 )
 
-            # 收尾：取代旧 ACTIVE + 写审批记录（含完整重校验结果），同事务。
-            supersede_previous_active(
-                self.session, plan.production_date, except_id=plan_id
-            )
+            # 收尾：写审批记录（含完整重校验结果），同事务。旧 ACTIVE 已在上面让位。
             self.session.add(
                 orm.PlanApproval(
                     approval_id=f"APR-{uuid4().hex[:16]}",

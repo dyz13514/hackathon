@@ -89,8 +89,10 @@ describe('Risks 视图', () => {
     render(<Risks />);
     await screen.findByRole('heading', { name: /Critical \(1\)/ });
 
+    // 缓解提案是一份 `PENDING_APPROVAL` 计划，走既有的审批视图处置；链接必须带上该提案的
+    // plan_id，让审批页选中它（回归：曾经指向 `/plans/{id}`——那个路由不存在，落到 NotFound）。
     const link = screen.getByRole('link', { name: /View mitigation proposal/ });
-    expect(link).toHaveAttribute('href', '/plans/PLAN-mit');
+    expect(link).toHaveAttribute('href', '/approval?plan_id=PLAN-mit');
     // 只有一个缓解入口（CRITICAL 那条），WARNING/INFO 不生成
     expect(screen.getAllByRole('link', { name: /View mitigation proposal/ })).toHaveLength(1);
   });

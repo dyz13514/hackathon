@@ -165,6 +165,16 @@ export function Gantt({ jobs }: GanttProps) {
                 const xChangeEnd = xOf(changeoverEndMs);
                 const x1 = xOf(endMs);
                 const label = `${job.order_id}·OP${job.operation_sequence}`;
+                // 纯展示：条太窄时不画标签（此前会留下 "OR" 这类被裁掉的残字），宽度够但放不下
+                // 时截断加省略号。估算按 fontSize 11 的粗略字宽（5.5 user unit/字符，viewBox 固定
+                // 900 宽，因此与屏幕缩放无关）。完整的 `job_id` 始终在 <title> 里，信息不丢。
+                const barWidth = Math.max(x1 - x0, 1);
+                const labelChars = Math.max(Math.floor((barWidth - 8) / 5.5), 0);
+                const showLabel = labelChars >= 4;
+                const labelText =
+                  label.length > labelChars
+                    ? `${label.slice(0, Math.max(labelChars - 1, 1))}…`
+                    : label;
                 return (
                   <g
                     key={job.job_id}
@@ -173,7 +183,7 @@ export function Gantt({ jobs }: GanttProps) {
                     data-changeover-minutes={job.changeover_minutes}
                   >
                     <title>
-                      {`${label} · machine ${job.machine_id} · worker ${job.worker_id} · ` +
+                      {`${job.job_id} · machine ${job.machine_id} · worker ${job.worker_id} · ` +
                         `${formatClock(job.start_time)}–${formatClock(job.end_time)}` +
                         (job.changeover_minutes > 0
                           ? ` · changeover ${job.changeover_minutes} min`
@@ -200,14 +210,16 @@ export function Gantt({ jobs }: GanttProps) {
                       fill="#10508c"
                       rx="2"
                     />
-                    <text
-                      x={x0 + 4}
-                      y={barY + BAR_HEIGHT / 2 + 4}
-                      fontSize="11"
-                      fill="#ffffff"
-                    >
-                      {label}
-                    </text>
+                    {showLabel && (
+                      <text
+                        x={x0 + 4}
+                        y={barY + BAR_HEIGHT / 2 + 4}
+                        fontSize="11"
+                        fill="#ffffff"
+                      >
+                        {labelText}
+                      </text>
+                    )}
                   </g>
                 );
               })}

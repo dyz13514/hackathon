@@ -286,3 +286,93 @@ def test_approve_concurrent_only_one_succeeds(
         assert active_count == 1
         # 成功的那次把提案本身激活了。
         assert plan_row.status == "ACTIVE"
+
+
+# --------------------------------------------------------------------------
+# ④ 同一生产日的第二次审批（回归：曾经 500 `UNIQUE constraint failed`）
+# --------------------------------------------------------------------------
+
+
+def test_approving_a_second_plan_for_the_same_day_supersedes_the_first(
+    client: TestClient, application: object
+) -> None:
+    """同一生产日的第二个计划审批必须成功，并取代上一个 `ACTIVE`（回归：曾经 500）。
+
+    **失败形态**：`approve()` 原先**先**把目标置 `ACTIVE`、**后** supersede 旧 `ACTIVE`。
+    `ux_active_per_day` 是 `WHERE status='ACTIVE'` 的部分唯一索引且 SQLite 逐语句校验，因此
+    该生产日已有 `ACTIVE` 计划时那次 UPDATE 当场撞索引 →
+    `IntegrityError: UNIQUE constraint failed: production_plans.production_date` → HTTP 500
+    （前端只看到 `UNKNOWN_ERROR`）。第一次审批（库里还没有 `ACTIVE`）正常，**同一天第二次
+    审批必失败**。
+
+    **第二个计划从哪来**：无需手工铺。批准一个计划会 `emit(PlanActivated)`，风险扫描随即为
+    CRITICAL 发现自动生成一个缓解提案（R14.7，`origin=RISK_MITIGATION`），它与被批准的计划同
+    生产日、状态 `PENDING_APPROVAL`——线上那次失败点的正是它的 Approve。因此本用例走的是
+    真实演示路径，而不是人造数据。
+
+    **为什么属性 15 没抓到**：它的每个 example 只批准一个计划，从不出现「同日已有 `ACTIVE`
+    再批准第二个」这一形态。
+
+    断言的落点不只是 HTTP 200，还有状态机结局：该生产日恰一个 `ACTIVE`（新的那个），旧的变
+    `SUPERSEDED` 且 `superseded_by_plan_id` 指向新计划（R11.3 的可追溯性）。
+    """
+    first = _generate_pending_plan(client)
+    first_id = first["plan_id"]
+
+    approve_first = client.post(
+        f"/api/plans/{first_id}/approve",
+        json={"expected_version": _optimistic_version(application, first_id)},
+    )
+    assert approve_first.status_code == 200, approve_first.text
+    assert approve_first.json()["status"] == "ACTIVE"
+
+    factory: sessionmaker[Session] = application.state.session_factory  # type: ignore[attr-defined]
+    with factory() as db:
+        first_row = db.get(orm.ProductionPlan, first_id)
+        assert first_row is not None
+        production_date = first_row.production_date
+        pending = list(
+            db.scalars(
+                select(orm.ProductionPlan).where(
+                    orm.ProductionPlan.production_date == production_date,
+                    orm.ProductionPlan.status == "PENDING_APPROVAL",
+                )
+            )
+        )
+
+    # 批准触发的风险扫描应恰留下一个待审批的缓解提案（R14.7）；没有它就无从复现本缺陷。
+    assert len(pending) == 1, (
+        "批准后应恰有一个待审批的缓解提案（R14.7）；"
+        f"实际 {[p.plan_id for p in pending]}——演示数据未触发 CRITICAL 风险？"
+    )
+    second_id = pending[0].plan_id
+    assert second_id != first_id
+
+    approve_second = client.post(
+        f"/api/plans/{second_id}/approve",
+        json={"expected_version": _optimistic_version(application, second_id)},
+    )
+
+    # 修复前这里就是那记 500（IntegrityError 从服务层直接冒到 ASGI 层）。
+    assert approve_second.status_code == 200, approve_second.text
+    assert approve_second.json()["status"] == "ACTIVE"
+
+    with factory() as db:
+        first_row = db.get(orm.ProductionPlan, first_id)
+        assert first_row is not None
+        active_ids = list(
+            db.scalars(
+                select(orm.ProductionPlan.plan_id).where(
+                    orm.ProductionPlan.production_date == first_row.production_date,
+                    orm.ProductionPlan.status == "ACTIVE",
+                )
+            )
+        )
+        first_status = first_row.status
+        first_superseded_by = first_row.superseded_by_plan_id
+
+    # 该生产日恰一个 ACTIVE，且是刚批准的那个（ux_active_per_day 不变量）。
+    assert active_ids == [second_id], f"该生产日的 ACTIVE 计划应恰为 {second_id}，实际 {active_ids}"
+    # 旧的已让位，并留下可追溯的取代关系。
+    assert first_status == "SUPERSEDED"
+    assert first_superseded_by == second_id

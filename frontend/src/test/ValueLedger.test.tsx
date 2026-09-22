@@ -149,7 +149,7 @@ describe('ValueLedger 视图', () => {
       .closest('section') as HTMLElement;
     expect(within(ratioSection).getByText('3')).toBeInTheDocument(); // auto_handled
     expect(within(ratioSection).getByText('1')).toBeInTheDocument(); // escalated
-    expect(within(ratioSection).getByText('75.0%')).toBeInTheDocument(); // ratio
+    expect(within(ratioSection).getByText('75.00%')).toBeInTheDocument(); // ratio
   });
 
   it('逐行列出每次判定的决定性判据（R13.12），含执行路径中文标签', async () => {

@@ -842,11 +842,12 @@ h4 {
 }
 
 .trace-list-kind {
-  color: var(--muted);
+  /* 运行卡片上的次要文字用更深的 --fg-soft（#2b3138）：--muted 在这张卡上对比度偏低。 */
+  color: var(--fg-soft);
 }
 
 .trace-list-meta {
-  color: var(--muted);
+  color: var(--fg-soft);
   font-size: 0.8rem;
 }
 

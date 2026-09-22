@@ -38,7 +38,31 @@ function pathLabel(path: string): string {
 }
 
 function formatRate(rate: number): string {
-  return `${(rate * 100).toFixed(1)}%`;
+  return `${(rate * 100).toFixed(2)}%`;
+}
+
+/** 金额：统一 `$X.XX`；`0E-10` 这类科学计数法字符串（前端从 KPI 行拿到的就是字符串）解析成 0。 */
+function formatUsd(value: unknown): string {
+  const parsed = typeof value === 'number' ? value : Number(String(value).trim());
+  const amount = Number.isFinite(parsed) ? parsed : 0;
+  return `$${amount.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+/** KPI 单元格：USD 行按 `$X.XX`，比率行按百分比；其余保持后端给的可读串。 */
+function formatKpiCell(metricName: string, value: string): string {
+  if (!value) {
+    return '-';
+  }
+  if (metricName.includes('USD')) {
+    return formatUsd(value);
+  }
+  if (metricName.toLowerCase().includes('rate') && Number.isFinite(Number(value))) {
+    return `${(Number(value) * 100).toFixed(2)}%`;
+  }
+  return value;
 }
 
 /** 标签的图标 + 文字（不仅靠颜色区分，R27.9、R19.4/R19.6/R25.13）。 */
@@ -134,9 +158,9 @@ export function ValueLedger() {
                   <tr key={row.kpi_id} data-label={row.label}>
                     <th scope="row">{row.kpi_id}</th>
                     <td>{row.metric_name}</td>
-                    <td>{row.current_value || '-'}</td>
-                    <td>{row.baseline_value || '-'}</td>
-                    <td>{row.delta || '-'}</td>
+                    <td>{formatKpiCell(row.metric_name, row.current_value)}</td>
+                    <td>{formatKpiCell(row.metric_name, row.baseline_value)}</td>
+                    <td>{formatKpiCell(row.metric_name, row.delta)}</td>
                     <td>{row.target_value}</td>
                     <td>
                       <LabelBadge label={row.label} />
@@ -170,10 +194,10 @@ export function ValueLedger() {
                 </tr>
                 <tr>
                   <th scope="row">Estimated cost (USD)</th>
-                  <td>{data.metrics.estimated_usd_cost.toFixed(4)}</td>
+                  <td>{formatUsd(data.metrics.estimated_usd_cost)}</td>
                   <td>
-                    One demo ~ {data.metrics.projected_hero_demo_usd} (K-17); build + rehearsal ~{' '}
-                    {data.metrics.projected_build_total_usd} (K-18)
+                    One demo ~ {formatUsd(data.metrics.projected_hero_demo_usd)} (K-17); build +
+                    rehearsal ~ {formatUsd(data.metrics.projected_build_total_usd)} (K-18)
                   </td>
                 </tr>
               </tbody>
