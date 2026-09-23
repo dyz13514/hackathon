@@ -95,6 +95,7 @@ SUPERSEDED_STATUS = "SUPERSEDED"
 APPROVE_ACTION = "APPROVE"
 REJECT_ACTION = "REJECT"
 MODIFY_ACTION = "MODIFY"
+CANCEL_ACTION = "CANCEL"
 
 #: `rejection_reason` 的最小长度（R11.4）。一句「不行」不构成可供审计与偏好蒸馏
 #: （R18.1）复盘的理由；design.md §4.1 明确「最少 5 字符」。
@@ -523,6 +524,58 @@ class ApprovalService:
     session: Session
     now: datetime
     events: EventBus
+
+    def cancel_stale_for_regeneration(self, plan_id: str, actor: str) -> bool:
+        """Cancel a stale proposal so the planner can generate a current replacement.
+
+        A stale plan is deliberately kept pending when an approval attempt fails so its
+        evidence remains reviewable.  When the planner explicitly starts a new generation,
+        however, that old proposal must leave the per-day pending slot; otherwise the
+        regenerate action can never succeed.  This is the state-machine-authorised
+        ``PENDING_APPROVAL -> SUPERSEDED`` cancellation path.
+        """
+        plan = self.session.get(orm.ProductionPlan, plan_id)
+        if plan is None or not is_allowed_transition(plan.status, PlanStatus.SUPERSEDED):
+            return False
+        current_version = current_input_snapshot_version(self.session)
+        if plan.input_snapshot_version == current_version:
+            return False
+
+        proposal_version = plan.input_snapshot_version
+        plan.status = SUPERSEDED_STATUS
+        self.session.add(
+            orm.PlanApproval(
+                approval_id=f"APR-{uuid4().hex[:16]}",
+                plan_id=plan_id,
+                action=CANCEL_ACTION,
+                actor=actor,
+                timestamp=self.now,
+                rejection_reason="Superseded by regeneration after input data changed.",
+                revalidation_result={
+                    "skipped": True,
+                    "reason": "STALE_REGENERATION",
+                    "proposal_version": proposal_version,
+                    "current_version": current_version,
+                },
+                modifications=None,
+            )
+        )
+        self.session.commit()
+        audit.append(
+            event_category="APPROVAL_ACTION",
+            event_type=CANCEL_ACTION,
+            actor=actor,
+            payload={
+                "plan_id": plan_id,
+                "reason": "STALE_REGENERATION",
+                "proposal_version": proposal_version,
+                "current_version": current_version,
+            },
+            subject_type="ProductionPlan",
+            subject_id=plan_id,
+            occurred_at=self.now,
+        )
+        return True
 
     def approve(self, plan_id: str, actor: str, expected_version: int) -> ApprovalResult:
         """执行五步审批闸门（见模块 docstring）。绝不直接激活未过闸门的计划。"""

@@ -455,12 +455,14 @@ def _commit_materials(
             continue
         existing = session.get(orm.Material, mid)
         overwritten = None
-        if existing is not None and existing.source == "MANUAL_ENTRY":
+        if existing is not None:
             overwritten = {
                 "name": existing.name,
                 "quantity_available": str(existing.quantity_available),
                 "unit": existing.unit,
                 "source": existing.source,
+                "record_status": existing.record_status,
+                "import_batch_id": existing.import_batch_id,
             }
         name = _cell_val(row, col_of.get("name")) or mid
         qty = _to_decimal(_cell_val(row, col_of.get("quantity_available")))
@@ -482,6 +484,7 @@ def _commit_materials(
             existing.name = name
             existing.quantity_available = qty
             existing.source = "SPREADSHEET_IMPORT"
+            existing.record_status = "ACTIVE"
             existing.import_batch_id = batch_id
             existing.last_updated_at = now
         session.add(
@@ -510,8 +513,13 @@ def _commit_workers(
             continue
         existing = session.get(orm.Worker, wid)
         overwritten = None
-        if existing is not None and existing.source == "MANUAL_ENTRY":
-            overwritten = {"name": existing.name, "source": existing.source}
+        if existing is not None:
+            overwritten = {
+                "name": existing.name,
+                "source": existing.source,
+                "record_status": existing.record_status,
+                "import_batch_id": existing.import_batch_id,
+            }
         name = _cell_val(row, col_of.get("name")) or wid
         if existing is None:
             session.add(
@@ -530,6 +538,7 @@ def _commit_workers(
         else:
             existing.name = name
             existing.source = "SPREADSHEET_IMPORT"
+            existing.record_status = "ACTIVE"
             existing.import_batch_id = batch_id
             existing.last_updated_at = now
         session.add(
@@ -599,7 +608,7 @@ def _get_entity(session: Session, entity_type: str, entity_id: str) -> object | 
 
 
 def _restore(entity: object, payload: dict, now: datetime) -> None:
-    """把被覆盖的 `MANUAL_ENTRY` 旧值还原到实体上（回滚 R3.4）。"""
+    """把被导入覆盖的旧记录逐字段还原（回滚 R3.4）。"""
     if "quantity_available" in payload:
         entity.quantity_available = _to_decimal(payload["quantity_available"])  # type: ignore[attr-defined]
     if "unit" in payload:
@@ -607,8 +616,8 @@ def _restore(entity: object, payload: dict, now: datetime) -> None:
     if "name" in payload:
         entity.name = payload["name"]  # type: ignore[attr-defined]
     entity.source = payload.get("source", "MANUAL_ENTRY")  # type: ignore[attr-defined]
-    entity.record_status = "ACTIVE"  # type: ignore[attr-defined]
-    entity.import_batch_id = None  # type: ignore[attr-defined]
+    entity.record_status = payload.get("record_status", "ACTIVE")  # type: ignore[attr-defined]
+    entity.import_batch_id = payload.get("import_batch_id")  # type: ignore[attr-defined]
     entity.last_updated_at = now  # type: ignore[attr-defined]
 
 

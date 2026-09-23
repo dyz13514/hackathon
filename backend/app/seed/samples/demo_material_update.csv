@@ -1,0 +1,4 @@
+material_id,name,quantity_available,unit
+MAT-STEEL-01,Carbon steel sheet S235JR,35,kg
+MAT-WELDWIRE-05,Solid welding wire ER70S-6,42,kg
+MAT-BEARING-06,Deep groove ball bearing 6205,280,pcs

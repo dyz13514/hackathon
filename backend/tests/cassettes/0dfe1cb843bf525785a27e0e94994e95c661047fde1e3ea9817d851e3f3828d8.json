@@ -1,0 +1,15 @@
+{
+  "content_hash": "0dfe1cb843bf525785a27e0e94994e95c661047fde1e3ea9817d851e3f3828d8",
+  "request": {
+    "agent": "PLANNING_AGENT",
+    "max_tokens": 512,
+    "user": "Translate the natural-language What-if question below into a structured list of scenario changes:\nReference time (this system's current production day): 2026-03-02T08:00:00\nResolve every relative date/time expression (today, tomorrow, this afternoon, next Friday, in 3 hours, next week, ...) against that reference time, and output absolute ISO8601 timestamps only - never echo a relative expression, and never guess a date.\n<untrusted source=\"whatif.query\">\n如果 CNC-01 明天上午停机 6 小时，对交期有什么影响？\n</untrusted>"
+  },
+  "response": {
+    "content": "```json\n{\n  \"final\": {\n    \"mutations\": [\n      {\n        \"kind\": \"SET_MACHINE_UNAVAILABLE\",\n        \"machine_id\": \"CNC-01\",\n        \"start_time\": \"2026-03-03T08:00:00\",\n        \"end_time\": \"2026-03-03T14:00:00\"\n      }\n    ]\n  }\n}\n```",
+    "usage": {
+      "input_tokens": 736,
+      "output_tokens": 105
+    }
+  }
+}

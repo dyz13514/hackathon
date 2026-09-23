@@ -38,8 +38,9 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Any
 
@@ -212,9 +213,18 @@ def _user_block(wrapped_query: str, error_feedback: str | None, *, now: datetime
 
 
 def _extract_final(raw: str) -> dict[str, Any] | None:
-    """解析模型一轮输出，取出 `final` 对象。非法 JSON / 无 final → None（视作一次错误观察）。"""
+    """解析模型一轮输出，取出 `final` 对象。
+
+    大多数模型会遵守“只输出 JSON”，但部分模型仍会以 `````json`` 代码块包裹同一份
+    JSON。代码块只是展示格式，不改变载荷语义，因此在这里剥掉它；其他 prose 或不完整
+    JSON 仍按不合规输出处理，绝不从自由文本猜测业务字段。
+    """
+    candidate = raw.strip()
+    fenced = re.fullmatch(r"```(?:json)?\s*\n?(.*?)\n?```", candidate, flags=re.DOTALL | re.IGNORECASE)
+    if fenced is not None:
+        candidate = fenced.group(1).strip()
     try:
-        parsed = json.loads(raw)
+        parsed = json.loads(candidate)
     except (ValueError, json.JSONDecodeError):
         return None
     if not isinstance(parsed, dict):
@@ -239,6 +249,70 @@ def _validate_mutations(final: dict[str, Any]) -> list[dict[str, Any]] | None:
     except ValidationError:
         return None
     return [m.model_dump(mode="json") for m in validated]
+
+
+def _stub_demo_translation(query: str, *, now: datetime) -> list[dict[str, Any]] | None:
+    """Translate the small, documented demo vocabulary without an LLM.
+
+    ``STUB`` deliberately has no network access and normally has no cassette for a new
+    sentence.  A short deterministic grammar keeps the local demo usable while making
+    its limits explicit: production and arbitrary wording still use the configured LLM.
+    """
+    text = query.upper()
+
+    order = re.search(r"ORD-\d+", text)
+    if order and re.search(r"优先级|PRIORITY|紧急|URGENT|HIGH|NORMAL|LOW", text):
+        priority = next(
+            (
+                value
+                for token, value in (
+                    ("紧急", "URGENT"),
+                    ("URGENT", "URGENT"),
+                    ("最高", "URGENT"),
+                    ("高", "HIGH"),
+                    ("HIGH", "HIGH"),
+                    ("普通", "NORMAL"),
+                    ("NORMAL", "NORMAL"),
+                    ("低", "LOW"),
+                    ("LOW", "LOW"),
+                )
+                if token in text
+            ),
+            None,
+        )
+        if priority:
+            return [{"kind": "CHANGE_ORDER_PRIORITY", "order_id": order.group(), "priority": priority}]
+
+    machine = re.search(r"CNC-\d+|LATHE-\d+|WELD-\d+", text)
+    worker = re.search(r"WRK-\d+|WORKER-\d+", text)
+    unavailable = re.search(r"停机|故障|不可用|DOWN|UNAVAILABLE|ABSENT|请假", text)
+    hours_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:小时|HOURS?|HRS?)", text)
+    if unavailable and (machine or worker) and hours_match:
+        hours = float(hours_match.group(1))
+        start = now.replace(hour=8, minute=0, second=0, microsecond=0)
+        if "明天" in text or "TOMORROW" in text:
+            start += timedelta(days=1)
+        if "下午" in text or "AFTERNOON" in text:
+            start = start.replace(hour=13)
+        payload: dict[str, Any] = {
+            "kind": "SET_MACHINE_UNAVAILABLE" if machine else "SET_WORKER_UNAVAILABLE",
+            "start_time": start.isoformat(),
+            "end_time": (start + timedelta(hours=hours)).isoformat(),
+        }
+        payload["machine_id" if machine else "worker_id"] = (machine or worker).group()
+        return [payload]
+
+    material = re.search(r"MAT-[A-Z0-9-]+", text)
+    quantity = re.search(r"(?:改为|剩余|设为|TO|AVAILABLE)\s*(\d+(?:\.\d+)?)", text)
+    if material and quantity and re.search(r"物料|库存|可用量|MATERIAL|STOCK|AVAILABLE", text):
+        return [
+            {
+                "kind": "CHANGE_MATERIAL_AVAILABILITY",
+                "material_id": material.group(),
+                "quantity_available": float(quantity.group(1)),
+            }
+        ]
+    return None
 
 
 def translate_whatif_query(
@@ -284,7 +358,26 @@ def translate_whatif_query(
         request = _build_request(system, _user_block(wrapped, error_feedback, now=now))
         try:
             response = adapter.invoke(request)
-        except (LlmDisabledError, CassetteMiss):
+        except CassetteMiss:
+            # 本地 STUB 演示没有为每一句自由文本准备 cassette。优先识别一小组明确列出的
+            # 演示表达，仍无法识别时才如实提示使用结构化表单；LIVE/REPLAY 不走此旁路。
+            if str(getattr(getattr(adapter, "mode", None), "value", "")) == "STUB":
+                demo_mutations = _stub_demo_translation(query, now=now)
+                if demo_mutations is not None:
+                    return TranslationResult(
+                        outcome=TranslationOutcome.TRANSLATED,
+                        mutations=demo_mutations,
+                        supported_kinds=SUPPORTED_SCENARIO_KINDS,
+                        injection_suspected=verdict.suspected,
+                        source_query_echo=query,
+                    )
+            return TranslationResult(
+                outcome=TranslationOutcome.LLM_UNAVAILABLE,
+                injection_suspected=verdict.suspected,
+                source_query_echo=query,
+                reason="The LLM is unavailable (degraded mode or missing recording); please use the structured scenario form.",
+            )
+        except LlmDisabledError:
             return TranslationResult(
                 outcome=TranslationOutcome.LLM_UNAVAILABLE,
                 injection_suspected=verdict.suspected,

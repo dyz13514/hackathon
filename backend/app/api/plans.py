@@ -42,6 +42,7 @@ from app.core.scheduler import InvalidRoutingError
 from app.core.snapshot import DataIntegrityError
 from app.db import audit
 from app.db import models as orm
+from app.db.repositories import current_input_snapshot_version
 from app.llm.adapter import BedrockAdapter
 from app.orchestrator.pipelines.plan_generation import (
     PlanGenerationResult,
@@ -59,6 +60,8 @@ from app.services.explanation import (
     build_explanation,
 )
 from app.services.exporter import PlanNotFoundError, export_csv, export_xlsx
+from app.services.approval import ApprovalService
+from app.services.events import EventBus
 from app.services.snapshot_loader import resolve_production_date
 
 router = APIRouter(prefix="/plans", tags=["plans"])
@@ -363,9 +366,10 @@ def generate_plan(
     # 同一处定义），两处口径不会分叉。
     production_date = resolve_production_date(body.production_date, now=DEMO_ANCHOR)
 
-    # 前置检查：同一 production_date 已存在 PENDING_APPROVAL 计划时拒绝重复生成
-    # （ux_pending_per_day 部分唯一索引的前端保护，R11.8 / R12.6）。
-    # 不依赖数据库约束抛 IntegrityError，而是主动返回 409 + PENDING_PLAN_EXISTS。
+    # 前置检查：同一 production_date 已存在 PENDING_APPROVAL 计划时通常拒绝重复生成
+    # （ux_pending_per_day 部分唯一索引的前端保护，R11.8 / R12.6）。若它已经陈旧，则
+    # 这次“基于最新数据重新生成”本身会通过 ApprovalService 的 CANCEL 路径让旧计划让位；
+    # 否则审批页的 regenerate 链接会陷入“不能审批也不能生成”的死锁。
     try:
         existing_pending = db.scalars(
             select(orm.ProductionPlan).where(
@@ -374,21 +378,38 @@ def generate_plan(
             )
         ).first()
         if existing_pending is not None:
-            db.close()
-            return error_response(
-                status_code=409,
-                code=ErrorCode.PENDING_PLAN_EXISTS,
-                message=(
-                    f"Production date {production_date} already has a pending-approval plan "
-                    f"({existing_pending.plan_id}). Please approve or reject the existing plan "
-                    "before generating a new one."
-                ),
-                next_actions=[
-                    NextAction(action="view_pending", href="/plans/pending"),
-                    NextAction(action="approve", href=f"/plans/{existing_pending.plan_id}/approve"),
-                ],
-                details={"existing_plan_id": existing_pending.plan_id},
-            )
+            current_version = current_input_snapshot_version(db)
+            if existing_pending.input_snapshot_version != current_version:
+                events: EventBus = request.app.state.event_bus
+                cancelled = ApprovalService(
+                    session=db, now=DEMO_ANCHOR, events=events
+                ).cancel_stale_for_regeneration(
+                    existing_pending.plan_id, actor=session.subject.upper()
+                )
+                if not cancelled:
+                    db.close()
+                    return error_response(
+                        status_code=409,
+                        code=ErrorCode.PENDING_PLAN_EXISTS,
+                        message="The pending plan changed while regeneration was starting. Please refresh and try again.",
+                        next_actions=[NextAction(action="view_pending", href="/plans/pending")],
+                    )
+            else:
+                db.close()
+                return error_response(
+                    status_code=409,
+                    code=ErrorCode.PENDING_PLAN_EXISTS,
+                    message=(
+                        f"Production date {production_date} already has a pending-approval plan "
+                        f"({existing_pending.plan_id}). Please approve or reject the existing plan "
+                        "before generating a new one."
+                    ),
+                    next_actions=[
+                        NextAction(action="view_pending", href="/plans/pending"),
+                        NextAction(action="approve", href=f"/plans/{existing_pending.plan_id}/approve"),
+                    ],
+                    details={"existing_plan_id": existing_pending.plan_id},
+                )
     except Exception:
         db.close()
         raise
