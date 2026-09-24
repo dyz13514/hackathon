@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { NavLink, Route, Routes } from 'react-router-dom';
+import { NavLink, Route, Routes, useLocation } from 'react-router-dom';
 
 import { Approval } from './routes/Approval';
 import { Dashboard } from './routes/Dashboard';
@@ -32,6 +32,7 @@ import { WhatIf } from './routes/WhatIf';
  */
 export function App() {
   const [loginOpen, setLoginOpen] = useState(false);
+  const location = useLocation();
 
   // 监听 client.ts 触发的 login-required 事件
   useEffect(() => {
@@ -40,15 +41,37 @@ export function App() {
     return () => window.removeEventListener('login-required', handler);
   }, []);
 
+  // 路由变化（主导航 / 浏览器 Back-Forward）时清理弹窗，避免旧弹窗、遮罩、
+  // 滚动锁定或过期状态残留。若此时弹窗仍开着，说明用户是离开而非登录，
+  // 派发取消信号让所有等待中的 401 请求及时结束。
+  useEffect(() => {
+    setLoginOpen((wasOpen) => {
+      if (wasOpen) {
+        window.dispatchEvent(new CustomEvent('login-cancelled'));
+      }
+      return false;
+    });
+  }, [location.pathname]);
+
   const handleLoginSuccess = useCallback(() => {
     setLoginOpen(false);
     // 通知 client.ts 的 waitForLogin 继续重试
     window.dispatchEvent(new CustomEvent('login-succeeded'));
   }, []);
 
+  const handleLoginCancel = useCallback(() => {
+    setLoginOpen(false);
+    // 通知 client.ts 的 waitForLogin 立即以取消结束所有等待中的请求
+    window.dispatchEvent(new CustomEvent('login-cancelled'));
+  }, []);
+
   return (
     <div className="app-shell">
-      <LoginModal open={loginOpen} onSuccess={handleLoginSuccess} />
+      <LoginModal
+        open={loginOpen}
+        onSuccess={handleLoginSuccess}
+        onCancel={handleLoginCancel}
+      />
       <header className="app-header">
         <h1>AI Production Planning Assistant</h1>
       </header>
