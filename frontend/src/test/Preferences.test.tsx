@@ -130,6 +130,57 @@ describe('Preferences 视图', () => {
     expect(arg?.structured_form.kind).toBe('AVOID_MACHINE_FOR_ORDER');
   });
 
+  // 回归（round-2）：Penalty weight 数字输入的 min/step 必须让其默认值合法，
+  // 否则浏览器的原生约束校验会**静默拦截**整个表单提交（不发请求、不报错、
+  // 不重置），导致「创建规则」在真实浏览器里点了没反应。历史缺陷：
+  // min=0.0001 step=0.5 使默认值 1 非法（合法值为 0.0001/0.5001/1.0001…）。
+  // jsdom 的 checkValidity 不校验 step，这里显式按 HTML5 规则手算，避免误判。
+  it('Penalty weight 输入的默认值满足 min/step 约束（否则原生校验会拦截提交）', async () => {
+    vi.mocked(listPreferences).mockResolvedValue(listWith([]));
+    render(<Preferences />);
+    await screen.findByRole('heading', { name: 'New rule' });
+
+    const weight = screen.getByLabelText(/Penalty weight/) as HTMLInputElement;
+    const value = Number(weight.value); // 表单默认值
+    const min = Number(weight.min);
+    const max = weight.max === '' ? Infinity : Number(weight.max);
+    const step = weight.step === 'any' ? null : Number(weight.step);
+
+    expect(Number.isFinite(value)).toBe(true);
+    expect(value).toBeGreaterThanOrEqual(min);
+    expect(value).toBeLessThanOrEqual(max);
+    if (step !== null) {
+      // HTML5：value 必须能表示为 min + n*step（容忍浮点误差）
+      const n = (value - min) / step;
+      expect(Math.abs(n - Math.round(n))).toBeLessThan(1e-9);
+    }
+    // 后端约束是 gt=0 且 le=10：min 必须 > 0，max 不得超过 10
+    expect(min).toBeGreaterThan(0);
+    expect(max).toBeLessThanOrEqual(10);
+  });
+
+  // 回归（round-2）：点击 Create 按钮（而非直接 submit 表单）在字段合法时应发起
+  // 创建请求。用真实按钮点击验证提交链路不被约束校验拦截。
+  it('填写合法字段后点击 Create 触发 createPreference', async () => {
+    vi.mocked(listPreferences).mockResolvedValue(listWith([]));
+    vi.mocked(createPreference).mockResolvedValue(RULE_LOW_EVIDENCE);
+    render(<Preferences />);
+    await screen.findByRole('heading', { name: 'New rule' });
+
+    fireEvent.change(screen.getByLabelText(/Rule description/), {
+      target: { value: 'Avoid CNC-01 for ORD-001' },
+    });
+    fireEvent.change(screen.getByLabelText('Order ID'), { target: { value: 'ORD-001' } });
+    fireEvent.change(screen.getByLabelText('Machine ID'), { target: { value: 'CNC-01' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /Create rule/ }));
+
+    await waitFor(() => expect(createPreference).toHaveBeenCalledTimes(1));
+    // 成功后展示已创建提示，并清空描述输入（表单重置）
+    expect(await screen.findByText(/Rule created/)).toBeInTheDocument();
+    expect((screen.getByLabelText(/Rule description/) as HTMLInputElement).value).toBe('');
+  });
+
   it('点「启用」调用 enablePreference（独立动作）', async () => {
     vi.mocked(listPreferences).mockResolvedValue(listWith([RULE_LOW_EVIDENCE]));
     vi.mocked(enablePreference).mockResolvedValue({ ...RULE_LOW_EVIDENCE, enabled: true });

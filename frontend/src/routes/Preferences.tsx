@@ -500,11 +500,11 @@ export function Preferences() {
 
           {fields.kind !== 'ADJUST_OBJECTIVE_WEIGHT' && (
             <div className="field">
-              <label htmlFor="f-weight-delta">Penalty weight (0–10, penalties only)</label>
+              <label htmlFor="f-weight-delta">Penalty weight (0.5–10, penalties only)</label>
               <input
                 id="f-weight-delta"
                 type="number"
-                min={0.0001}
+                min={0.5}
                 max={10}
                 step="0.5"
                 value={fields.weight_delta}
