@@ -1977,3 +1977,66 @@ h4 {
     transition: none !important;
   }
 }
+
+
+/* ── Login modal (global auth dialog) ─────────────────────────── */
+.login-modal {
+  border: 1px solid var(--border, #d0d7de);
+  border-radius: 8px;
+  padding: 1.25rem 1.5rem;
+  max-width: 28rem;
+  width: calc(100% - 2rem);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.24);
+}
+
+.login-modal::backdrop {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.login-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.login-modal-header h2 {
+  margin: 0;
+}
+
+.login-modal-close {
+  flex: none;
+  border: 1px solid transparent;
+  background: transparent;
+  font-size: 1.25rem;
+  line-height: 1;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.login-modal-close:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.login-modal-close:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.login-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.login-modal-btn-secondary {
+  cursor: pointer;
+}
+
+.login-modal-btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
