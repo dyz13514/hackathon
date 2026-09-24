@@ -83,6 +83,7 @@ function fileOf(name: string): File {
 
 afterEach(() => {
   vi.clearAllMocks();
+  vi.restoreAllMocks();
 });
 
 describe('Import 视图', () => {
@@ -152,11 +153,50 @@ describe('Import 视图', () => {
       ],
     });
     vi.mocked(revertImport).mockResolvedValue({ batch_id: 'BATCH-1', reverted_row_count: 3 });
+    // 回滚现在需要确认（破坏性操作）：确认放行。
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
     render(<Import />);
     await screen.findByRole('heading', { name: /Import batches/ });
 
     fireEvent.click(await screen.findByRole('button', { name: /Revert batch BATCH-1/ }));
     await waitFor(() => expect(revertImport).toHaveBeenCalledWith('BATCH-1'));
+  });
+
+  // 回归（round-2）：回滚需确认，取消则不发请求（防误滚）。
+  it('回滚在用户取消确认时不发请求', async () => {
+    vi.mocked(listImports).mockResolvedValue({
+      batches: [
+        {
+          batch_id: 'BATCH-1',
+          file_name: 'a.csv',
+          entity_type: 'MATERIAL',
+          row_count: 3,
+          status: 'COMMITTED',
+          imported_at: '2026-03-02T00:00:00',
+        },
+      ],
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(<Import />);
+    await screen.findByRole('heading', { name: /Import batches/ });
+
+    fireEvent.click(await screen.findByRole('button', { name: /Revert batch BATCH-1/ }));
+    expect(revertImport).not.toHaveBeenCalled();
+  });
+
+  // 回归（round-2）：选择文件后 input 会被清空，以便再次选择同名文件仍能触发上传。
+  it('选择文件后清空 input 值，允许再次选择同名文件', async () => {
+    vi.mocked(listImports).mockResolvedValue({ batches: [] });
+    vi.mocked(uploadImport).mockResolvedValue(UPLOAD);
+    vi.mocked(getProposal).mockResolvedValue(PROPOSAL);
+    render(<Import />);
+
+    const input = screen.getByLabelText('Choose a spreadsheet file to import') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [fileOf('materials.csv')] } });
+
+    await waitFor(() => expect(uploadImport).toHaveBeenCalledTimes(1));
+    // change 处理后 input 值被清空，再选同名文件仍会触发 change
+    expect(input.value).toBe('');
   });
 
   it('上传失败显示错误而不是空白', async () => {

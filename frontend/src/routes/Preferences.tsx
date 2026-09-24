@@ -236,13 +236,19 @@ export function Preferences() {
   );
 
   const handleDelete = useCallback(
-    async (ruleId: string) => {
+    async (ruleId: string, humanText: string) => {
       if (mutating) return;
+      // 删除是破坏性操作：先确认，取消则不发请求（防误删）。
+      const confirmed = window.confirm(
+        `Delete this preference rule permanently?\n\n"${humanText}"\n\nThis cannot be undone.`,
+      );
+      if (!confirmed) return;
       setError(null);
       setNotice(null);
       setMutating(true);
       try {
         await deletePreference(ruleId);
+        setNotice('Rule deleted.');
         await load();
       } catch (err) {
         setError(
@@ -653,7 +659,7 @@ export function Preferences() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => void handleDelete(rule.rule_id)}
+                      onClick={() => void handleDelete(rule.rule_id, rule.human_text)}
                       disabled={mutating}
                       aria-label={`Delete rule ${rule.rule_id}`}
                     >

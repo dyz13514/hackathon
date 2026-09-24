@@ -22,6 +22,7 @@ vi.mock('../api/preferences', async () => {
 
 import {
   createPreference,
+  deletePreference,
   disablePreference,
   distilPreferences,
   enablePreference,
@@ -67,6 +68,7 @@ function listWith(items: PreferenceRule[], enabledCount = 0): PreferenceList {
 
 afterEach(() => {
   vi.clearAllMocks();
+  vi.restoreAllMocks();
 });
 
 describe('Preferences 视图', () => {
@@ -205,6 +207,28 @@ describe('Preferences 视图', () => {
 
     resolveCreate(RULE_LOW_EVIDENCE);
     expect(await screen.findByText(/Rule created/)).toBeInTheDocument();
+  });
+
+  // 回归（round-2）：删除是破坏性操作，需二次确认。
+  it('删除在确认后调用 deletePreference', async () => {
+    vi.mocked(listPreferences).mockResolvedValue(listWith([RULE_LOW_EVIDENCE]));
+    vi.mocked(deletePreference).mockResolvedValue(undefined);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<Preferences />);
+    await screen.findByText('Don’t schedule ORD-007 on CNC-03');
+
+    fireEvent.click(screen.getByRole('button', { name: /Delete rule PR-001/ }));
+    await waitFor(() => expect(deletePreference).toHaveBeenCalledWith('PR-001'));
+  });
+
+  it('删除在用户取消确认时不发请求', async () => {
+    vi.mocked(listPreferences).mockResolvedValue(listWith([RULE_LOW_EVIDENCE]));
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(<Preferences />);
+    await screen.findByText('Don’t schedule ORD-007 on CNC-03');
+
+    fireEvent.click(screen.getByRole('button', { name: /Delete rule PR-001/ }));
+    expect(deletePreference).not.toHaveBeenCalled();
   });
 
   it('点「启用」调用 enablePreference（独立动作）', async () => {
