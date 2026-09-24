@@ -132,6 +132,8 @@ export function Preferences() {
   const [enabledCount, setEnabledCount] = useState(0);
   const [maxEnabled, setMaxEnabled] = useState(20);
   const [loading, setLoading] = useState(true);
+  /** 任一写操作（创建/启停/删除/编辑）进行中，用于禁用相关按钮、防重复提交。 */
+  const [mutating, setMutating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -173,8 +175,10 @@ export function Preferences() {
   const handleCreate = useCallback(
     async (event: FormEvent) => {
       event.preventDefault();
+      if (mutating) return;
       setError(null);
       setNotice(null);
+      setMutating(true);
       try {
         const sources = sourceIds
           .split(',')
@@ -196,15 +200,19 @@ export function Preferences() {
             ? `Create failed (${err.code}): ${err.message}`
             : 'Create failed: backend service unavailable.',
         );
+      } finally {
+        setMutating(false);
       }
     },
-    [fields, humanText, sourceIds, load],
+    [fields, humanText, sourceIds, load, mutating],
   );
 
   const handleEnable = useCallback(
     async (rule: PreferenceRule) => {
+      if (mutating) return;
       setError(null);
       setNotice(null);
+      setMutating(true);
       try {
         if (rule.enabled) {
           await disablePreference(rule.rule_id);
@@ -220,25 +228,37 @@ export function Preferences() {
             err instanceof ApiError ? `Operation failed (${err.code}): ${err.message}` : 'Operation failed.',
           );
         }
+      } finally {
+        setMutating(false);
       }
     },
-    [load, maxEnabled],
+    [load, maxEnabled, mutating],
   );
 
   const handleDelete = useCallback(
-    async (ruleId: string) => {
+    async (ruleId: string, humanText: string) => {
+      if (mutating) return;
+      // 删除是破坏性操作：先确认，取消则不发请求（防误删）。
+      const confirmed = window.confirm(
+        `Delete this preference rule permanently?\n\n"${humanText}"\n\nThis cannot be undone.`,
+      );
+      if (!confirmed) return;
       setError(null);
       setNotice(null);
+      setMutating(true);
       try {
         await deletePreference(ruleId);
+        setNotice('Rule deleted.');
         await load();
       } catch (err) {
         setError(
           err instanceof ApiError ? `Delete failed (${err.code}): ${err.message}` : 'Delete failed.',
         );
+      } finally {
+        setMutating(false);
       }
     },
-    [load],
+    [load, mutating],
   );
 
   const handleEditText = useCallback(
@@ -247,7 +267,9 @@ export function Preferences() {
       if (next == null || next.trim() === '' || next.trim() === currentText) {
         return;
       }
+      if (mutating) return;
       setError(null);
+      setMutating(true);
       try {
         await updatePreference(ruleId, { human_text: next.trim() });
         await load();
@@ -255,9 +277,11 @@ export function Preferences() {
         setError(
           err instanceof ApiError ? `Edit failed (${err.code}): ${err.message}` : 'Edit failed.',
         );
+      } finally {
+        setMutating(false);
       }
     },
-    [load],
+    [load, mutating],
   );
 
   const handleAffected = useCallback(async (ruleId: string) => {
@@ -319,7 +343,7 @@ export function Preferences() {
         <button
           type="button"
           onClick={() => void handleDistil()}
-          disabled={distilling}
+          disabled={distilling || mutating}
           aria-busy={distilling}
           aria-label="Distil candidate preference rules from historical decisions"
         >
@@ -328,7 +352,7 @@ export function Preferences() {
         <button
           type="button"
           onClick={() => void load()}
-          disabled={loading}
+          disabled={loading || mutating}
           aria-busy={loading}
           aria-label="Refresh preference rule list"
         >
@@ -500,11 +524,11 @@ export function Preferences() {
 
           {fields.kind !== 'ADJUST_OBJECTIVE_WEIGHT' && (
             <div className="field">
-              <label htmlFor="f-weight-delta">Penalty weight (0–10, penalties only)</label>
+              <label htmlFor="f-weight-delta">Penalty weight (0.5–10, penalties only)</label>
               <input
                 id="f-weight-delta"
                 type="number"
-                min={0.0001}
+                min={0.5}
                 max={10}
                 step="0.5"
                 value={fields.weight_delta}
@@ -558,7 +582,9 @@ export function Preferences() {
             <p className="field-hint">Rules with fewer than 2 source decisions are marked “Low evidence” (R18.10).</p>
           </div>
 
-          <button type="submit">Create rule (must be enabled explicitly)</button>
+          <button type="submit" disabled={mutating} aria-busy={mutating}>
+            {mutating ? 'Creating…' : 'Create rule (must be enabled explicitly)'}
+          </button>
         </form>
       </section>
 
@@ -618,7 +644,7 @@ export function Preferences() {
                     <button
                       type="button"
                       onClick={() => void handleEnable(rule)}
-                      disabled={!rule.enabled && atLimit}
+                      disabled={mutating || (!rule.enabled && atLimit)}
                       aria-label={rule.enabled ? `Disable rule ${rule.rule_id}` : `Enable rule ${rule.rule_id}`}
                     >
                       {rule.enabled ? 'Disable' : 'Enable'}
@@ -626,13 +652,15 @@ export function Preferences() {
                     <button
                       type="button"
                       onClick={() => void handleEditText(rule.rule_id, rule.human_text)}
+                      disabled={mutating}
                       aria-label={`Edit rule ${rule.rule_id}`}
                     >
                       Edit
                     </button>
                     <button
                       type="button"
-                      onClick={() => void handleDelete(rule.rule_id)}
+                      onClick={() => void handleDelete(rule.rule_id, rule.human_text)}
+                      disabled={mutating}
                       aria-label={`Delete rule ${rule.rule_id}`}
                     >
                       Delete

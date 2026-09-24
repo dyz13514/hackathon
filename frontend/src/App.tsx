@@ -3,6 +3,7 @@ import { NavLink, Route, Routes, useLocation } from 'react-router-dom';
 
 import { Approval } from './routes/Approval';
 import { Dashboard } from './routes/Dashboard';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { Import } from './routes/Import';
 import { Insights } from './routes/Insights';
 import { NotFound } from './routes/NotFound';
@@ -96,21 +97,23 @@ export function App() {
       </nav>
 
       <main className="app-main">
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/schedule" element={<Schedule />} />
-          <Route path="/approval" element={<Approval />} />
-          <Route path="/traces" element={<Traces />} />
-          <Route path="/risks" element={<Risks />} />
-          <Route path="/whatif" element={<WhatIf />} />
-          <Route path="/import" element={<Import />} />
-          <Route path="/preferences" element={<Preferences />} />
-          <Route path="/value" element={<ValueLedger />} />
-          <Route path="/insights" element={<Insights />} />
-          <Route path="/quote" element={<Quote />} />
-          <Route path="/plans/:a/compare/:b" element={<PlanCompare />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <ErrorBoundary resetKey={location.pathname}>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/schedule" element={<Schedule />} />
+            <Route path="/approval" element={<Approval />} />
+            <Route path="/traces" element={<Traces />} />
+            <Route path="/risks" element={<Risks />} />
+            <Route path="/whatif" element={<WhatIf />} />
+            <Route path="/import" element={<Import />} />
+            <Route path="/preferences" element={<Preferences />} />
+            <Route path="/value" element={<ValueLedger />} />
+            <Route path="/insights" element={<Insights />} />
+            <Route path="/quote" element={<Quote />} />
+            <Route path="/plans/:a/compare/:b" element={<PlanCompare />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </ErrorBoundary>
       </main>
     </div>
   );

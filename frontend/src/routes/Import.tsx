@@ -42,6 +42,8 @@ export function Import() {
   const [committed, setCommitted] = useState<string | null>(null);
   const [batches, setBatches] = useState<readonly BatchSummary[]>([]);
   const [loading, setLoading] = useState(false);
+  /** 正在回滚的批次 id，用于禁用该行按钮、防重复点击。 */
+  const [reverting, setReverting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const refreshBatches = useCallback(async () => {
@@ -111,7 +113,14 @@ export function Import() {
 
   const onRevert = useCallback(
     async (batchId: string) => {
+      if (reverting) return;
+      // 回滚整批已导入数据是破坏性操作：先确认，取消则不发请求。
+      const confirmed = window.confirm(
+        `Revert import batch ${batchId}? This rolls back all rows imported in this batch and cannot be undone.`,
+      );
+      if (!confirmed) return;
       setError(null);
+      setReverting(batchId);
       try {
         await revertImport(batchId);
         await refreshBatches();
@@ -121,9 +130,11 @@ export function Import() {
             ? `Revert failed (${err.code}): ${err.message}`
             : 'Revert failed: backend service unavailable.',
         );
+      } finally {
+        setReverting(null);
       }
     },
-    [refreshBatches],
+    [refreshBatches, reverting],
   );
 
   return (
@@ -140,6 +151,9 @@ export function Import() {
           aria-label="Choose a spreadsheet file to import"
           onChange={(e) => {
             const f = e.target.files?.[0];
+            // 立刻清空 input 的值：否则再次选择"同名同文件"时不会触发 change 事件，
+            // 用户会看到"点了没反应"。清空后即使选同一个文件也能重新上传/重试。
+            e.target.value = '';
             if (f) void onUpload(f);
           }}
         />
@@ -292,9 +306,11 @@ export function Import() {
                       <button
                         type="button"
                         onClick={() => void onRevert(b.batch_id)}
+                        disabled={reverting !== null}
+                        aria-busy={reverting === b.batch_id}
                         aria-label={`Revert batch ${b.batch_id}`}
                       >
-                        Revert
+                        {reverting === b.batch_id ? 'Reverting…' : 'Revert'}
                       </button>
                     )}
                   </td>
