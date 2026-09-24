@@ -181,6 +181,32 @@ describe('Preferences 视图', () => {
     expect((screen.getByLabelText(/Rule description/) as HTMLInputElement).value).toBe('');
   });
 
+  // 回归（round-2）：创建进行中禁用提交按钮并显示进度，重复提交不重复请求。
+  it('创建进行中禁用 Create 按钮，重复提交不重复请求', async () => {
+    vi.mocked(listPreferences).mockResolvedValue(listWith([]));
+    let resolveCreate: (v: typeof RULE_LOW_EVIDENCE) => void = () => {};
+    vi.mocked(createPreference).mockImplementation(
+      () => new Promise((resolve) => { resolveCreate = resolve; }),
+    );
+    render(<Preferences />);
+    await screen.findByRole('heading', { name: 'New rule' });
+
+    fireEvent.change(screen.getByLabelText(/Rule description/), { target: { value: 'X rule' } });
+    fireEvent.change(screen.getByLabelText('Order ID'), { target: { value: 'ORD-001' } });
+    fireEvent.change(screen.getByLabelText('Machine ID'), { target: { value: 'CNC-01' } });
+
+    const createBtn = screen.getByRole('button', { name: /Creating|Create rule/ });
+    fireEvent.click(createBtn);
+    await waitFor(() => expect(createBtn).toBeDisabled());
+    // 二次点击不应产生第二次请求
+    fireEvent.click(createBtn);
+    fireEvent.click(createBtn);
+    expect(createPreference).toHaveBeenCalledTimes(1);
+
+    resolveCreate(RULE_LOW_EVIDENCE);
+    expect(await screen.findByText(/Rule created/)).toBeInTheDocument();
+  });
+
   it('点「启用」调用 enablePreference（独立动作）', async () => {
     vi.mocked(listPreferences).mockResolvedValue(listWith([RULE_LOW_EVIDENCE]));
     vi.mocked(enablePreference).mockResolvedValue({ ...RULE_LOW_EVIDENCE, enabled: true });

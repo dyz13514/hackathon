@@ -229,4 +229,49 @@ describe('Approval 视图', () => {
     );
     expect(serious).toEqual([]);
   });
+
+  // 回归（round-2）：写操作进行中必须禁用按钮并显示进度，避免重复提交/重复请求。
+  it('APPROVE 进行中禁用按钮、显示进度，二次点击不重复请求', async () => {
+    mockLoaded();
+    let resolveApprove: (v: { plan_id: string; status: string }) => void = () => {};
+    vi.mocked(approvePlan).mockImplementation(
+      () => new Promise((resolve) => { resolveApprove = resolve; }),
+    );
+    renderApproval();
+
+    const approveBtn = await screen.findByRole('button', { name: 'Approve plan PLAN-abc' });
+    fireEvent.click(approveBtn);
+
+    // 进行中：按钮禁用 + 进度文案；再次点击不应触发第二次请求
+    await waitFor(() => expect(approveBtn).toBeDisabled());
+    expect(approveBtn).toHaveTextContent('Approving');
+    fireEvent.click(approveBtn);
+    fireEvent.click(approveBtn);
+    expect(approvePlan).toHaveBeenCalledTimes(1);
+
+    // 完成后恢复
+    resolveApprove({ plan_id: 'PLAN-abc', status: 'ACTIVE' });
+    await waitFor(() => expect(approvePlan).toHaveBeenCalledTimes(1));
+    expect(await screen.findByRole('status')).toHaveTextContent('activated');
+  });
+
+  it('审批进行中时 Reject 与 Refresh 一并禁用（防止并发写/读）', async () => {
+    mockLoaded();
+    let resolveApprove: (v: { plan_id: string; status: string }) => void = () => {};
+    vi.mocked(approvePlan).mockImplementation(
+      () => new Promise((resolve) => { resolveApprove = resolve; }),
+    );
+    renderApproval();
+
+    const approveBtn = await screen.findByRole('button', { name: 'Approve plan PLAN-abc' });
+    fireEvent.click(approveBtn);
+    await waitFor(() => expect(approveBtn).toBeDisabled());
+
+    expect(screen.getByRole('button', { name: 'Refresh pending list' })).toBeDisabled();
+    // Reject 本来就受理由长度约束，这里确认写进行中它也被禁用
+    expect(screen.getByRole('button', { name: 'Reject plan PLAN-abc' })).toBeDisabled();
+
+    resolveApprove({ plan_id: 'PLAN-abc', status: 'ACTIVE' });
+    await screen.findByRole('status');
+  });
 });

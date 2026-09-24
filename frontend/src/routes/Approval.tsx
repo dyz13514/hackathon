@@ -130,6 +130,8 @@ export function Approval() {
   const [pending, setPending] = useState<readonly PlanSummary[]>([]);
   const [plan, setPlan] = useState<PlanDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  /** 正在进行的写操作（approve/reject/modify），用于禁用按钮、防重复提交并显示进度。 */
+  const [submitting, setSubmitting] = useState<'approve' | 'reject' | 'modify' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [stale, setStale] = useState<StaleInfo | null>(null);
@@ -198,10 +200,11 @@ export function Approval() {
   }, []);
 
   const onApprove = useCallback(async () => {
-    if (!plan) {
+    if (!plan || submitting) {
       return;
     }
     resetActionState();
+    setSubmitting('approve');
     try {
       const result = await approvePlan(plan.plan_id, plan.plan_version);
       setNotice(`Plan ${result.plan_id} activated (${result.status}).`);
@@ -217,14 +220,17 @@ export function Approval() {
       setError(
         err instanceof ApiError ? `Approval failed (${err.code}): ${err.message}` : 'Approval failed.',
       );
+    } finally {
+      setSubmitting(null);
     }
-  }, [plan, resetActionState, loadPending]);
+  }, [plan, submitting, resetActionState, loadPending]);
 
   const onReject = useCallback(async () => {
-    if (!plan) {
+    if (!plan || submitting) {
       return;
     }
     resetActionState();
+    setSubmitting('reject');
     try {
       const result = await rejectPlan(plan.plan_id, rejectionReason);
       setNotice(`Plan ${result.plan_id} rejected (${result.status}).`);
@@ -234,11 +240,13 @@ export function Approval() {
       setError(
         err instanceof ApiError ? `Rejection failed (${err.code}): ${err.message}` : 'Rejection failed.',
       );
+    } finally {
+      setSubmitting(null);
     }
-  }, [plan, rejectionReason, resetActionState, loadPending]);
+  }, [plan, submitting, rejectionReason, resetActionState, loadPending]);
 
   const onModify = useCallback(async () => {
-    if (!plan) {
+    if (!plan || submitting) {
       return;
     }
     resetActionState();
@@ -247,6 +255,7 @@ export function Approval() {
       setError('Please enter the job id and the target value required for this modification type.');
       return;
     }
+    setSubmitting('modify');
     try {
       const result = await modifyPlan(plan.plan_id, [modification]);
       setNotice(
@@ -259,8 +268,10 @@ export function Approval() {
       setError(
         err instanceof ApiError ? `Modification failed (${err.code}): ${err.message}` : 'Modification failed.',
       );
+    } finally {
+      setSubmitting(null);
     }
-  }, [plan, modKind, modJobId, modTarget, resetActionState, loadPending]);
+  }, [plan, submitting, modKind, modJobId, modTarget, resetActionState, loadPending]);
 
   const breakdown = plan?.objective_breakdown ?? null;
   const affected = plan ? affectedOrderIds(plan) : [];
@@ -280,7 +291,7 @@ export function Approval() {
         <button
           type="button"
           onClick={() => void loadPending()}
-          disabled={loading}
+          disabled={loading || submitting !== null}
           aria-busy={loading}
           aria-label="Refresh pending list"
         >
@@ -423,9 +434,11 @@ export function Approval() {
               <button
                 type="button"
                 onClick={() => void onApprove()}
+                disabled={submitting !== null}
+                aria-busy={submitting === 'approve'}
                 aria-label={`Approve plan ${plan.plan_id}`}
               >
-                Approve
+                {submitting === 'approve' ? 'Approving…' : 'Approve'}
               </button>
             </div>
 
@@ -441,10 +454,11 @@ export function Approval() {
               <button
                 type="button"
                 onClick={() => void onReject()}
-                disabled={rejectionReason.trim().length < 5}
+                disabled={rejectionReason.trim().length < 5 || submitting !== null}
+                aria-busy={submitting === 'reject'}
                 aria-label={`Reject plan ${plan.plan_id}`}
               >
-                Reject
+                {submitting === 'reject' ? 'Rejecting…' : 'Reject'}
               </button>
             </div>
 
@@ -489,9 +503,11 @@ export function Approval() {
               <button
                 type="button"
                 onClick={() => void onModify()}
+                disabled={submitting !== null}
+                aria-busy={submitting === 'modify'}
                 aria-label={`Submit modification for plan ${plan.plan_id}`}
               >
-                Submit modification
+                {submitting === 'modify' ? 'Submitting…' : 'Submit modification'}
               </button>
             </div>
           </section>
