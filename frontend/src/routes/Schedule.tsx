@@ -16,7 +16,7 @@
 import { useCallback, useState } from 'react';
 
 import { ApiError } from '../api/client';
-import { generatePlan, type PlanDetail } from '../api/plans';
+import { generatePlan, getPlan, type PlanDetail } from '../api/plans';
 import { Gantt } from '../components/Gantt';
 
 function formatRate(rate: number): string {
@@ -82,14 +82,29 @@ export function Schedule() {
   const [plan, setPlan] = useState<PlanDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingPlanId, setPendingPlanId] = useState<string | null>(null);
 
   const onGenerate = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setPendingPlanId(null);
     try {
       const result = await generatePlan();
       setPlan(result);
+      if (result.status === 'PENDING_APPROVAL') setPendingPlanId(result.plan_id);
     } catch (err) {
+      if (err instanceof ApiError && err.code === 'PENDING_PLAN_EXISTS') {
+        const existingId = err.details.existing_plan_id;
+        if (typeof existingId === 'string') {
+          setPendingPlanId(existingId);
+          try {
+            setPlan(await getPlan(existingId));
+            return;
+          } catch {
+            // Existing plan may have changed between the 409 and this read; keep the approval link.
+          }
+        }
+      }
       const message =
         err instanceof ApiError
           ? `Generation failed (${err.code}): ${err.message}`
@@ -104,10 +119,18 @@ export function Schedule() {
     <section aria-labelledby="schedule-heading" className="schedule">
       <div className="schedule-header">
         <h2 id="schedule-heading">Schedule</h2>
-        <button type="button" onClick={onGenerate} disabled={loading} aria-busy={loading}>
-          {loading ? 'Generating…' : 'Generate today’s plan'}
+        <button type="button" onClick={onGenerate} disabled={loading || plan?.status === 'PENDING_APPROVAL'} aria-busy={loading}>
+          {loading ? 'Generating…' : plan?.status === 'PENDING_APPROVAL' ? 'Plan awaiting approval' : 'Generate today’s plan'}
         </button>
       </div>
+
+      {pendingPlanId && (
+        <p role="status" className="schedule-pending">
+          Plan {pendingPlanId} is awaiting approval. Review its schedule below, then{' '}
+          <a href={`/approval?plan_id=${encodeURIComponent(pendingPlanId)}`}>approve or reject it</a>
+          {' '}before generating another plan for this date.
+        </p>
+      )}
 
       {error && (
         <p role="alert" className="schedule-error">

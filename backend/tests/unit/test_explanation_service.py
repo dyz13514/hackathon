@@ -24,8 +24,9 @@ from app.core.explain import Explanation
 from app.db import audit
 from app.db.models import AuditLog, Base
 from app.db.session import create_db_engine
-from app.llm.adapter import LlmDisabledError, LlmRequest, LlmResponse, LlmUsage
+from app.llm.adapter import BedrockUnavailableError, LlmDisabledError, LlmMode, LlmRequest, LlmResponse, LlmUsage
 from app.services.explanation import (
+    ExplanationGenerationFailed,
     BaselineView,
     ComponentView,
     NumericCheck,
@@ -200,3 +201,19 @@ def test_disabled_mode_falls_back_to_template(audit_engine: Engine) -> None:
     assert result.fallback_reason is not None
     assert result.fallback_reason.startswith("LLM_UNAVAILABLE")
     assert "Confidence" in result.narrative  # 模板文本渲染了结构化证据
+
+
+def test_live_failure_does_not_publish_template(audit_engine: Engine) -> None:
+    explanation, payload = _inputs()
+    adapter = FakeAdapter(raise_exc=BedrockUnavailableError("gateway failed"))
+    adapter.configured_mode = LlmMode.LIVE
+    with pytest.raises(ExplanationGenerationFailed):
+        build_explanation(explanation, payload, adapter, engine=audit_engine)  # type: ignore[arg-type]
+
+
+def test_live_numeric_mismatch_does_not_publish_template(audit_engine: Engine) -> None:
+    explanation, payload = _inputs()
+    adapter = FakeAdapter(content="总拖期 999999 分钟。")
+    adapter.configured_mode = LlmMode.LIVE
+    with pytest.raises(ExplanationGenerationFailed):
+        build_explanation(explanation, payload, adapter, engine=audit_engine)  # type: ignore[arg-type]

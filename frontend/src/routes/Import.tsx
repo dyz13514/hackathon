@@ -5,8 +5,8 @@
  * 处置 → 重复文件提示 → 提交。落库经 `/api/imports/confirm`（`AcceptedMapping` 闸门，K-07）。
  * 批次列表支持整批回滚（R3.4）。
  *
- * P0 只有结构化流程；自然语言不在此。列映射提议来自 Ingestion_Agent（后端 STUB/REPLAY，无
- * LIVE），前端只呈现与确认，不做任何映射推断。
+ * P0 只有结构化流程；自然语言不在此。列映射提议来自后端 Ingestion_Agent，
+ * 前端只呈现与确认，不做任何映射推断。LIVE 模型失败时显示错误，不冒充成功映射。
  *
  * 可访问性（R27.9）：区块 `aria-labelledby`；控件有 `<label>`；置信/状态除颜色外带文字；
  * 加载/错误/空态显式呈现。
@@ -14,16 +14,18 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
-import { ApiError } from '../api/client';
+import { ApiError, LoginCancelledError } from '../api/client';
 import {
   type BatchSummary,
   type FieldMapping,
   type ProposalResponse,
+  type ValidateResult,
   confirmImport,
   getProposal,
   listImports,
   revertImport,
   uploadImport,
+  validateMapping,
 } from '../api/imports';
 
 const STATUS_LABEL: Record<FieldMapping['status'], string> = {
@@ -38,6 +40,7 @@ export function Import() {
   const [lastImportedAt, setLastImportedAt] = useState<string | null>(null);
   const [proposal, setProposal] = useState<ProposalResponse | null>(null);
   const [fields, setFields] = useState<FieldMapping[]>([]);
+  const [validation, setValidation] = useState<ValidateResult | null>(null);
   const [unparsedResolved, setUnparsedResolved] = useState(false);
   const [committed, setCommitted] = useState<string | null>(null);
   const [batches, setBatches] = useState<readonly BatchSummary[]>([]);
@@ -63,20 +66,29 @@ export function Import() {
       setLoading(true);
       setError(null);
       setProposal(null);
+      setValidation(null);
+      setUnparsedResolved(false);
       setCommitted(null);
+      let stage = 'Upload';
       try {
         const up = await uploadImport(file);
         setUploadId(up.upload_id);
         setDuplicateOf(up.duplicate_of);
         setLastImportedAt(up.last_imported_at);
+        stage = 'Mapping proposal';
         const prop = await getProposal(up.upload_id);
         setProposal(prop);
         setFields(prop.proposal.field_mappings.map((f) => ({ ...f })));
+        stage = 'Mapping validation';
+        setValidation(await validateMapping(up.upload_id, {
+          field_mappings: prop.proposal.field_mappings,
+        }));
       } catch (err) {
+        if (err instanceof LoginCancelledError) return;
         setError(
           err instanceof ApiError
-            ? `Upload failed (${err.code}): ${err.message}`
-            : 'Upload failed: backend service unavailable.',
+            ? `${stage} failed (${err.code}): ${err.message}`
+            : `${stage} failed: backend service unavailable.`,
         );
       } finally {
         setLoading(false);
@@ -85,22 +97,32 @@ export function Import() {
     [],
   );
 
-  const setFieldStatus = (target: string, status: FieldMapping['status']) =>
+  const setFieldStatus = (target: string, status: FieldMapping['status']) => {
+    setValidation(null);
+    setUnparsedResolved(false);
     setFields((prev) => prev.map((f) => (f.target_field === target ? { ...f, status } : f)));
+  };
 
   const onConfirm = useCallback(async () => {
     if (!uploadId || !proposal) return;
     setLoading(true);
     setError(null);
     try {
+      const checked = await validateMapping(uploadId, { field_mappings: fields });
+      setValidation(checked);
+      if (checked.unparsed_cells.length > 0 && !unparsedResolved) {
+        setError('Review the unparsed cells below before confirming the import.');
+        return;
+      }
       const result = await confirmImport(uploadId, {
         entity_type: proposal.proposal.entity_type,
         field_mappings: fields,
-        unparsed_cells_resolved: unparsedResolved,
+        unparsed_cells_resolved: checked.unparsed_cells.length === 0 || unparsedResolved,
       });
       setCommitted(result.batch_id);
       await refreshBatches();
     } catch (err) {
+      if (err instanceof LoginCancelledError) return;
       setError(
         err instanceof ApiError
           ? `Confirm failed (${err.code}): ${err.message}`
@@ -251,14 +273,31 @@ export function Import() {
             </section>
           )}
 
-          <label className="import-unparsed">
-            <input
-              type="checkbox"
-              checked={unparsedResolved}
-              onChange={(e) => setUnparsedResolved(e.target.checked)}
-            />
-            I have resolved all unparsed cells / conflicts
-          </label>
+          {validation && (
+            <section aria-labelledby="import-validation-heading" className="import-validation">
+              <h3 id="import-validation-heading">Validation</h3>
+              <p>{validation.parsed_row_count} rows parsed; {validation.type_error_count} type errors; {validation.normalisation_failure_count} normalisation failures.</p>
+              {validation.unparsed_cells.length > 0 && (
+                <>
+                  <ul>
+                    {validation.unparsed_cells.map((cell) => (
+                      <li key={`${cell.row_number}-${cell.column_name}`}>
+                        Row {cell.row_number}, {cell.column_name}: {cell.raw_value} — {cell.reason}
+                      </li>
+                    ))}
+                  </ul>
+                  <label className="import-unparsed">
+                    <input
+                      type="checkbox"
+                      checked={unparsedResolved}
+                      onChange={(e) => setUnparsedResolved(e.target.checked)}
+                    />
+                    I have reviewed and resolved the listed cells
+                  </label>
+                </>
+              )}
+            </section>
+          )}
 
           <button
             type="button"

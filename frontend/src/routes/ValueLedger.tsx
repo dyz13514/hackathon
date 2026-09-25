@@ -139,7 +139,7 @@ export function ValueLedger() {
         <div className="value-ledger-body">
           {/* --- KPI 表：当前值 / 基线值 / 差值 / 目标值 + 标签（R19.4） --- */}
           <section aria-labelledby="kpi-heading" className="value-ledger-kpis">
-            <h3 id="kpi-heading">KPIs (K-01 to K-18)</h3>
+            <h3 id="kpi-heading">KPIs with recorded values</h3>
             <table>
               <caption className="sr-only">Current value, baseline, delta, target and label for each KPI</caption>
               <thead>
@@ -171,18 +171,15 @@ export function ValueLedger() {
             </table>
           </section>
 
-          {/* --- 实测累计 vs 预测（两列，R25.13） --- */}
+          {/* Only recorded totals are shown; fixed demo-cost projections were removed. */}
           <section aria-labelledby="cost-heading" className="value-ledger-cost">
-            <h3 id="cost-heading">Cost: measured cumulative vs. projected (side by side)</h3>
+            <h3 id="cost-heading">Recorded LLM usage and cost estimate</h3>
             <table>
               <thead>
                 <tr>
                   <th scope="col">Basis</th>
                   <th scope="col">
-                    Measured cumulative <LabelBadge label="MEASURED" />
-                  </th>
-                  <th scope="col">
-                    Projected <LabelBadge label="PROJECTED" />
+                    Recorded cumulative <LabelBadge label="MEASURED" />
                   </th>
                 </tr>
               </thead>
@@ -190,15 +187,10 @@ export function ValueLedger() {
                 <tr>
                   <th scope="row">Cumulative LLM tokens</th>
                   <td>{data.metrics.llm_tokens_used}</td>
-                  <td>-</td>
                 </tr>
                 <tr>
                   <th scope="row">Estimated cost (USD)</th>
                   <td>{formatUsd(data.metrics.estimated_usd_cost)}</td>
-                  <td>
-                    One demo ~ {formatUsd(data.metrics.projected_hero_demo_usd)} (K-17); build +
-                    rehearsal ~ {formatUsd(data.metrics.projected_build_total_usd)} (K-18)
-                  </td>
                 </tr>
               </tbody>
             </table>

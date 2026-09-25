@@ -93,8 +93,8 @@ def scan_and_persist(
 
     `narrative_driver`（任务 13.2，P1）：可选的 `RiskNarrativeDriver`。给定时，为**严重度最高的
     至多 `MAX_LLM_NARRATIVES_PER_SCAN` 项 WARNING 及以上**的风险生成 LLM 归因叙述
-    （`narrative_source=LLM`）；生成失败/不合格/降级则回退确定性模板（`TEMPLATE`）。缺省 `None`
-    保持 P0 行为——全部模板叙述，零 LLM 调用。驱动是只读的（R14.8）。
+    （`narrative_source=LLM`）；LIVE 生成失败标记 `LLM_FAILED` 且不展示模板叙述。
+    缺省 `None` 保持 P0 行为——全部模板叙述，零 LLM 调用。驱动是只读的（R14.8）。
     """
     resolved_now = now if now is not None else DEMO_ANCHOR
 
@@ -113,10 +113,11 @@ def scan_and_persist(
     findings = scan(snapshot, candidate.scheduled_jobs, horizon_days=horizon_days)
 
     # 任务 13.2：为最高严重度的至多 5 项 WARNING+ 风险生成 LLM 叙述（R14.10 成本闸门）。
-    llm_narratives = _llm_narratives(findings, narrative_driver)
+    llm_narratives, failed_narratives = _llm_narratives(findings, narrative_driver)
 
     inserted, updated, rows = _persist(
-        session, findings, now=resolved_now, llm_narratives=llm_narratives
+        session, findings, now=resolved_now, llm_narratives=llm_narratives,
+        failed_narratives=failed_narratives,
     )
     session.commit()
 
@@ -246,19 +247,18 @@ def _propose_mitigations_for_critical(
 
 def _llm_narratives(
     findings: tuple[RiskFinding, ...], narrative_driver: object | None
-) -> dict[str, str]:
+) -> tuple[dict[str, str], set[str]]:
     """为最高严重度的至多 `MAX_LLM_NARRATIVES_PER_SCAN` 项 WARNING+ 风险生成 LLM 叙述（R14.10）。
 
-    返回 `finding_key -> narrative_text` 的映射（只含成功生成的项）。`narrative_driver` 为 None、
-    或没有 WARNING+ 风险、或驱动对某项返回 None（不可用/不合格/降级）时，对应项不进映射，
-    `_persist` 因此回退模板。
+    返回成功叙述映射和 LIVE 失败键集合。只有离线/未配置驱动的项使用事实模板；
+    LIVE 失败项由 `_persist` 标记 `LLM_FAILED`。
 
     只读、无副作用：本函数不碰会话、不写任何生产数据（R14.8）。`findings` 已按
     `(SEVERITY_RANK, finding_key)` 升序（CRITICAL 在前），因此「前 5 项 WARNING+」正是「最高
     严重度的 5 项」。INFO 一律不生成 LLM 叙述（成本闸门只覆盖 WARNING 及以上）。
     """
     if narrative_driver is None:
-        return {}
+        return {}, set()
 
     # 延迟 import，避免服务层在无需 LLM 叙述时拖入 Agent 层类型。
     from app.agents.risk_monitor_agent import RiskFindingFacts
@@ -268,6 +268,7 @@ def _llm_narratives(
     selected = eligible[:MAX_LLM_NARRATIVES_PER_SCAN]
 
     result: dict[str, str] = {}
+    failed: set[str] = set()
     for finding in selected:
         facts = RiskFindingFacts(
             risk_type=finding.risk_type.value,
@@ -281,9 +282,11 @@ def _llm_narratives(
         text = narrative_driver.generate(facts)  # type: ignore[attr-defined]
         if text is not None:
             result[finding.finding_key] = text
+        elif getattr(narrative_driver, "live_configured", False):
+            failed.add(finding.finding_key)
     if result:
         log_event(logger, "RISK_LLM_NARRATIVES_GENERATED", count=len(result))
-    return result
+    return result, failed
 
 
 def _persist(
@@ -292,6 +295,7 @@ def _persist(
     *,
     now: datetime,
     llm_narratives: dict[str, str] | None = None,
+    failed_narratives: set[str] | None = None,
 ) -> tuple[int, int, list[orm.RiskFinding]]:
     """按 `finding_key` upsert 落库（R14.9）。返回 (新增数, 更新数, 全部对应行)。
 
@@ -300,17 +304,22 @@ def _persist(
     ——它记录「这个风险第一次被看见是什么时候」。
 
     `llm_narratives`（任务 13.2）：`finding_key -> LLM 叙述文本` 的映射。命中的发现落
-    `narrative_source=LLM` 并用 LLM 文本；未命中的照常用确定性模板（`TEMPLATE`）。
+    `narrative_source=LLM` 并用 LLM 文本；失败键标记 `LLM_FAILED`，其余用事实模板。
     """
     llm_map = llm_narratives or {}
+    failed_keys = failed_narratives or set()
     inserted = 0
     updated = 0
     rows: list[orm.RiskFinding] = []
     for finding in findings:
         template = render_template_narrative(finding)
         llm_text = llm_map.get(finding.finding_key)
-        narrative_text = llm_text if llm_text is not None else template.text
-        narrative_source = "LLM" if llm_text is not None else template.source
+        if finding.finding_key in failed_keys:
+            narrative_text = None
+            narrative_source = "LLM_FAILED"
+        else:
+            narrative_text = llm_text if llm_text is not None else template.text
+            narrative_source = "LLM" if llm_text is not None else template.source
         existing = session.execute(
             select(orm.RiskFinding).where(orm.RiskFinding.finding_key == finding.finding_key)
         ).scalars().first()

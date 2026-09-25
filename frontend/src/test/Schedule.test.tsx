@@ -2,16 +2,17 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import axe from 'axe-core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { ApiError } from '../api/client';
 import type { PlanDetail } from '../api/plans';
 import { groupByMachine, timeSpan } from '../components/Gantt';
 
 // 用 mock 隔离网络：本套测试守的是「组件拿到计划后画对了什么」，不测后端。
 vi.mock('../api/plans', async () => {
   const actual = await vi.importActual<typeof import('../api/plans')>('../api/plans');
-  return { ...actual, generatePlan: vi.fn() };
+  return { ...actual, generatePlan: vi.fn(), getPlan: vi.fn() };
 });
 
-import { generatePlan } from '../api/plans';
+import { generatePlan, getPlan } from '../api/plans';
 import { Schedule } from '../routes/Schedule';
 
 const PLAN: PlanDetail = {
@@ -130,6 +131,23 @@ describe('Schedule 视图', () => {
     render(<Schedule />);
     fireEvent.click(screen.getByRole('button', { name: 'Generate today’s plan' }));
     expect(await screen.findByRole('alert')).toBeInTheDocument();
+  });
+
+  it('已有待审批计划时显示现有甘特和审批入口，不重复创建', async () => {
+    vi.mocked(generatePlan).mockRejectedValue(new ApiError(409, 'PENDING_PLAN_EXISTS', 'already pending', {
+      existing_plan_id: 'PLAN-abc',
+    }));
+    vi.mocked(getPlan).mockResolvedValue(PLAN);
+    render(<Schedule />);
+    fireEvent.click(screen.getByRole('button', { name: 'Generate today’s plan' }));
+
+    expect(await screen.findByRole('img', { name: 'Schedule Gantt chart' })).toBeInTheDocument();
+    expect(getPlan).toHaveBeenCalledWith('PLAN-abc');
+    expect(screen.getByRole('link', { name: 'approve or reject it' })).toHaveAttribute(
+      'href', '/approval?plan_id=PLAN-abc',
+    );
+    expect(screen.getByRole('button', { name: 'Plan awaiting approval' })).toBeDisabled();
+    expect(generatePlan).toHaveBeenCalledTimes(1);
   });
 
   it('无严重可访问性违规（axe-core）', async () => {

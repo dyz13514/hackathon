@@ -216,6 +216,19 @@ def test_llm_narrative_falls_back_to_template(
         assert f.narrative  # 回退叙述非空
 
 
+def test_live_narrative_failure_is_visible_without_template(
+    client: TestClient, application: object
+) -> None:
+    _activate(client, application)
+    driver = _FakeDriver(fail=True)
+    driver.live_configured = True
+    with _factory(application)() as db:
+        scan_and_persist(db, now=DEMO_ANCHOR, narrative_driver=driver)
+    failed = [f for f in _findings(application) if f.narrative_source == "LLM_FAILED"]
+    assert failed
+    assert all(f.narrative is None for f in failed)
+
+
 def test_no_driver_keeps_template_source(client: TestClient, application: object) -> None:
     """不注入驱动（P0 行为）：全部模板叙述，零 LLM 调用。"""
     _activate(client, application)

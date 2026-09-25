@@ -102,12 +102,12 @@ class ValueMetricsOut(BaseModel):
     real_run_count: int
     project_real_run_cap: int = Field(description="真实运行硬上限（150），供计算剩余配额")
     real_run_remaining: int = Field(description="剩余真实运行次数 = cap - real_run_count")
-    baseline_plan_generation_seconds: float
-    baseline_disruption_response_seconds: float
+    baseline_plan_generation_seconds: float | None
+    baseline_disruption_response_seconds: float | None
     baseline_on_time_rate: float | None = None
     baseline_total_tardiness_minutes: int | None = None
-    projected_hero_demo_usd: float = Field(description="K-17 预测（PROJECTED）")
-    projected_build_total_usd: float = Field(description="K-18 预测（PROJECTED）")
+    projected_hero_demo_usd: float | None = None
+    projected_build_total_usd: float | None = None
     labels: dict[str, str] = Field(description="逐字段 MEASURED/ESTIMATED/PROJECTED 标签")
 
 
@@ -228,8 +228,8 @@ def _build_ledger(db: Session) -> ValueLedgerOut:
         baseline_disruption_response_seconds=metrics.baseline_disruption_response_seconds,
         baseline_on_time_rate=metrics.baseline_on_time_rate,
         baseline_total_tardiness_minutes=metrics.baseline_total_tardiness_minutes,
-        projected_hero_demo_usd=float(metrics.projected_hero_demo_usd),
-        projected_build_total_usd=float(metrics.projected_build_total_usd),
+        projected_hero_demo_usd=None,
+        projected_build_total_usd=None,
         labels=dict(metrics.labels),
     )
 

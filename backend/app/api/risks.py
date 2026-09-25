@@ -170,7 +170,7 @@ def scan_risks_endpoint(
     """
     factory: sessionmaker[Session] = request.app.state.session_factory
     # 任务 13.2：装上 Risk_Monitor_Agent 的 LLM 归因叙述驱动（只读）。它对最高严重度的至多 5 项
-    # WARNING+ 风险生成 LLM 叙述；不可用/降级/不合格则回退模板。缺 adapter 时回退纯模板（P0 行为）。
+    # WARNING+ 风险尝试 LLM 叙述；LIVE 失败标记 LLM_FAILED，缺 adapter 用事实模板。
     driver = _narrative_driver(request)
     with factory() as db:
         result = scan_and_persist(
@@ -188,9 +188,8 @@ def scan_risks_endpoint(
 def _narrative_driver(request: Request) -> object | None:
     """从 `app.state.llm_adapter` 构造只读的 `RiskNarrativeDriver`；缺 adapter 时返回 None。
 
-    降级模式（`LLM_MODE=DISABLED`）不在此判断——驱动内部 `invoke` 抛 `LlmDisabledError` 时
-    自行返回 None，`scan_and_persist` 因此对该项回退模板。这样「装了驱动但当前禁用」与「没装
-    驱动」在落库结果上一致（都用模板），无需在端点分支。
+    降级模式在驱动内部判断。若启动配置为 LIVE，即便运行期已转为 DISABLED，
+    生成失败仍标记 LLM_FAILED；没有驱动时才使用事实模板。
     """
     adapter = getattr(request.app.state, "llm_adapter", None)
     if adapter is None:

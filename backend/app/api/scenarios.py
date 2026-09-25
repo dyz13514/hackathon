@@ -277,7 +277,7 @@ def translate_scenario_endpoint(
         return error_response(
             status_code=503,
             code=ErrorCode.LLM_UNAVAILABLE_USE_STRUCTURED_FORM,
-            message="The LLM is in degraded mode, so natural-language translation is unavailable. Please use the structured scenario form instead.",
+            message=result.reason or "Natural-language translation failed; no demo translation was substituted. Please use the structured scenario form instead.",
             next_actions=[NextAction(action="use_structured_form", href="/whatif")],
         )
     if result.outcome is TranslationOutcome.UNSUPPORTED_SCENARIO:

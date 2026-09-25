@@ -166,10 +166,10 @@ def test_translate_self_corrects_within_step_limit(audit_engine: Engine) -> None
 
 
 def test_translate_gives_up_after_max_steps(audit_engine: Engine) -> None:
-    """连续不合规达步数上限 → UNSUPPORTED，调用次数恰为 MAX_TRANSLATE_STEPS。"""
+    """连续不合规达步数上限 → 模型失败，不归咎于用户场景。"""
     adapter = _FakeAdapter(['{"final": {"mutations": [{"kind": "BOGUS"}]}}'])
     result = translate_whatif_query(adapter, "x", now=DEMO_ANCHOR)  # type: ignore[arg-type]
-    assert result.outcome is TranslationOutcome.UNSUPPORTED_SCENARIO
+    assert result.outcome is TranslationOutcome.LLM_UNAVAILABLE
     assert adapter.calls == MAX_TRANSLATE_STEPS
 
 

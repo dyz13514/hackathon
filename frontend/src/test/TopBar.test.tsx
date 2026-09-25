@@ -40,7 +40,7 @@ const NORMAL: Health = {
   status: 'OK',
   mode: 'NORMAL',
   db_ok: true,
-  llm_mode: 'STUB',
+  llm_mode: 'LIVE',
   project_usd_spent: 1.0,
   real_run_count: 2,
 };
@@ -73,7 +73,13 @@ describe('TopBar 全局横幅', () => {
     render(<TopBar />);
     const banner = await screen.findByRole('alert');
     expect(banner.textContent).toMatch(/Degraded mode/);
-    expect(banner.textContent).toMatch(/manual column mapping/);
+    expect(banner.textContent).toMatch(/retry those actions after model access is restored/);
+  });
+
+  it('离线模型模式明确提示不是 LIVE API 结果', async () => {
+    vi.mocked(getHealth).mockResolvedValue({ ...NORMAL, llm_mode: 'STUB' });
+    render(<TopBar />);
+    expect(await screen.findByText(/model output is offline test\/recording data/)).toBeInTheDocument();
   });
 
   it('累计成本达 80% 上限时显示预算告警（R25.4）', async () => {

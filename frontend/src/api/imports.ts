@@ -5,7 +5,7 @@
  * 上传走 multipart（不能用 `apiFetch` 的 JSON 头），其余走 `apiFetch`。
  */
 
-import { API_BASE, ApiError, apiFetch } from './client';
+import { apiFetch, apiFetchResponse } from './client';
 
 export interface UploadResult {
   readonly upload_id: string;
@@ -101,23 +101,10 @@ export interface BatchSummary {
 export async function uploadImport(file: File): Promise<UploadResult> {
   const form = new FormData();
   form.append('file', file);
-  const response = await fetch(`${API_BASE}/imports/upload`, {
+  const response = await apiFetchResponse('/imports/upload', {
     method: 'POST',
-    credentials: 'include',
     body: form, // 不设 Content-Type：浏览器自动带 multipart boundary
   });
-  if (!response.ok) {
-    let code = 'UNKNOWN';
-    let message = 'Upload failed';
-    try {
-      const body = (await response.json()) as { error?: { code?: string; message?: string } };
-      code = body.error?.code ?? code;
-      message = body.error?.message ?? message;
-    } catch {
-      /* 非 JSON 错误体 */
-    }
-    throw new ApiError(response.status, code, message);
-  }
   return (await response.json()) as UploadResult;
 }
 

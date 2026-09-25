@@ -90,6 +90,9 @@ class _Upload:
     filename: str
     parsed: ParsedFile
     checksum: str
+    proposed_mapping: dict | None = None
+    agent_outcome: str | None = None
+    from_agent: bool = False
 
 
 @dataclass

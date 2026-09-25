@@ -307,7 +307,7 @@ export function Preferences() {
         setNotice('No historical decisions available to distil yet (rejection/modification decisions with reasons are needed first).');
         setCandidates([]);
       } else if (result.outcome === 'LLM_UNAVAILABLE') {
-        setNotice('The LLM is in degraded mode, so distilling from historical decisions is unavailable. You can keep writing rules manually.');
+        setNotice('Model distillation failed or is unavailable; no candidate rules were created. Check the LIVE connection or write rules manually.');
         setCandidates([]);
       } else {
         setCandidates([...result.candidates]);

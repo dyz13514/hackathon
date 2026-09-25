@@ -126,6 +126,17 @@ describe('Risks 视图', () => {
     expect(screen.getByLabelText('Narrative source: LLM')).toBeInTheDocument();
   });
 
+  it('LIVE 叙述失败时明确告知，不展示模板叙述', async () => {
+    vi.mocked(getRisks).mockResolvedValue({
+      ...RISKS,
+      findings: RISKS.findings.map((finding, index) => index === 0
+        ? { ...finding, narrative: null, narrative_source: 'LLM_FAILED' }
+        : finding),
+    });
+    render(<Risks />);
+    expect(await screen.findByText(/Live model narrative failed/)).toBeInTheDocument();
+  });
+
   it('「重新扫描」触发 POST 后回读（R14.1）', async () => {
     vi.mocked(getRisks).mockResolvedValue(RISKS);
     vi.mocked(scanRisks).mockResolvedValue({

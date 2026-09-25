@@ -1,10 +1,10 @@
 """电子表格摄取端点（design.md §4.2/§6 `/import`，任务 10，R2/R3）。
 
-P0 的摄取入口，全部确定性、无 LIVE LLM：
+摄取入口：上传和校验是确定性的；列映射提议可使用 LIVE LLM：
 
 - `POST /api/imports/upload`（multipart）—— 安全闸门 + 解析 + 暂存，返回 `upload_id`
   （R2.1、R23.7）。重复 `file_checksum` 提示上次导入时间（R3.6）。
-- `GET  /api/imports/{upload_id}/proposal` —— 确定性列映射提议 + 有界预览（R2.2/2.6/2.7）。
+- `GET  /api/imports/{upload_id}/proposal` —— Agent 列映射提议 + 有界预览；LIVE 失败显式报错。
 - `POST /api/imports/{upload_id}/validate` —— 确定性校验，返回 `unparsed_cells` 等（R2.8）。
 - `POST /api/imports/{upload_id}/confirm` —— 人工确认后落库（R2.9/3.2）；经 `AcceptedMapping`
   闸门（低置信/缺必填/未处置 unparsed → 拒绝，不写库）。落库后触发风险扫描。
@@ -17,6 +17,7 @@ P0 的摄取入口，全部确定性、无 LIVE LLM：
 from __future__ import annotations
 
 import uuid
+from dataclasses import replace
 from typing import Annotated
 
 from fastapi import APIRouter, File, Request, UploadFile
@@ -136,25 +137,55 @@ def get_proposal(request: Request, upload_id: str) -> JSONResponse:
     except KeyError:
         return _upload_not_found(upload_id)
 
-    # 列映射经 Agent 路径；STUB、REPLAY 缺录制或 DETERMINISTIC_ONLY 都会在
-    # `run_ingestion_mapping` 内回退为确定性提议。导入不应因解释类 LLM 不可用而中断。
+    from app.llm.adapter import LlmMode
+
+    if request.app.state.llm_adapter.mode == LlmMode.DISABLED and upload.proposed_mapping is None:
+        return error_response(
+            status_code=503,
+            code=ErrorCode.LLM_GENERATION_FAILED,
+            message=(
+                "Column mapping is unavailable while the model is disabled; "
+                "no proposal was substituted."
+            ),
+            next_actions=[NextAction(action="retry_mapping", href="/import")],
+        )
+
+    # 列映射经 Agent 路径；LIVE 失败返回 503，不用确定性提议冒充模型结果。
+    # 离线模式的确定性提议有 from_agent=False 标记。
     # 惰性 import
     # 打破 app.api ← imports ← ingestion_agent_run ← orchestrator ← budget ← app.api.admin 的环。
-    from app.services.ingestion_agent_run import run_ingestion_mapping
+    from app.services.ingestion_agent_run import IngestionMappingUnavailable, run_ingestion_mapping
 
-    run = run_ingestion_mapping(
-        parsed=upload.parsed,
-        upload_id=upload_id,
-        adapter=request.app.state.llm_adapter,
-    )
-    proposal = run.proposed_mapping
+    if upload.proposed_mapping is None:
+        try:
+            run = run_ingestion_mapping(
+                parsed=upload.parsed,
+                upload_id=upload_id,
+                adapter=request.app.state.llm_adapter,
+            )
+        except IngestionMappingUnavailable:
+            return error_response(
+                status_code=503,
+                code=ErrorCode.LLM_GENERATION_FAILED,
+                message=(
+                    "LIVE column mapping failed; no mapping proposal was substituted. "
+                    "Check the model connection and retry."
+                ),
+                next_actions=[NextAction(action="retry_mapping", href="/import")],
+            )
+        upload = replace(
+            upload, proposed_mapping=run.proposed_mapping,
+            agent_outcome=run.agent_outcome, from_agent=run.from_agent,
+        )
+        _store(request).put(upload_id, upload)
+    proposal = upload.proposed_mapping
     preview = build_preview(upload.parsed)
     return JSONResponse(
         {
             "upload_id": upload_id,
             "proposal": proposal,
-            "agent_outcome": run.agent_outcome,
-            "from_agent": run.from_agent,
+            "agent_outcome": upload.agent_outcome,
+            "from_agent": upload.from_agent,
             "preview": {
                 "detected_header_row": preview.detected_header_row,
                 "total_rows": preview.total_rows,
@@ -219,16 +250,17 @@ def confirm_import(
             next_actions=[NextAction(action="fix_mapping", href="/import")],
         )
 
-    from app.services.ingestion_agent_run import run_ingestion_mapping
-
     factory = request.app.state.session_factory
-    # 持久化 Agent 的列映射提案到 import_batches.proposed_mapping（spec 10.4/10.6）。
-    run = run_ingestion_mapping(
-        parsed=upload.parsed,
-        upload_id=upload_id,
-        adapter=request.app.state.llm_adapter,
-        entity_type_hint=body.entity_type,
-    )
+    # Persist the exact proposal shown to the user; do not call LIVE again at confirmation.
+    if upload.proposed_mapping is None:
+        return error_response(
+            status_code=409,
+            code=ErrorCode.IMPORT_MAPPING_INCOMPLETE,
+            message="Get and review a mapping proposal before confirming this import.",
+            next_actions=[
+                NextAction(action="review_mapping", href=f"/imports/{upload_id}/proposal")
+            ],
+        )
     with factory() as db:
         result = ingestion.commit_batch(
             db,
@@ -236,7 +268,7 @@ def confirm_import(
             accepted=accepted,
             file_name=upload.filename,
             file_checksum=upload.checksum,
-            proposed_mapping=run.proposed_mapping,
+            proposed_mapping=upload.proposed_mapping,
         )
     # 数据变更后触发风险扫描（R14.1 第 2 类），尽力而为、独立会话。
     trigger_scan(request.app.state.session_factory, trigger="DATA_CHANGE")

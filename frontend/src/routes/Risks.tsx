@@ -69,6 +69,11 @@ function RiskCard({ finding }: { finding: RiskFinding }) {
           )}
         </p>
       )}
+      {finding.narrative_source === 'LLM_FAILED' && (
+        <p role="alert" className="risk-narrative-error">
+          Live model narrative failed; no template explanation was substituted.
+        </p>
+      )}
       {finding.affected_order_ids.length > 0 && (
         <p className="risk-affected">Affected orders: {finding.affected_order_ids.join(', ')}</p>
       )}

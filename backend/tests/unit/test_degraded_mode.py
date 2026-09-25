@@ -272,7 +272,7 @@ def _set_disabled(application: object) -> None:
 def test_column_mapping_rejected_in_degraded_mode(
     client: TestClient, application: object
 ) -> None:
-    """DISABLED 下 GET /imports/{id}/proposal → 409 LLM_UNAVAILABLE_USE_MANUAL_MAPPING。"""
+    """DISABLED 下 GET /imports/{id}/proposal → 503，不生成替代提议。"""
     # 先上传一个最小 CSV，拿到 upload_id。
     csv_bytes = b"order_id,product_id,quantity,due_date\nORD-9,PRD-1,10,2026-03-10\n"
     up = client.post(
@@ -284,11 +284,11 @@ def test_column_mapping_rejected_in_degraded_mode(
 
     _set_disabled(application)
     resp = client.get(f"/api/imports/{upload_id}/proposal")
-    assert resp.status_code == 409, resp.text
+    assert resp.status_code == 503, resp.text
     body = resp.json()
-    assert body["error"]["code"] == "LLM_UNAVAILABLE_USE_MANUAL_MAPPING"
-    # 给出手工列映射的下一步入口（UI 打开手工列映射界面）。
-    assert any(a["action"] == "manual_mapping" for a in body["error"]["next_actions"])
+    assert body["error"]["code"] == "LLM_GENERATION_FAILED"
+    # 当前 UI 尚无手工源列编辑器，下一步只能在模型恢复后重试。
+    assert any(a["action"] == "retry_mapping" for a in body["error"]["next_actions"])
 
 
 # --------------------------------------------------------------------------

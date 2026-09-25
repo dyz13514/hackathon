@@ -47,7 +47,7 @@ from app.agents.ingestion_agent import (
     IngestionAgentDriver,
     ingestion_contracts,
 )
-from app.llm.adapter import BedrockAdapter, LlmDisabledError
+from app.llm.adapter import BedrockAdapter, BedrockUnavailableError, LlmDisabledError, LlmMode
 from app.llm.budget import TokenBudgetManager
 from app.llm.cassette import CassetteMiss
 from app.logging_config import log_event
@@ -71,6 +71,14 @@ logger = logging.getLogger(__name__)
 #: LLM 侧不可用时 `agent_outcome` 的取值。与 `whatif_translate.TranslationOutcome.LLM_UNAVAILABLE`
 #: 用同一个词，便于按结局筛选 Trace；前端只据 `from_agent=False` 显示「确定性提议」。
 LLM_UNAVAILABLE_OUTCOME = "LLM_UNAVAILABLE"
+
+
+class IngestionMappingUnavailable(RuntimeError):
+    """LIVE mapping failed; callers must report failure instead of substituting a proposal."""
+
+
+def _live_configured(adapter: BedrockAdapter) -> bool:
+    return getattr(adapter, "configured_mode", adapter.mode) == LlmMode.LIVE
 
 
 class _IngestMappingPayload(BaseModel):
@@ -163,14 +171,10 @@ def run_ingestion_mapping(
     payload = _IngestMappingPayload(upload_id=upload_id, entity_type_hint=entity_type_hint)
     try:
         result = orch.run(Intent.INGEST_MAPPING, payload, session_id=session_id)
-    except (LlmDisabledError, CassetteMiss) as exc:
-        # LLM 侧不可用**不升级为 500**：与 `explanation.py`（回退模板解释）和
-        # `whatif_translate.py`（回退结构化表单）同一处置——回退到确定性提议，并如实标注
-        # `agent_outcome` / `from_agent=False`。
-        #
-        # 只接住这两个类型，`LIVE` 行为因此不变：网关失败抛的是 `BedrockUnavailableError`
-        # （adapter 已切 `DETERMINISTIC_ONLY`），仍按原样上抛，由上游的降级守卫处置
-        # （R25.10：降级下 `GET /imports/{id}/proposal` 返回 409 手工列映射）。
+    except (LlmDisabledError, BedrockUnavailableError, CassetteMiss) as exc:
+        if _live_configured(adapter):
+            raise IngestionMappingUnavailable("LIVE column mapping failed.") from exc
+        # 只有离线模式允许标注清楚的确定性提议；LIVE 失败已在上面报错。
         log_event(
             logger,
             "INGESTION_LLM_UNAVAILABLE",
@@ -195,7 +199,12 @@ def run_ingestion_mapping(
             from_agent=True,
         )
 
-    # 诚实降级：STUB 无 cassette 时 Agent 走不到合法 final。用确定性提议，不伪造 Agent 成功。
+    if _live_configured(adapter):
+        raise IngestionMappingUnavailable(
+            f"LIVE column mapping produced no valid proposal ({result.outcome})."
+        )
+
+    # Offline modes may retain their explicitly labelled deterministic proposal.
     return _deterministic_result(
         parsed, entity_type_hint, outcome=result.outcome, trace_id=result.trace_id
     )

@@ -66,6 +66,7 @@ from app.llm.adapter import (
     BedrockAdapter,
     BedrockUnavailableError,
     LlmDisabledError,
+    LlmMode,
     LlmRequest,
 )
 from app.llm.cassette import CassetteMiss
@@ -350,6 +351,10 @@ class ExplanationResult:
 _RENDERER = TemplateExplanationRenderer()
 
 
+class ExplanationGenerationFailed(RuntimeError):
+    """LIVE explanation failed validation or delivery; do not publish template prose."""
+
+
 def build_explanation(
     explanation: Explanation,
     payload: dict[str, Any],
@@ -358,7 +363,7 @@ def build_explanation(
     trace_id: str | None = None,
     engine: Engine | None = None,
 ) -> ExplanationResult:
-    """发起**恰好 1 次**解释调用并按数值比对结果发布 LLM 文本或模板文本（design.md §2.1）。
+    """发起**恰好 1 次**解释调用并按数值比对结果发布 LLM 文本（design.md §2.1）。
 
     参数：
     - `explanation`——`core.explain` 产出的结构化证据骨架（确定性真值）。
@@ -368,9 +373,9 @@ def build_explanation(
       **至多一次**（成功路径恰好一次；降级模式下 `LlmDisabledError` 在 `invoke` 内即抛，
       仍算一次尝试但无网络）。
 
-    三条回退路径（模块 docstring）都渲染 `TemplateExplanationRenderer`，`numeric_check =
-    FALLBACK`。只有 LLM 文本经 `guard_explanation_numeric_consistency` 返回 `None`（一致）时
-    才发布 LLM 文本、`numeric_check = PASS`。
+    LIVE 失败或数值不一致时抛 `ExplanationGenerationFailed`；离线模式才用显式标记的模板。
+    只有 LLM 文本经 `guard_explanation_numeric_consistency` 返回 `None`（一致）时才发布，
+    `numeric_check = PASS`。
 
     `trace_id` 关联本次运行的 `Trace`（R24.5）；`engine` 透传给护栏的审计写入（测试指向临时库）。
     """
@@ -385,6 +390,8 @@ def build_explanation(
     try:
         response = adapter.invoke(request)
     except (LlmDisabledError, BedrockUnavailableError, CassetteMiss) as exc:
+        if getattr(adapter, "configured_mode", getattr(adapter, "mode", None)) == LlmMode.LIVE:
+            raise ExplanationGenerationFailed("LIVE explanation request failed.") from exc
         # 降级：Bedrock 不可用或 REPLAY 缺少录制，发布模板解释（R25.9）。
         return _template_result(
             explanation, reason=f"LLM_UNAVAILABLE:{type(exc).__name__}"
@@ -399,6 +406,8 @@ def build_explanation(
         engine=engine,
     )
     if fallback is not None:
+        if getattr(adapter, "configured_mode", getattr(adapter, "mode", None)) == LlmMode.LIVE:
+            raise ExplanationGenerationFailed("LIVE explanation failed numeric validation.")
         # 数值不一致（R10.7）：护栏已写 EXPLANATION_NUMERIC_MISMATCH 审计并回退。
         return _template_result(explanation, reason=fallback.reason)
 

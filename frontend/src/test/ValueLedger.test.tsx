@@ -57,16 +57,14 @@ const LEDGER: ValueLedgerData = {
     real_run_count: 2,
     project_real_run_cap: 150,
     real_run_remaining: 148,
-    baseline_plan_generation_seconds: 2700,
-    baseline_disruption_response_seconds: 1800,
+    baseline_plan_generation_seconds: null,
+    baseline_disruption_response_seconds: null,
     baseline_on_time_rate: 0.6,
     baseline_total_tardiness_minutes: 210,
-    projected_hero_demo_usd: 0.14,
-    projected_build_total_usd: 30,
+    projected_hero_demo_usd: null,
+    projected_build_total_usd: null,
     labels: {
       manual_steps_eliminated: 'MEASURED',
-      baseline_plan_generation_seconds: 'ESTIMATED',
-      projected_hero_demo_usd: 'PROJECTED',
     },
   },
   manual_steps: [
@@ -75,23 +73,13 @@ const LEDGER: ValueLedgerData = {
   ],
   kpis: [
     {
-      kpi_id: 'K-01',
-      metric_name: 'Plan generation time (seconds)',
-      current_value: '',
-      baseline_value: '2700',
+      kpi_id: 'K-03',
+      metric_name: 'On-time delivery rate',
+      current_value: '0.9',
+      baseline_value: '0.6',
       delta: '',
       target_value: '≤ 60',
-      label: 'ESTIMATED',
-      measured_at: '2026-03-02T08:00:00',
-    },
-    {
-      kpi_id: 'K-17',
-      metric_name: 'Full-demo LLM cost (USD, projected)',
-      current_value: '0.14',
-      baseline_value: '',
-      delta: '',
-      target_value: '≈ 0.14',
-      label: 'PROJECTED',
+      label: 'MEASURED',
       measured_at: '2026-03-02T08:00:00',
     },
   ],
@@ -124,12 +112,12 @@ const EMPTY_LEDGER: ValueLedgerData = {
     real_run_count: 0,
     project_real_run_cap: 150,
     real_run_remaining: 150,
-    baseline_plan_generation_seconds: 2700,
-    baseline_disruption_response_seconds: 1800,
+    baseline_plan_generation_seconds: null,
+    baseline_disruption_response_seconds: null,
     baseline_on_time_rate: null,
     baseline_total_tardiness_minutes: null,
-    projected_hero_demo_usd: 0.14,
-    projected_build_total_usd: 30,
+    projected_hero_demo_usd: null,
+    projected_build_total_usd: null,
     labels: {},
   },
   manual_steps: [],
@@ -174,22 +162,21 @@ describe('ValueLedger 视图', () => {
     expect(await screen.findByText(/No impact-classification decisions yet/)).toBeInTheDocument();
   });
 
-  it('渲染 KPI 表并带 MEASURED/ESTIMATED/PROJECTED 标签（不仅靠颜色，R19.4/R27.9）', async () => {
+  it('KPI 表只显示可计算项，不再显示固定演示预测', async () => {
     vi.mocked(getValueLedger).mockResolvedValue(LEDGER);
     render(<ValueLedger />);
-    await screen.findByRole('heading', { name: /KPIs \(K-01 to K-18\)/ });
+    await screen.findByRole('heading', { name: /KPIs with recorded values/ });
     // KPI 行可见
-    expect(screen.getByRole('rowheader', { name: 'K-01' })).toBeInTheDocument();
-    expect(screen.getByRole('rowheader', { name: 'K-17' })).toBeInTheDocument();
+    expect(screen.getByRole('rowheader', { name: 'K-03' })).toBeInTheDocument();
+    expect(screen.queryByRole('rowheader', { name: 'K-17' })).not.toBeInTheDocument();
     // 标签用文字（不仅颜色）
-    expect(screen.getAllByText(/Estimated \(interview\)/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Projected/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Measured/).length).toBeGreaterThan(0);
   });
 
-  it('展示实测 vs 预测两列与真实运行配额剩余（R25.12/13）', async () => {
+  it('展示记录的用量与真实运行配额剩余', async () => {
     vi.mocked(getValueLedger).mockResolvedValue(LEDGER);
     render(<ValueLedger />);
-    await screen.findByRole('heading', { name: /Cost: measured cumulative vs\. projected/ });
+    await screen.findByRole('heading', { name: /Recorded LLM usage and cost estimate/ });
     expect(screen.getByText('1234')).toBeInTheDocument(); // 累计 token
     // 配额剩余（148）可见
     const quota = screen.getByText(/Real-run quota/);

@@ -357,6 +357,9 @@ class BedrockAdapter:
         http_client: httpx.Client | None = None,
     ) -> None:
         self.mode = mode
+        # Keep the configured mode even if a LIVE failure switches the runtime mode to DISABLED.
+        # Callers use this to avoid presenting offline fallback output as a LIVE model result.
+        self.configured_mode = mode
         self._cassette = cassette
         # 网关 URL 与密钥只在 LIVE 下用到。它们从这里进入，不在别处读 —— 静态扫描
         # 断言 BEDROCK_GATEWAY_URL 只被本文件引用（见 from_settings）。

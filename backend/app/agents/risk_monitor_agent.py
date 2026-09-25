@@ -121,7 +121,8 @@ def build_narrative_request(facts: RiskFindingFacts) -> LlmRequest:
 class RiskNarrativeDriver:
     """单轮 LLM 归因叙述驱动：装配请求 → `BedrockAdapter.invoke` → 解析出 narrative 文本。
 
-    `generate(facts)` 返回叙述字符串，或 `None` 表示本次不可用/不合格（调用方据此回退模板）。
+    `generate(facts)` 返回叙述字符串，或 `None` 表示本次不可用/不合格；调用方根据
+    启动时模型模式决定标记失败还是使用离线模板。
     在 `STUB`/`REPLAY` 下 `invoke` 从 cassette 取回（不触网）；`DISABLED` 抛 `LlmDisabledError`
     ——由本方法捕获并返回 `None`（回退信号），因此调用方无需分别处理禁用与解析失败。
     """
@@ -129,14 +130,20 @@ class RiskNarrativeDriver:
     def __init__(self, adapter: BedrockAdapter) -> None:
         self._adapter = adapter
 
+    @property
+    def live_configured(self) -> bool:
+        from app.llm.adapter import LlmMode
+
+        return getattr(self._adapter, "configured_mode", self._adapter.mode) == LlmMode.LIVE
+
     def generate(self, facts: RiskFindingFacts) -> str | None:
         request = build_narrative_request(facts)
         try:
             response = self._adapter.invoke(request)
         except Exception:  # noqa: BLE001
-            # 回退信号（R14.5「LLM 不可用、回放缺失或输出不合格时，必须回退模板」）：
+            # 失败信号：
             # DISABLED 降级抛 LlmDisabledError、REPLAY 回放缺失抛 CassetteMiss、真实调用连续失败
-            # 抛 BedrockUnavailableError——任一 LLM 侧失败都返回 None，由调用方回退确定性模板。
+            # 抛 BedrockUnavailableError——任一 LLM 侧失败都返回 None，由调用方如实标记。
             # 只读驱动不吞掉自身的编程错误：invoke 之外没有 try 覆盖，解析在下面独立进行。
             return None
         return _parse_narrative(response.content)

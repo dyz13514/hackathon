@@ -33,7 +33,7 @@ from app.agents.ingestion_agent import (
     scripted_mapping_final,
 )
 from app.db.models import Base
-from app.llm.adapter import BedrockAdapter, LlmMode
+from app.llm.adapter import BedrockAdapter, BedrockUnavailableError, LlmMode
 from app.llm.budget import TokenBudgetManager
 from app.llm.cassette import Cassette
 from app.main import create_app
@@ -41,6 +41,7 @@ from app.orchestrator.orchestrator import Orchestrator, RouteNotWiredError
 from app.orchestrator.routing import Intent
 from app.orchestrator.tracing import InMemoryTracer
 from app.services.ingestion_agent_run import (
+    IngestionMappingUnavailable,
     LLM_UNAVAILABLE_OUTCOME,
     MappingToolSession,
     run_ingestion_mapping,
@@ -269,3 +270,37 @@ def test_import_proposal_endpoint_returns_200_when_replay_recording_is_missing(
     assert body["from_agent"] is False
     assert body["agent_outcome"] == LLM_UNAVAILABLE_OUTCOME
     assert body["proposal"]["field_mappings"]
+
+
+def test_live_mapping_failure_is_reported_without_deterministic_proposal(
+    replay_app_client: TestClient,
+) -> None:
+    """LIVE failure must not look like a successful mapping proposal or trigger network."""
+    class FailingLiveAdapter:
+        mode = LlmMode.LIVE
+        configured_mode = LlmMode.LIVE
+
+        def invoke(self, _request):
+            raise BedrockUnavailableError("simulated gateway failure")
+
+    replay_app_client.app.state.llm_adapter = FailingLiveAdapter()
+    csv_bytes = b"material_id,name,quantity_available\nMAT-1,Steel,100\n"
+    uploaded = replay_app_client.post(
+        "/api/imports/upload", files={"file": ("materials.csv", csv_bytes, "text/csv")}
+    )
+    assert uploaded.status_code == 200
+    response = replay_app_client.get(f"/api/imports/{uploaded.json()['upload_id']}/proposal")
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "LLM_GENERATION_FAILED"
+
+
+def test_live_mapping_service_failure_never_falls_back() -> None:
+    class FailingLiveAdapter:
+        mode = LlmMode.LIVE
+        configured_mode = LlmMode.LIVE
+
+        def invoke(self, _request):
+            raise BedrockUnavailableError("simulated gateway failure")
+
+    with pytest.raises(IngestionMappingUnavailable):
+        run_ingestion_mapping(parsed=_parsed(), upload_id="UP-1", adapter=FailingLiveAdapter())

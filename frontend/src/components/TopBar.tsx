@@ -1,11 +1,8 @@
 /**
  * 全局顶栏横幅（任务 11.6，R25.8/R25.9、R25.4）。
  *
- * 两条全局提示，跨所有视图可见（design.md §2.6：降级模式必须**显著**提示）：
- * 1. **降级模式横幅**——`GET /api/health` 的 `mode === 'DETERMINISTIC_ONLY'` 时显示：所有 LLM
- *    路径已旁路，计划生成 / 校验 / 审批 / 重排 / 风险扫描 / What-if / 台账 / 偏好规则照常，
- *    仅 LLM 列映射改用手工列映射（R25.10）。
- * 2. **预算告警**——累计成本达项目上限的 80% 时显示（R25.4）。
+ * 全局提示跨所有视图可见（design.md §2.6）：降级模式明确区分确定性核心与
+ * 暂不可用的模型能力；STUB/REPLAY 标为离线输出；累计成本达项目上限 80% 时告警。
  *
  * 轮询 `GET /api/health`（只读、无认证），初次加载即拉一次，之后每 30s 刷新一次——降级是
  * 运行期状态（手动开关或 Bedrock 连续失败触发），顶栏因此要能在不刷新页面时更新。
@@ -94,9 +91,10 @@ export function TopBar() {
 
   const activeChanges = changes.filter((c) => !c.reverted);
   const degraded = health?.mode === 'DETERMINISTIC_ONLY';
+  const offlineModel = health?.llm_mode === 'STUB' || health?.llm_mode === 'REPLAY';
   const budgetWarning = health !== null && isBudgetWarning(health);
 
-  if (!degraded && !budgetWarning && activeChanges.length === 0 && revertError === null) {
+  if (!degraded && !offlineModel && !budgetWarning && activeChanges.length === 0 && revertError === null) {
     return null;
   }
 
@@ -105,9 +103,15 @@ export function TopBar() {
       {degraded && (
         <div role="alert" className="banner banner-degraded">
           <strong>Degraded mode (DETERMINISTIC_ONLY)</strong>
-          : LLM paths are bypassed. Plan generation, validation, approval, replanning, risk scanning,
-          What-if, value ledger and preference rules all continue as usual; only LLM-based spreadsheet
-          column mapping is unavailable - please use manual column mapping instead.
+          : deterministic planning, validation, approval, risk metrics and structured What-if remain
+          available. LLM-dependent mapping, explanations and natural-language What-if may fail; retry
+          those actions after model access is restored.
+        </div>
+      )}
+      {offlineModel && (
+        <div role="status" className="banner banner-offline-model">
+          <strong>LLM mode: {health?.llm_mode}</strong>
+          : model output is offline test/recording data, not a live API result.
         </div>
       )}
       {budgetWarning && health !== null && (

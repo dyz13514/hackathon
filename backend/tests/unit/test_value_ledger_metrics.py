@@ -94,15 +94,13 @@ def test_build_value_metrics_deterministic(factory: sessionmaker[Session]) -> No
 
 
 def test_labels_measured_estimated_projected(factory: sessionmaker[Session]) -> None:
-    """标签规则：人工基线时间 ESTIMATED、系统指标 MEASURED、K-17/K-18 PROJECTED。"""
+    """只保留有数据来源的指标；固定演示估计不再出现。"""
     with factory() as db:
         m = vl.build_value_metrics(db, now=FIXED_NOW)
-    assert m.labels["baseline_plan_generation_seconds"] == "ESTIMATED"
-    assert m.labels["baseline_disruption_response_seconds"] == "ESTIMATED"
     assert m.labels["manual_steps_eliminated"] == "MEASURED"
     assert m.labels["llm_tokens_used"] == "MEASURED"
-    assert m.labels["projected_hero_demo_usd"] == "PROJECTED"
-    assert m.labels["projected_build_total_usd"] == "PROJECTED"
+    assert m.baseline_plan_generation_seconds is None
+    assert m.projected_hero_demo_usd is None
 
 
 def test_manual_steps_rubric_has_eight_entries_and_counts(factory: sessionmaker[Session]) -> None:
@@ -138,14 +136,11 @@ def test_manual_steps_import_batch_counts_one_regardless_of_rows(
 
 
 def test_kpi_rows_reference_expected_kpis(factory: sessionmaker[Session]) -> None:
-    """KPI 行引用 K-01/K-02/K-03/K-04/K-13/K-11/K-17/K-18，标签正确。"""
+    """KPI 行只含可计算指标，不展示写死的时间/演示成本。"""
     with factory() as db:
         rows = vl.kpi_rows(vl.build_value_metrics(db, now=FIXED_NOW))
     by_id = {r.kpi_id: r for r in rows}
-    assert {"K-01", "K-02", "K-03", "K-04", "K-13", "K-11", "K-17", "K-18"} <= set(by_id)
-    assert by_id["K-01"].label == "ESTIMATED"
-    assert by_id["K-17"].label == "PROJECTED"
-    assert by_id["K-18"].label == "PROJECTED"
+    assert set(by_id) == {"K-03", "K-04", "K-13", "K-11"}
     assert by_id["K-13"].label == "MEASURED"
 
 
@@ -171,7 +166,7 @@ def test_get_value_ledger_keeps_task76_fields_and_adds_blocks(client: TestClient
     assert body["metrics"]["project_real_run_cap"] == 150
     assert body["metrics"]["real_run_remaining"] == 150 - body["metrics"]["real_run_count"]
     assert len(body["manual_steps"]) == 8
-    assert any(k["kpi_id"] == "K-17" and k["label"] == "PROJECTED" for k in body["kpis"])
+    assert not any(k["kpi_id"] in {"K-01", "K-02", "K-17", "K-18"} for k in body["kpis"])
 
 
 def test_export_csv_header_columns_and_parseable(client: TestClient) -> None:
@@ -192,9 +187,9 @@ def test_export_csv_header_columns_and_parseable(client: TestClient) -> None:
         "measured_at",
     ]
     data_rows = list(reader)
-    assert len(data_rows) >= 8  # 至少 8 行 KPI
+    assert len(data_rows) == 4
     kpi_ids = {row[0] for row in data_rows}
-    assert {"K-01", "K-17", "K-18"} <= kpi_ids
+    assert kpi_ids == {"K-03", "K-04", "K-11", "K-13"}
 
 
 def test_export_csv_is_deterministic(client: TestClient) -> None:

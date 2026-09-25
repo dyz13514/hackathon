@@ -123,15 +123,12 @@ function waitForLogin(): Promise<void> {
   return pendingLogin;
 }
 
-export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+/** 原始响应入口：multipart 等非 JSON 请求也复用相同的会话续期和错误解析。 */
+export async function apiFetchResponse(path: string, init: RequestInit = {}): Promise<Response> {
   const doFetch = () =>
     fetch(`${API_BASE}${path}`, {
       ...init,
       credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(init.headers ?? {}),
-      },
     });
 
   let response = await doFetch();
@@ -145,6 +142,18 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   if (!response.ok) {
     throw await parseApiError(response);
   }
+
+  return response;
+}
+
+export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const response = await apiFetchResponse(path, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(init.headers ?? {}),
+    },
+  });
 
   if (response.status === 204) {
     return undefined as T;

@@ -1,161 +1,87 @@
 # AI Production Planning Agent
 
-面向中小制造车间的排产助手：**确定性内核做决策，LLM 只做解释、映射与叙述，人做审批**。
+面向中小制造车间的排产演示系统。它把订单、物料、机器和人员放进同一份生产快照，生成可解释的排产提案；计划必须经人工审批才能成为 `ACTIVE`。遇到停机、缺料或加急需求，可以先在沙箱里推演影响，再决定是否提交新提案。
 
-规格文档在 `.kiro/specs/production-planning-agent/`（`requirements.md` 28 条需求、
-`design.md` 架构、`tasks.md` 实施计划）。本 README 是入口，不重复设计细节。
+**第一次了解项目：**先看下面的[功能地图](#功能地图)，再按 [DEMO.md](DEMO.md) 实际走一遍。需求、架构和实施任务的完整依据分别在 [requirements.md](.kiro/specs/production-planning-agent/requirements.md)、[design.md](.kiro/specs/production-planning-agent/design.md)、[tasks.md](.kiro/specs/production-planning-agent/tasks.md)。
 
----
+## 快速启动
 
-## 架构
+需要 Python 3.11+ 和 Node.js 18+。Windows 直接双击项目根目录的 `start.cmd`，或在 PowerShell 中运行：
 
-四层，边界可测（`design.md` Architecture §1）：
-
-```
-浏览器 (React + TS)
-   │  HTTPS，全部路径前缀 /api
-FastAPI 应用层        REST + Pydantic 边界校验 + Session_Auth
-   │
-编排层（确定性）      Orchestrator / Context_Manager / Tool_Registry
-   │                  Guardrail_Layer / Token_Budget_Manager
-   ├── Agent 层       Ingestion / Planning / Risk_Monitor（只经 Tool_Registry 触达能力）
-   │      └── Bedrock_Adapter（全仓唯一 LLM 出口）
-确定性内核（纯 Python，无 I/O）
-   │                  Scheduling_Core / Constraint_Validator / Objective_Scorer
-   │                  Baseline_Scheduler / Replanner / Autonomy_Policy_Engine ...
-持久层                SQLite（WAL）via SQLAlchemy，schema 保持 PostgreSQL 兼容
+```powershell
+.\start.ps1
 ```
 
-三条分层规则由 `backend/tests/structure/test_layering.py` 静态扫描断言（任务 1.8）：
+首次运行会创建虚拟环境、安装依赖、迁移数据库和填充演示数据。启动器确认前后端就绪后才打开 <http://localhost:5173>；后端 API 文档在 <http://127.0.0.1:8000/api/docs>。后端与前端各占一个窗口，关闭窗口即可停止相应服务。若 `8000` 或 `5173` 端口被占用，启动器会报错；先关掉旧服务再运行。
 
-1. `app/core/**` 不 import `sqlalchemy` / `fastapi` / `httpx` / `boto3`。
-2. `app/agents/**` 不 import 内核或 `tools/handlers`。
-3. 全仓库仅 `app/llm/adapter.py` 出现 Bedrock 网关 URL。
-
-两种执行形态（ADR-002）：**形态 A** 确定性流水线用于计划生成（零 LLM 编排 + 末端
-1 次解释调用）；**形态 B** ReAct 循环只用于路线可变的路径（P0 接线重排与列映射两条）。
-
-目录树见 `design.md`「项目结构」。当前仓库状态：骨架与工具链已就位（任务 1.1），
-各包的 `__init__.py` 标注了后续由哪个任务填充。
-
----
-
-## 启动
-
-前置：Python ≥ 3.11、Node ≥ 18、GNU Make。
+macOS、Linux 或 WSL 可在项目根目录运行：
 
 ```bash
-cp .env.example .env      # 填 SESSION_SHARED_PASSWORD 与 SESSION_SECRET_KEY
+cp .env.example .env   # 首次使用；先设置 SESSION_SHARED_PASSWORD 和 SESSION_SECRET_KEY
 make dev
 ```
 
-`make dev` 依次做四件事（`design.md`「运维要点」R27.7）：建虚拟环境并安装依赖 →
-`alembic upgrade head` → `python -m app.seed --demo` → 并行启动 uvicorn（`:8000`）
-与 Vite（`:5173`）。前端经 Vite 代理把 `/api` 转发到后端，因此浏览器始终同源。
+配置入口是根目录的 `.env`。浏览器首次执行写操作时会弹出登录框，输入 `SESSION_SHARED_PASSWORD`。排产、审批、结构化 What-if 等核心流程不依赖模型；模型能力的真实演示需 `LLM_MODE=LIVE`，会调用配置的外部网关并产生用量。`STUB`/`REPLAY` 仅供离线测试或回放，页面会标明非 LIVE；LIVE 失败不会再以演示文本冒充成功。
 
-配置只有一个入口：`backend/app/settings.py`。**必需环境变量缺失即拒绝启动**
-（R23.11）——`DATABASE_URL`、`SESSION_SHARED_PASSWORD`、`SESSION_SECRET_KEY` 三个，
-另外 `LLM_MODE=LIVE` 时追加要求 `BEDROCK_GATEWAY_URL` 与 `BEDROCK_API_KEY`。
-`.env` 在 `.gitignore` 中，凭证不入版本控制。
+排产按钮是确定性计算，不调用外部模型；若已有同一天的 `PENDING_APPROVAL` 计划，页面会显示该计划并引导到 Approval 审批或拒绝，不会重复创建。当前 LLM 接口走 `BEDROCK_GATEWAY_URL` 指定的 HTTP 网关（`BEDROCK_API_KEY` 为 Bearer 密钥），不是仅凭 AWS 账号就自动接入。需将 `.env` 设为 `LLM_MODE=LIVE` 并填好与网关匹配的地址、密钥和 `LLM_API_STYLE`，再重启后端；这只证明已配置，真实连通性还需单独验证。
 
-`LLM_MODE` 默认 `REPLAY`：构建期与 CI 回放录制的响应，不消耗 Bedrock 额度。
-取值 `LIVE`（真实调用）/ `REPLAY`（回放）/ `STUB`（固定模板）/ `DISABLED`
-（`DETERMINISTIC_ONLY` 降级）。
+> 演示数据的“今天”固定为 **2026-03-02 08:00**，排产时域为三天。这是为了重放结果稳定；录屏时不要把界面中的“today/tomorrow”理解成电脑的当前日期。完整录屏准备见 [DEMO.md](DEMO.md#录制前准备)。
 
-### Windows 上的等价命令
+## 功能地图
 
-`Makefile` 面向 POSIX shell。Windows 建议在 WSL 中运行；若要在 PowerShell 下直接跑：
+| 页面 / 入口 | 做什么 | 演示时看什么 |
+| --- | --- | --- |
+| Dashboard `/` | 汇总订单、物料、机器、工人和计划 | `CNC-01` 瓶颈、`MAT-STEEL-01` 缺口、订单备注的 `untrusted` 标记 |
+| Schedule `/schedule` | 生成确定性排产提案 | 甘特图、不可排产原因与解锁建议、和先来先服务（FCFS）基线的对比 |
+| Approval `/approval` | 审批、拒绝或修改提案 | 目标分项、输入版本、人工审批闸门；陈旧提案会被拒绝 |
+| What-if `/whatif` | 五类结构化场景的只读推演；可选自然语言翻译 | 推演与当前 `ACTIVE` 的差值；“生成正式提案”后仍须审批 |
+| Import & Mapping `/import` | 上传 CSV/XLSX、查看列映射、确认和整批回滚 | 原始列到目标字段的对应、归一化预览、批次来源 |
+| Risks `/risks` | 风险雷达及重新扫描 | 严重度、受影响对象、模板或模型叙述来源 |
+| Preferences `/preferences` | 人工创建、启用和查看软偏好；可选模型蒸馏候选 | 偏好有惩罚分，但不能突破硬约束；候选需人工启用 |
+| Quote `/quote` | 新询单的可承诺交期推演 | 最早可行完成时间、对既有订单的影响；不写入正式计划 |
+| Insights `/insights` | 瓶颈机器、产能和技能缺口 | `CNC-01` 的利用率及无替代能力；需要先有 `ACTIVE` 计划 |
+| Value Ledger `/value` | KPI、节省步骤、执行分级和成本口径 | 当前值与基线值、实测与预测的区别；可导出 CSV |
+| Trace Viewer `/traces` | 查看运行步骤、工具调用、模式和审计关联 | 为什么做出某个决策、是否用了模型、失败/降级是否留痕 |
 
-```powershell
-python -m venv backend\.venv
-backend\.venv\Scripts\pip install -e "./backend[dev]"
-cd backend
-.venv\Scripts\alembic upgrade head
-.venv\Scripts\python -m app.seed --demo
-.venv\Scripts\uvicorn app.main:create_app --factory --reload --workers 1 --port 8000
-# 另开一个终端
-cd frontend
-npm install
-npm run dev
-```
+另有计划对比视图 `/plans/{a}/compare/{b}`。当前前端没有直达按钮，需要拿两个真实计划 ID 填入网址。**扰动登记与重排、计划解释、计划导出、演示重置**已经有 API，但没有对应的完整前端操作入口；可在 API 文档或脚本中展示。不要把 API 能力讲成现有页面按钮。
 
-从 `backend/` 目录启动时，`app/settings.py` 会依次尝试 `../.env`（仓库根）与
-`backend/.env`，因此把 `.env` 放在仓库根即可。
+### 一条最短的产品路径
 
-`uvicorn` 固定 `--workers 1`：SQLite 写并发受限，且计划审批的乐观并发控制
-（R12.7）在单进程下更容易正确。
+1. Dashboard 看资源与订单现状。
+2. Schedule 生成 `PENDING_APPROVAL` 提案，读甘特图、基线和不可排产原因。
+3. Approval 审批成为 `ACTIVE`。系统允许 `PARTIAL` 计划，但会把未排产作业和原因摆出来；审批前仍会重新校验硬约束和输入版本。
+4. What-if 模拟停机或缺料：先看影响，不修改生产数据；确有需要再生成新提案并审批。
+5. Risks、Insights、Value Ledger、Traces 解释风险、瓶颈、业务价值及决策过程。
 
-### 登录（Session_Auth）
+## 演示数据与 CSV 样例
 
-**全部写端点都要认证**（R23.12）：`POST` / `PUT` / `PATCH` / `DELETE` 一律经服务端校验
-会话令牌，唯一豁免是登录与登出本身。读端点与 `GET /health` 公开。
+固定 seed 含 6 种产品、14 个订单、10 种物料、5 台机器、8 名工人。`CNC-01` 是唯一能深孔钻削的机器；`MAT-STEEL-01` 有预设缺口；`ORD-004` 的交期裕度不足。这些不是随机数据，目的是让瓶颈、不可排产和扰动影响可重复出现。
 
-```bash
-# 共享口令换 HttpOnly Cookie（口令即 .env 里的 SESSION_SHARED_PASSWORD）
-curl -c cookies.txt -X POST localhost:8000/api/auth/login \
-  -H 'Content-Type: application/json' -d '{"password":"change-me-before-demo"}'
+可上传的样例在 [`backend/app/seed/samples/`](backend/app/seed/samples/README.md)：
 
-curl -b cookies.txt -X POST localhost:8000/api/plans/generate   # 带 Cookie 才能写
-curl -b cookies.txt -X POST localhost:8000/api/auth/logout
-```
+| 样例 | 展示点 | 使用方式 |
+| --- | --- | --- |
+| `demo_material_shortage.csv` | 钢材和焊丝库存下降 | 导入后观察 Dashboard / Risks / 新计划；建议独立重置后演示 |
+| `demo_material_restock.csv` | 钢材补货到 520 kg | 导入前后比较新计划的不可排产项；可演示整批回滚 |
+| `demo_material_chinese_columns.csv` | 中文表头与额外 ERP 备注列 | 将原 CSV 与映射表并排看，展示备注列未成为目标字段，再看来源与回滚 |
+| `demo_new_workers.csv` | 工人记录的导入和回滚 | 仅演示数据管理；新工人没有技能与班次，不能宣称它提升产能 |
+| `dirty_orders.csv` | 混合日期、空表头、不可解析数量 | 只演示映射和问题暴露；不要点“确认导入” |
+| `malicious_orders.csv` | 不可信单元格与注入防护 | 用于对抗评估；录屏时可展示防护思路 |
 
-未认证的写请求返回 `401` + `{"error": {"code": "UNAUTHENTICATED", ...}}`。令牌有效期
-12 小时，**改 `SESSION_SHARED_PASSWORD` 或 `SESSION_SECRET_KEY` 会立即让全部既有令牌
-失效**（签名密钥绑定口令指纹），这就是「口令泄漏了怎么办」的答案。浏览器里的 Cookie
-标 `Secure` 的条件是 `CORS_ALLOW_ORIGINS` 全为 https。
+**导入范围要讲准确：**当前批次落库实现 `MATERIAL` 和 `WORKER`；订单、产品、机器表可以做解析和映射提议，但尚无真实业务行落库。页面现在展示整表 Validation 结果；只有存在未解析单元格时才显示人工确认框，它不等于自动修复。对于脏订单样例，不应勾选后强行提交。样例中的物料 ID 均已存在于 seed，因此导入是更新现有库存；当前物料落库路径保留旧单位，不把 CSV 的 `unit` 列当作新增单位写入。
 
----
+## 设计思路和可证明的创新点
 
-## 测试与评估套件
+1. **决策可复现。**排产、硬约束、评分、FCFS 基线、沙箱和自主等级由确定性 Python 内核计算。相同快照与参数产生相同结果；业务指标与正式计划不以 LLM 的自由文本为权威。
+2. **建议与执行分开。**模型可用于列映射、自然语言 What-if 翻译、解释、风险叙述和受限的重排编排；其输出经过结构化校验。场景先模拟，计划先待审，只有审批路径能激活正式计划。
+3. **把“不行”解释清楚。**部分可行计划列出每项阻塞与解锁建议；方案与 FCFS 用同一口径比较；What-if 给出迟交与延期的变化量。
+4. **安全边界能看到。**上传内容和订单备注被当作不可信数据，工具调用受白名单与预算限制；Trace 与审计记录保留决策路径。降级模式仍可运行确定性核心。
+5. **价值可核对。**Value Ledger 区分实测累计与预测成本，记录人工步骤、决策分级和同口径基线，避免只给一段“AI 帮你优化”的叙述。
 
-```bash
-make test        # 后端 pytest（不含 eval）+ 前端 vitest，LLM_MODE=STUB
-make eval        # 评估套件，LLM_MODE=REPLAY，零 Bedrock 消耗
-make eval-live   # 评估套件，LLM_MODE=LIVE，消耗真实额度（需二次确认）
-make lint        # ruff + mypy + 前端 typecheck
-```
+四层实现是 React/Vite 前端 → FastAPI 与会话认证 → 编排与 Agent / 工具闸门 → 纯 Python 排产内核及 SQLite 持久层。详细接口、状态机、数据结构与约束见 [design.md](.kiro/specs/production-planning-agent/design.md)。
 
-`backend/tests/` 的分工：
+## 验证与部署
 
-| 目录 | 内容 |
-|------|------|
-| `properties/` | 7 条属性测试，一文件一属性（编号 1、2、4、10、15、21、37），全部非可选 |
-| `unit/` | 单元测试；`Scheduling_Core` / `Constraint_Validator` / `Objective_Scorer` / `Autonomy_Policy_Engine` 四模块要求 100% 分支覆盖（R27.10） |
-| `contracts/` | 工具输入输出契约与白名单矩阵 |
-| `structure/` | 分层与「日志中无凭证」的静态断言 |
-| `smoke/` | 装配、演示重置、性能与可访问性冒烟 |
-| `eval/` | 29 条 EVAL 用例：EVAL-001–015（黄金）与 EVAL-201–214（对抗），全部非可选 |
-| `cassettes/` | 录制的 LLM 响应，供 `REPLAY` 模式回放 |
+POSIX/WSL：`make test` 跑后端基础测试与前端 Vitest，`make eval` 用 REPLAY 跑固定评估套件，`make lint` 跑 Ruff、mypy 和前端类型检查。Windows PowerShell 可分别在 `backend` 中运行 `.venv\Scripts\python -m pytest tests --ignore=tests/eval`，在 `frontend` 中运行 `npm.cmd run test`。评估和真实调用的成本边界见 [SETUP.md](SETUP.md) 与 [测试说明](backend/tests/eval/README.md)。
 
-成本纪律：真实端到端运行有硬上限 `PROJECT_REAL_RUN_CAP = 150`（按 `traces` 表中
-`mode != REPLAY` 的行数在启动时计数强制），项目累计上限 USD 35。因此**默认一切走
-`REPLAY`**，`make eval-live` 需要显式确认。
-
----
-
-## 部署
-
-单 AWS Lightsail 实例（1 GB）：Caddy 负责 TLS、静态文件与反向代理，uvicorn 单
-worker 跑 FastAPI，SQLite 文件开 WAL。仅使用两类 AWS 能力：Lightsail 与 Bedrock
-Claude Sonnet 4.5 的 JSON API（R27.2）。
-
-```bash
-make deploy      # 在目标实例上调用 deploy/deploy.sh（幂等：建环境→迁移→seed→构建前端→装 unit/Caddy→重启→探活）
-```
-
-部署产物在 `deploy/`（见 `deploy/README.md`）：`Caddyfile`（TLS + 静态文件 +
-`/api/*` 反向代理）、`planning-agent.service`（systemd，`uvicorn --workers 1`，凭证经
-`EnvironmentFile` 注入、`ProtectSystem=strict` 最小权限）、`backup.sh`（SQLite 每小时
-`VACUUM INTO backups/`，保留最近 24 份）、`deploy.sh`（`make deploy` 入口）。
-
-一次性准备（实例上手工/IaC，不由 `deploy.sh` 做——它只部署代码、不创建云资源）：开通
-Lightsail 实例并放行 80/443、装 `python3.12`/`nodejs`/`caddy`/`sqlite3`、建 `planning-agent`
-用户与 `/srv/planning-agent` 目录、写 `/etc/planning-agent.env`（权限 600，含
-`DATABASE_URL`/`SESSION_*`/可选 `BEDROCK_*`）、把 `Caddyfile` 的 `example.com` 换成真实
-域名。逐项清单见 `deploy/README.md`。仅使用两类 AWS 能力：Lightsail 与 Bedrock（R27.2）。
-
-**数据库最小权限的 SQLite 差异**（R23.9）：SQLite 无账户概念，因此以「应用只持有
-一个数据库文件句柄 + 文件权限 600 + 不开放任何 SQL 执行端点」落实等价约束。迁移到
-PostgreSQL 时改为表级 `GRANT`；schema 本身已保持 PostgreSQL 兼容（不用 SQLite 专有
-类型，JSON 列用 `JSON`，时间列统一 `DateTime`，主键为可读字符串 ID），迁移是配置
-变更而非重写。
+部署目标是单台 AWS Lightsail、Caddy、单 worker Uvicorn 与 SQLite WAL；脚本和前置条件见 [deploy/README.md](deploy/README.md)。本仓库的开发启动器用于本地演示，不是生产部署入口。

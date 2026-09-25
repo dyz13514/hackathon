@@ -39,12 +39,12 @@ export interface ValueMetrics {
   readonly real_run_count: number;
   readonly project_real_run_cap: number;
   readonly real_run_remaining: number;
-  readonly baseline_plan_generation_seconds: number;
-  readonly baseline_disruption_response_seconds: number;
+  readonly baseline_plan_generation_seconds: number | null;
+  readonly baseline_disruption_response_seconds: number | null;
   readonly baseline_on_time_rate: number | null;
   readonly baseline_total_tardiness_minutes: number | null;
-  readonly projected_hero_demo_usd: number;
-  readonly projected_build_total_usd: number;
+  readonly projected_hero_demo_usd: number | null;
+  readonly projected_build_total_usd: number | null;
   /** 逐字段 MEASURED/ESTIMATED/PROJECTED 标签。 */
   readonly labels: Readonly<Record<string, MetricLabel>>;
 }

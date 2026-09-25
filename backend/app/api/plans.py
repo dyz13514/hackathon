@@ -483,7 +483,7 @@ def get_plan(request: Request, plan_id: str) -> PlanDetailOut | JSONResponse:
 @router.get(
     "/{plan_id}/explanation",
     response_model=ExplanationOut,
-    summary="计划的结构化解释 + 叙述 + numeric_check（R10，单次 LLM 调用 / 模板回退）",
+    summary="计划的结构化解释与叙述；LIVE 失败显式报错",
 )
 def get_plan_explanation(
     request: Request, plan_id: str
@@ -493,8 +493,8 @@ def get_plan_explanation(
     读端点，但它触发那**唯一一次**解释 LLM 调用（design.md §2.1）：从持久化的计划重建
     紧凑载荷（按机器聚合、7 分量、基线、不可排产摘要、假设、关键作业——**不含原始实体
     清单**，R21.12），经 `Guardrail_Layer` 发起 1 次 `Bedrock_Adapter.invoke`，数值比对通过
-    则发布 LLM 文本、否则回退模板解释（R10.7）。降级模式（`DETERMINISTIC_ONLY`）下同样返回
-    模板解释（R25.9）。
+    则发布 LLM 文本；LIVE 调用失败或数值校验未通过时返回 503，不发布模板。离线模式仍保留
+    明确标记的确定性模板供测试使用。
 
     同一份计划的载荷字节稳定，因此第二次请求命中内容哈希缓存、零 token（R25.7）——解释因此
     对同一计划是稳定的。计划不存在返回 `PLAN_NOT_FOUND`。
@@ -512,12 +512,27 @@ def get_plan_explanation(
             )
         inputs = _explanation_inputs_from_db(db, plan)
 
-    result = build_explanation(
-        inputs.explanation,
-        inputs.payload,
-        adapter,
-        trace_id=plan.generated_by_trace_id,
-    )
+    from app.services.explanation import ExplanationGenerationFailed
+
+    try:
+        result = build_explanation(
+            inputs.explanation,
+            inputs.payload,
+            adapter,
+            trace_id=plan.generated_by_trace_id,
+        )
+    except ExplanationGenerationFailed:
+        return error_response(
+            status_code=503,
+            code=ErrorCode.LLM_GENERATION_FAILED,
+            message=(
+                "LIVE plan explanation failed or did not pass numeric validation; "
+                "no template was substituted."
+            ),
+            next_actions=[
+                NextAction(action="retry_explanation", href=f"/plans/{plan_id}/explanation")
+            ],
+        )
     return _explanation_out(result)
 
 

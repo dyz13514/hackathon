@@ -154,14 +154,7 @@ def autonomy_decisions(session: Session, *, limit: int = 50) -> list[AutonomyDec
 #: 同值；此处再定义一份常量避免服务层 import API 层（分层规则），值必须一致。
 PROJECT_REAL_RUN_CAP = 150
 
-#: 人工基线时间（分钟），标注为 `ESTIMATED`（来源：访谈估计，R19.6、K-01/K-02）。
-#: 取各自区间的下界作为保守估计，避免夸大系统收益。
-_BASELINE_PLAN_GENERATION_SECONDS = 45 * 60  # K-01：45–90 min，取 45 min
-_BASELINE_DISRUPTION_RESPONSE_SECONDS = 30 * 60  # K-02：30–60 min，取 30 min
-
-#: K-17 / K-18 的**预测值**（PROJECTED，非实测，R25.13）。常量取自 requirements 第 4 节。
-_PROJECTED_HERO_DEMO_USD = Decimal("0.14")  # K-17
-_PROJECTED_BUILD_TOTAL_USD = Decimal("30")  # K-18（≈USD21 LLM + USD5–10 Lightsail）
+# 固定的人工耗时与演示成本预测已移除：无可核实记录时返回 None，不造数。
 
 #: `manual_steps_eliminated` 的口径表（design.md §4.4，R19.5）。UI 原样展示这张表。
 #: 每一项是 (动作标识, 中文说明, 计 1 步的条件)；计数在 `manual_steps_breakdown` 里逐项算。
@@ -194,7 +187,7 @@ class ValueMetrics:
 
     `labels` 与各字段平行：每个指标带 `MEASURED` / `ESTIMATED` / `PROJECTED` 标签
     （R19.4、R19.6、R25.13）。人工基线时间标 `ESTIMATED`；系统实测指标标 `MEASURED`；
-    K-17 / K-18 标 `PROJECTED`。
+    无可核实记录的预测项为 None，不作为 KPI 发布。
     """
 
     plan_id: str | None
@@ -212,13 +205,13 @@ class ValueMetrics:
     estimated_usd_cost: Decimal
     real_run_count: int
     # 基线（ESTIMATED 人工时间 / FCFS 同口径值）
-    baseline_plan_generation_seconds: float
-    baseline_disruption_response_seconds: float
+    baseline_plan_generation_seconds: float | None
+    baseline_disruption_response_seconds: float | None
     baseline_on_time_rate: float | None
     baseline_total_tardiness_minutes: int | None
     # 预测（PROJECTED，R25.13）
-    projected_hero_demo_usd: Decimal
-    projected_build_total_usd: Decimal
+    projected_hero_demo_usd: Decimal | None
+    projected_build_total_usd: Decimal | None
     labels: dict[str, Label] = field(default_factory=dict)
 
 
@@ -332,12 +325,8 @@ def build_value_metrics(session: Session, *, now: datetime | None = None) -> Val
         "llm_tokens_used": "MEASURED",
         "estimated_usd_cost": "MEASURED",
         "real_run_count": "MEASURED",
-        "baseline_plan_generation_seconds": "ESTIMATED",
-        "baseline_disruption_response_seconds": "ESTIMATED",
         "baseline_on_time_rate": "MEASURED",  # FCFS 同口径计算值（R19.3）
         "baseline_total_tardiness_minutes": "MEASURED",
-        "projected_hero_demo_usd": "PROJECTED",
-        "projected_build_total_usd": "PROJECTED",
     }
 
     return ValueMetrics(
@@ -354,12 +343,12 @@ def build_value_metrics(session: Session, *, now: datetime | None = None) -> Val
         llm_tokens_used=tokens,
         estimated_usd_cost=usd,
         real_run_count=real_runs,
-        baseline_plan_generation_seconds=float(_BASELINE_PLAN_GENERATION_SECONDS),
-        baseline_disruption_response_seconds=float(_BASELINE_DISRUPTION_RESPONSE_SECONDS),
+        baseline_plan_generation_seconds=None,
+        baseline_disruption_response_seconds=None,
         baseline_on_time_rate=baseline_on_time,
         baseline_total_tardiness_minutes=baseline_tardiness,
-        projected_hero_demo_usd=_PROJECTED_HERO_DEMO_USD,
-        projected_build_total_usd=_PROJECTED_BUILD_TOTAL_USD,
+        projected_hero_demo_usd=None,
+        projected_build_total_usd=None,
         labels=labels,
     )
 
@@ -393,34 +382,14 @@ def _fmt(value: float | int | Decimal | None) -> str:
 
 
 def kpi_rows(metrics: ValueMetrics) -> list[KpiRow]:
-    """把 `ValueMetrics` 展开成引用 K-01…K-18 的 KPI 行（R19.4）。
+    """把 `ValueMetrics` 展开成有实际来源的 KPI 行（R19.4）。
 
-    只输出有确定性来源的 KPI 行：K-01/K-02（时间，基线 ESTIMATED）、K-03（按期率）、
-    K-04（拖期）、K-13（消除人工步数）、K-11（累计美元）、K-17/K-18（PROJECTED）。
+    只输出有确定性来源的 KPI 行：K-03（按期率）、
+    K-04（拖期）、K-13（消除人工步数）、K-11（累计美元）。
     `measured_at` 全行共用 `metrics.measured_at`（一次聚合的时刻）。
     """
     ts = metrics.measured_at.isoformat()
     rows: list[KpiRow] = [
-        KpiRow(
-            kpi_id="K-01",
-            metric_name="Plan generation time (s)",
-            current_value=_fmt(metrics.plan_generation_seconds),
-            baseline_value=_fmt(metrics.baseline_plan_generation_seconds),
-            delta="",
-            target_value="<= 60",
-            label="ESTIMATED",
-            measured_at=ts,
-        ),
-        KpiRow(
-            kpi_id="K-02",
-            metric_name="Disruption response latency (s)",
-            current_value=_fmt(metrics.disruption_response_seconds),
-            baseline_value=_fmt(metrics.baseline_disruption_response_seconds),
-            delta="",
-            target_value="<= 90",
-            label="ESTIMATED",
-            measured_at=ts,
-        ),
         KpiRow(
             kpi_id="K-03",
             metric_name="On-time delivery rate",
@@ -459,26 +428,6 @@ def kpi_rows(metrics: ValueMetrics) -> list[KpiRow]:
             delta="",
             target_value="<= 40",
             label="MEASURED",
-            measured_at=ts,
-        ),
-        KpiRow(
-            kpi_id="K-17",
-            metric_name="LLM cost for one full demo (USD, projected)",
-            current_value=_fmt(metrics.projected_hero_demo_usd),
-            baseline_value="",
-            delta="",
-            target_value="~ 0.14",
-            label="PROJECTED",
-            measured_at=ts,
-        ),
-        KpiRow(
-            kpi_id="K-18",
-            metric_name="Total build + rehearsal spend (USD, projected)",
-            current_value=_fmt(metrics.projected_build_total_usd),
-            baseline_value="",
-            delta="",
-            target_value="~ 30 (<= 100)",
-            label="PROJECTED",
             measured_at=ts,
         ),
     ]

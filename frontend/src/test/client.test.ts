@@ -9,6 +9,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiError, LoginCancelledError, apiFetch } from '../api/client';
+import { uploadImport } from '../api/imports';
 
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -147,5 +148,36 @@ describe('ApiError 类型', () => {
     expect(err).toBeInstanceOf(ApiError);
     expect(err.status).toBe(401);
     expect(err.code).toBe('LOGIN_CANCELLED');
+  });
+});
+
+describe('CSV 上传会话续期', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => {
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('过期后弹登录窗、原 multipart 请求重试一次且不强设 JSON 头', async () => {
+    const upload = { upload_id: 'UP-1', file_name: 'materials.csv', total_rows: 1, duplicate_of: null, last_imported_at: null };
+    const fetchMock = vi.fn().mockResolvedValueOnce(unauth()).mockResolvedValueOnce(jsonResponse(200, upload));
+    vi.stubGlobal('fetch', fetchMock);
+    const required = vi.fn();
+    window.addEventListener('login-required', required);
+
+    const pending = uploadImport(new File(['material_id,name\nMAT-1,Steel'], 'materials.csv'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(required).toHaveBeenCalledTimes(1);
+    window.dispatchEvent(new CustomEvent('login-succeeded'));
+    expect(await pending).toEqual(upload);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const [url, init] of fetchMock.mock.calls) {
+      expect(url).toBe('/api/imports/upload');
+      expect(init).toMatchObject({ method: 'POST', credentials: 'include' });
+      expect(init.body).toBeInstanceOf(FormData);
+      expect(init.headers).toBeUndefined();
+    }
+    window.removeEventListener('login-required', required);
   });
 });

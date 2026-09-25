@@ -355,6 +355,6 @@ describe('Preferences 视图', () => {
     render(<Preferences />);
     await screen.findByRole('heading', { name: /Preferences/ });
     fireEvent.click(screen.getByRole('button', { name: /Distil candidate preference rules/ }));
-    expect(await screen.findByText(/degraded mode/)).toBeInTheDocument();
+    expect(await screen.findByText(/Model distillation failed or is unavailable/)).toBeInTheDocument();
   });
 });
