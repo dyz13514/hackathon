@@ -1,119 +1,176 @@
-# AI 生产计划助手｜30 分钟中英双语汇报配音稿
+# AI 生产计划助手｜30 分钟汇报与录屏脚本
 
-对应文件：`hackathon_demo_deck_cn.pptx`。中文为主讲版本，英文用于国际评委场景。整套采用淡入转场；录屏页按右侧提示讲解，操作时避免念大段文字。
+**配套 PPT：** `hackathon_showcase_storyboard_cn.pptx`  
+**主叙事：** 车间发生 `CNC-01` 停机事件后，系统如何把自然语言描述转化为经计算、审批和追踪的计划决策。  
+**录制原则：** 前半段用业务问题引出技术架构；后半段只沿同一事件推进。技术名词只在对应画面出现时解释。
 
-## 01 封面｜1:00
+## 总体节奏
 
-**动画：** 标题、主张、赛事名称依次淡入。
+| 阶段 | 幻灯片 | 建议时长 | 目标 |
+| --- | --- | ---: | --- |
+| 背景、需求与目标 | 01–04 | 6 分钟 | 说明真实问题和产品边界 |
+| 架构与运行逻辑 | 05–08 | 10 分钟 | 讲清数据、上下文、Agent、工具和控制点 |
+| 车间突发事件主线演示 | 09–14 | 11 分钟 | 用一次停机串起系统能力 |
+| 技术回扣、价值和收束 | 15–17 | 3 分钟 | 把演示证据连接到落地价值 |
 
-**中：** 生产现场的变化从来不会等待计划员准备好。订单插单、物料短缺和设备停机，都可能在几分钟内让原计划失效。我们的 AI 生产计划助手不直接替人做决定，而是理解变化、模拟影响，并给出计划员能够核验和批准的行动建议。
+---
 
-**EN:** Change never waits for a planner to be ready. Rush orders, material shortages and machine downtime can invalidate a plan within minutes. Our assistant understands the change, simulates the impact and produces an action a planner can verify and approve.
+## 01｜封面｜0:45
 
-## 02 业务问题｜1:40
+**翻页与动画：** 标题、主张、赛事名称依次淡入。停留两秒后开始。
 
-**动画：** 四个挑战词依次出现，每出现一个配一个真实场景。
+**中：** 今天我们展示的项目是 AI 生产计划助手。它面向制造车间中高频发生的变化：订单变化、缺料、设备故障和交期压力。我们的目标是让计划员能够更快理解影响、运行推演，并基于可验证的证据完成计划决策。
 
-**中：** 生产计划的难点不只是排出一张甘特图。一个订单变化会同时挤压设备产能、物料可用性和交期承诺。计划员需要快速判断，但每次修改又都必须保留可行性、可解释性和责任边界。
+**EN:** Today we present the AI Production Planning Assistant. It supports manufacturing planners facing frequent changes such as order changes, shortages, machine failures and delivery pressure. The system helps planners understand impact, run simulations and make decisions from verifiable evidence.
 
-**EN:** Planning is more than generating a Gantt chart. One order change affects capacity, material availability and delivery commitments at the same time. Planners need speed, but every change must remain feasible, explainable and accountable.
+## 02｜项目背景：一次车间突发事件｜1:45
 
-## 03 项目目标与边界｜1:40
+**画面：** 停机灯和右侧车间图片。指向左侧三张卡片。
 
-**动画：** 先出现“理解、模拟、建议”，再出现红线边界。
+**中：** 我们从一个具体事件开始。2026 年 3 月 3 日早上八点，关键设备 CNC-01 停机六小时。计划员要立刻回答三个问题：哪些订单受到影响，是否存在可行的调整方案，正式计划应当由谁、依据什么来修改。这三类问题同时涉及事实、计算和决策权限。
 
-**中：** 我们把产品定位为计划协作助手。它可以理解需求、运行模拟、提出建议；它不能编造业务事实，不能绕开生产约束，也不能跳过人工审批直接激活计划。这样的边界让 AI 能够安全地进入真实运营场景。
+**EN:** We start with a concrete event. At 8 AM on March 3, 2026, the critical machine CNC-01 is unavailable for six hours. The planner must immediately answer three questions: which orders are affected, whether a feasible adjustment exists, and who may change the formal plan based on what evidence.
 
-**EN:** We designed a planning copilot. It can understand requests, run simulations and propose actions. It cannot invent facts, bypass production constraints or activate a plan without approval. These boundaries make AI safe for real operations.
+## 03｜项目需求｜1:45
 
-## 04 从输入到决策的分层架构｜2:30
+**动画：** 四张卡片按从左至右顺序出现。
 
-**动画：** 背景架构图先出现，再按从左到右顺序讲解，讲到审批治理时停顿。
+**中：** 这次停机让项目需求变得非常明确。系统需要看清订单、物料、机器和工人的当前状态；需要在硬约束下计算可行方案；需要把推演与正式计划隔离；还需要记录完整的决策证据。速度很重要，每一步的解释、验证和审计同样重要。
 
-**中：** 这不是技术清单，而是一条受控的决策链。界面收集意图，API 负责身份和业务边界，编排层管理任务，LLM 从被允许的工具中选择下一步，确定性核心负责计算，最后治理层将提案送入审批。每一层都把模糊输入变得更明确、更安全，才交给下一层。
+**EN:** This incident makes the requirements clear. The system needs a reliable view of orders, materials, machines and workers. It needs to compute feasible options under hard constraints, separate simulations from formal plans, and retain decision evidence. Speed, explanation, validation and auditability all matter.
 
-**EN:** This is not a technology list. It is a controlled decision chain. The UI captures intent. The API enforces boundaries. Orchestration manages the task. The LLM selects a permitted tool. The deterministic core computes the result. Governance sends the proposal to approval.
+## 04｜项目目标：一条受控的处理流程｜1:30
 
-## 05 上下文与智能体交接｜2:30
+**动画：** 五个节点随讲解依次出现。
 
-**动画：** 四类上下文信息逐项出现，最后显示 Context Manager。
+**中：** 因此我们把用户体验设计成一条明确的流程：识别变化，确认结构化场景，运行沙盒推演，生成提案并审批，最后追踪和复盘。计划员始终能看到当前状态和下一步权限。系统在每个节点给出建议和证据，正式激活计划由计划员完成。
 
-**中：** 多个智能体保持上下文，并不是不断把全部聊天记录塞进模型。每次调用前，系统基于业务状态、当前任务、最近验证的工具结果和压缩后的历史摘要，重新组织任务上下文。智能体之间交接的是经过 Schema 校验的结构化状态，而不是含糊的自然语言猜测。
+**EN:** We designed a clear workflow: identify the change, confirm a structured scenario, run a sandbox simulation, generate and approve a proposal, then trace and review the result. The planner can see the current state and authority at every step. The system supplies recommendations and evidence; the planner activates the formal plan.
 
-**EN:** Agents do not maintain context by repeatedly sending an unlimited chat transcript to the model. Before each call, the system rebuilds context from business state, active task, verified tool results and a compact history summary. Agents hand over schema-validated structured state.
+## 05｜总体架构：数据流与控制流｜3:00
 
-## 06 LLM 的职责与边界｜2:00
+**画面讲法：** 先沿上方青色箭头解释数据流，再沿下方琥珀色箭头解释控制流。
 
-**动画：** 左右两侧分别淡入，最后出现“分工协作”。
+**中：** 这张图说明技术如何服务于业务链路。订单、物料、机器和工人进入 React 界面和 FastAPI 服务。编排层根据 Intent 路由任务，创建 Trace 并管理执行过程。Agent 调用 LLM 理解语言和选择受允许的工具。工具注册表对每次调用执行白名单、输入 Schema、输出 Schema、投影、截断和记账。确定性排产核心完成约束校验、排程、风险和模拟。最后，计划治理层将提案置于待审批状态，由计划员决定是否激活。
 
-**中：** LLM 负责理解自然语言、解释权衡、选择下一项获准工具。排程、约束检查、风险识别和影响计算由确定性核心完成。我们不把概率性的语言输出当作生产事实，而是让模型调用能够复现、能够校验的计算工具。
+**EN:** This diagram shows how the technology serves the business chain. Orders, materials, machines and workers enter the React UI and FastAPI service. The orchestrator routes each intent, creates a trace and manages execution. Agents use the LLM to interpret language and choose permitted tools. The Tool Registry applies the whitelist, input schema, output schema, projection, truncation and accounting to every call. The deterministic core calculates constraints, schedules, risks and simulations. Governance places a proposal into approval for the planner to activate.
 
-**EN:** The LLM interprets language, explains trade-offs and selects the next approved tool. The deterministic core handles scheduling, constraints, risks and impact. We do not treat probabilistic language output as operational truth.
+## 06｜上下文如何保持连续｜2:30
 
-## 07 录屏一：受治理的数据导入｜2:00
+**画面讲法：** 从左侧三类输入，指向 Context Manager，再指向一次 LLM 请求。
 
-**操作：** 播放导入与字段映射录屏。停在映射建议和确认按钮各一秒。
+**中：** 多个模型调用保持连续，依赖的是显式运行状态和工具观察记录。`SessionState` 保存当前激活计划、待审批计划、最近扰动、已启用偏好和降级状态。更早的工具结果压缩成一行摘要，最近两条结果保留完整结构化内容。Context Manager 以固定顺序组合运行状态、历史摘要、最近观察和任务块，形成一次模型请求。外部文件等不可信内容会包裹在 `untrusted` 标记中，模型将其当作数据处理。这里可以提到：RAG 通常用于检索文档，本项目的主链路采用运行状态和工具观察来维持上下文。
 
-**中：** 系统先提出字段映射建议，计划员确认后才创建导入批次。这个批次可追溯、可回滚，因此原始表格不会未经确认就影响生产计划。
+**EN:** Continuity across model calls comes from explicit runtime state and tool observations. `SessionState` holds the active plan, pending plan, latest disruption, enabled preferences and degraded mode. Earlier tool results become one-line summaries, while the latest two retain their full structured content. The Context Manager assembles runtime state, history, recent observations and the task block in a fixed order. Untrusted external content is wrapped with an `untrusted` marker and treated as data. RAG is commonly used to retrieve documents; this project’s main path maintains context through runtime state and tool observations.
 
-**EN:** The system proposes a field mapping. The planner confirms it before an import batch is created. The batch is traceable and reversible, so raw data cannot silently change the plan.
+## 07｜三个 Agent 的职责和交接｜2:00
 
-## 08 录屏二：约束下生成计划｜2:30
+**动画：** 三张 Agent 卡片依次出现，最后出现 Handoff Contract。
 
-**操作：** 播放仪表盘与排程录屏，明确指向 CNC-01、物料约束、甘特图和阻塞原因。
+**中：** Agent 的划分来自输入可信度和权限边界。Ingestion Agent 处理外部表格，只能预览、映射、校验和创建导入批次，映射提案先由人确认。Planning Agent 读取业务事实、调用计算工具、形成重排提案。Risk Monitor Agent 读取事实、触发风险扫描、生成风险归因叙述。每个 Agent 的输出由 Pydantic 契约校验，声明字段之外的内容会被拒绝；自由文本在跨边界时标记为不可信。工具权限由 Tool Registry 的不可变白名单在调用入口执行。
 
-**中：** 这里生成的是受真实约束检验的计划。我们可以追问某个订单为何被阻塞、哪个资源是瓶颈，以及需要满足什么条件才能解除阻塞。计划员获得的是依据，而不仅仅是答案。
+**EN:** Agent boundaries follow input trust and authority. The Ingestion Agent previews, maps and validates external files before creating an import batch. The Planning Agent reads business facts, calls computation tools and prepares replanning proposals. The Risk Monitor Agent reads facts, triggers risk scans and writes risk narratives. Pydantic contracts validate each output. Undeclared fields are rejected, while free text is marked untrusted across boundaries. The Tool Registry enforces each agent’s immutable tool whitelist at the invocation point.
 
-**EN:** The system generates a plan checked against real constraints. We can ask why an order is blocked, which resource is the bottleneck and what would unblock it. The planner receives evidence, not only an answer.
+## 08｜LLM API 如何参与决策｜2:15
 
-## 09 录屏三：审批与责任｜1:30
+**画面讲法：** 沿横向闭环讲解，最后停在底部两行职责划分。
 
-**操作：** 播放从 PENDING_APPROVAL 到 APPROVE、MODIFY、REJECT 的状态转移。
+**中：** 每次模型调用都在受限 ReAct 循环中运行。输入进入模型后，模型只能输出一个 JSON 动作，例如调用某个工具及其参数，或返回一个符合契约的最终结果。Tool Registry 通过七道闸门验证调用，然后将确定性工具返回的结构化事实送回上下文。下一轮模型调用基于这些最新事实选择下一步。LLM 负责自然语言翻译、解释、工具选择和受限格式输出；确定性服务负责数值、约束检查和状态变迁。
 
-**中：** 提案和正式计划之间有清晰的状态边界。智能体可以收集证据并准备建议，但计划员必须明确选择批准、修改或拒绝。运营影响发生之前，决策人和决策依据都保持可见。
+**EN:** Each model call runs inside a bounded ReAct loop. The model can only output a JSON action, such as a permitted tool and arguments, or a final result that matches a contract. The Tool Registry validates the call through seven gates. The structured facts from deterministic tools return to context, and the next model turn selects the next step from those facts. The LLM handles language translation, explanation, tool selection and constrained output; deterministic services handle numbers, constraints and state transitions.
 
-**EN:** A proposal and an active plan have a clear state boundary. The agent prepares evidence and recommendations, while the planner explicitly approves, modifies or rejects it.
+## 09｜演示主线预告｜0:45
 
-## 10 录屏四：风险雷达｜1:30
+**中：** 现在进入演示。我们始终围绕同一个事件：CNC-01 明天上午停机六小时。录像将按这五步推进：先建立已审批的基线计划，再输入停机、确认结构化场景、运行沙盒模拟，最后生成提案并审批。每一步都能对应到刚刚介绍的一层技术。
 
-**操作：** 播放风险扫描，展示瓶颈、物料耗尽、零缓冲订单和产能风险。
+**EN:** We now enter the demo. We will keep one event throughout: CNC-01 is unavailable for six hours tomorrow morning. We will establish an approved baseline, enter the outage, confirm the structured scenario, run a sandbox simulation, then create and approve a proposal. Each step maps to a technical layer we have just introduced.
 
-**中：** 风险雷达把隐藏在计划中的脆弱点转为按优先级排列的待处理事项。它不替计划员下结论，而是帮助计划员从影响最大的风险开始调查和行动。
+## 10｜演示步骤 1：建立可信基线｜3:00
 
-**EN:** The risk radar turns hidden plan fragility into prioritized issues. It helps the planner investigate and act on the highest-impact risk first.
+**录屏操作：**
 
-## 11 录屏五：What-if 情景推演｜3:30
+1. 可选前置镜头，45 秒：在 Import & Mapping 上传 `demo_material_chinese_columns.csv`，展示映射建议和 Confirm and import。强调该批次可回滚、带来源。
+2. 打开 Dashboard，扫过订单、物料、机器、工人；停在 `CNC-01`、`MAT-STEEL-01` 和订单备注。
+3. 打开 Schedule，点击 **Generate today’s plan**。
+4. 展示甘特图、`PARTIAL` 或不可排产作业、`blocking_reason`、`unblock_suggestion` 和 FCFS 对比。
+5. 打开 Approval，批准该计划，使状态变为 `ACTIVE`。
 
-**动画与操作：** 输入“CNC-01 明天上午停机 6 小时”，播放翻译、确认、沙盒模拟和方案对比。
+**中：** 我们先得到一个正式的基线。排程内核从同一个生产快照计算计划，将每个作业明确归入已排产或不可排产，并为不可排产作业给出原因和解除条件。通过审批后，这份计划成为 ACTIVE。后续推演会始终与这个基线比较。
 
-**中：** 这是智能体能力最集中的一段。计划员用自然语言描述设备故障，LLM 将其转为结构化场景；信息不足时，系统请求确认；随后确定性核心在沙盒中模拟影响。最终呈现的是带替代方案和影响说明的正式提案，而不是对生产环境的直接修改。
+**EN:** We first establish the formal baseline. The scheduling core calculates from one production snapshot, classifies every job as scheduled or unschedulable, and gives a reason and unblock condition for each unschedulable job. After approval, the plan becomes ACTIVE. Every later simulation compares against this baseline.
 
-**EN:** This is the most agentic part. A planner describes a machine outage in natural language. The LLM translates it into a structured scenario and requests confirmation when needed. The deterministic core simulates the impact in a sandbox. The result is a formal proposal, not an uncontrolled production change.
+## 11｜演示步骤 2：用自然语言描述停机｜2:00
 
-## 12 追踪与审计｜1:30
+**录屏操作：**
 
-**操作：** 可播放 Trace Viewer 45 秒；没有录屏时停留在结论。
+1. 打开 What-if。
+2. 在自然语言入口输入：`CNC-01 明天上午停机 6 小时`。
+3. 在 LIVE 模式下展示翻译结果；将 `machine_id`、开始时间和结束时间逐项与画面确认。
+4. 点击确认。模型不可用时展示系统的降级提示，然后使用结构化表单完成同一场景。
 
-**中：** 每次运行都保留任务、组装后的上下文、工具调用、验证结果、提案和审批结论。这条追踪记录回答“系统为什么这样建议”，也让一次 AI 对话成为可审计的运营记录。
+**中：** 这一步展示 LLM 的具体价值。它把计划员的口语描述转换为结构化场景变更。模型输出只表达候选场景，计划员在执行前确认设备和时间窗口。系统没有在此刻修改生产计划。
 
-**EN:** Every run retains the task, assembled context, tool calls, verified results, proposal and approval outcome. This trace answers why the system made a recommendation.
+**EN:** This step shows the specific value of the LLM. It turns the planner’s natural-language description into a structured scenario change. The model outputs a candidate scenario, and the planner confirms the machine and time window before execution. The formal production plan remains unchanged at this point.
 
-## 13 可信性证据｜2:00
+## 12｜演示步骤 3：在沙盒计算影响｜2:00
 
-**动画：** 六道防线逐项淡入。
+**录屏操作：**
 
-**中：** 可信来自架构。输入验证避免错误数据进入系统；确定性计算保证核心结果可复现；沙盒隔离变化；审批阻止越权；版本和审计记录保证可回看。某一层不确定时，它不会悄悄变成生产决策。
+1. 点击 **Run simulation**。
+2. 展示相对于 ACTIVE 基线的延迟、不可排产或目标差值。
+3. 返回 Dashboard 或计划状态区域，确认原 ACTIVE 计划仍然存在。
 
-**EN:** Trust comes from architecture. Input validation protects data quality. Deterministic computation makes results reproducible. Sandboxes isolate changes. Approval prevents overreach. Versioning and audit preserve accountability.
+**中：** 确认场景后，确定性核心运行 `run_scenario`、评估和计划比较。沙盒把停机窗口临时加入模拟输入，输出可量化影响。画面上最重要的证据是：我们看到了差异，同时正式 ACTIVE 计划保持原样。
 
-## 14 价值与下一步｜2:00
+**EN:** After confirmation, the deterministic core runs `run_scenario`, evaluation and plan comparison. The sandbox adds the outage window only to simulated inputs and returns quantified impact. The key evidence is the visible difference while the formal ACTIVE plan remains unchanged.
 
-**动画：** 先显示当下价值，再出现 ERP／MES 与多工厂路径，最后停留在收束句。
+## 13｜演示步骤 4：从模拟到提案与审批｜2:00
 
-**中：** 即时价值是缩短计划重排时间，同时提升决策的可解释性与可治理性。下一步，系统可以连接 ERP 和 MES，并扩展到跨产线、跨工厂的场景。变化频繁的地方，智能体要足够有用；后果真实的地方，智能体必须值得信任。谢谢。
+**录屏操作：**
 
-**EN:** The immediate value is faster replanning with clearer, more governable decisions. Next, the system can connect with ERP and MES and scale to multi-site planning. Where change is frequent, agents must be useful. Where consequences are real, agents must be trustworthy. Thank you.
+1. 点击 **Generate formal proposal from this scenario**。
+2. 打开 Approval，展示目标分项、输入版本和 `PENDING_APPROVAL` 状态。
+3. 选择 **Approve**、**Modify** 或 **Reject** 中的实际决策；演示批准后新计划成为 ACTIVE。
 
-## 录制节奏
+**中：** 沙盒结果为提案提供证据。保存提案后，状态机进入 PENDING_APPROVAL。审批动作再次核验约束和输入版本，计划员再决定是否让新计划生效。这个控制点把计算结果连接到真实运营决策。
 
-第 1–6 页约 11 分钟；第 7–12 页连同录屏与停顿约 12 分钟；第 13–14 页约 4 分钟；余下 3 分钟留给切换、停顿和问答缓冲。
+**EN:** Sandbox results provide evidence for a proposal. Saving the proposal moves the state machine to PENDING_APPROVAL. Approval validates constraints and input versions again, then the planner decides whether the new plan becomes active. This control point connects computation to an operational decision.
+
+## 14｜演示步骤 5：风险、追踪与复盘｜2:00
+
+**录屏操作：**
+
+1. 打开 Risks，点击 **Rescan**，展示风险严重程度、受影响对象和建议。
+2. 打开 Trace Viewer，找到本次运行的 `trace_id`。
+3. 展示任务、工具调用、关键结果、提案和审批结论。
+4. 可打开 Value Ledger，展示项目记录哪些量化指标；只引用实际页面已经出现的数值。
+
+**中：** 在最后一步，我们将风险和整个运行轨迹放在一起看。同一个 trace_id 可以连接任务、上下文、工具调用、结果、提案和审批结论。这样团队能够复盘系统当时看到了什么、计算了什么，以及谁做出了最终决定。
+
+**EN:** In the final step, we view risk and the complete run together. The same trace ID connects the task, context, tool calls, results, proposal and approval outcome. The team can review what the system observed, what it computed and who made the final decision.
+
+## 15｜从演示回看技术证据｜1:00
+
+**中：** 现在回扣技术链路。基线排程对应确定性 Scheduler 和约束检查；自然语言停机对应 Planning Agent 和 Schema 契约；沙盒推演对应 `run_scenario` 与 `compare_plans`；审批和 Trace 对应状态机、审计和工具记账。编排层在整条路径中统一路由、创建 Trace 并管理 ReAct 回合。
+
+**EN:** We can now map the demo back to the implementation. Baseline scheduling maps to the deterministic Scheduler and constraint checks. The natural-language outage maps to the Planning Agent and schema contract. Sandbox simulation maps to `run_scenario` and `compare_plans`. Approval and trace map to the state machine, audit and tool accounting. The orchestrator routes the full path, creates the trace and manages ReAct turns.
+
+## 16｜落地价值｜1:00
+
+**中：** 落地后，运营团队能更快定位可排和不可排作业，并在正式改动前看见影响。治理团队获得输入来源、版本、审批和调用日志组成的证据链。商业上，这套能力可以接入 ERP 和 MES，进一步扩展到报价承诺、风险治理和跨工厂协同。
+
+**EN:** In deployment, operations teams can identify schedulable and unschedulable work faster and view impact before a formal change. Governance teams receive an evidence chain covering input source, version, approval and tool calls. Commercially, this capability can connect with ERP and MES and extend to quoting, risk governance and multi-site coordination.
+
+## 17｜收束｜0:30
+
+**中：** 这次展示的核心是一条完整的决策链：从变化发生、事实确认、可复现计算，到人工批准和可审计记录。谢谢。
+
+**EN:** The core of this demonstration is a complete decision chain: from a change event, through fact confirmation and reproducible computation, to human approval and an auditable record. Thank you.
+
+## 录制检查清单
+
+- 演示前调用 `POST /api/demo/reset`，获得干净的固定种子数据。
+- 在本地健康检查中确认 `LLM_MODE=LIVE`；若使用降级路径，画面和配音均明确说明。
+- 录屏前记下本次生成的 `plan_id`、`trace_id` 与实际差值；不要在字幕中预写会变化的数值。
+- 出现 `PENDING_PLAN_EXISTS` 时，先到 Approval 处理当前待审批提案，再继续生成下一份计划。
+- 所有价值数字以录制时界面出现的实际数值为准。
