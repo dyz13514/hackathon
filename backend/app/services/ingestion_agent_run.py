@@ -224,6 +224,12 @@ def _agent_final_to_proposed(
     columns = getattr(final, "columns", []) or []
     header_index = {h: i for i, h in enumerate(parsed.header)}
     required = ingestion_svc.REQUIRED_FIELDS.get(entity_type, [])
+    exact_matches = {
+        item["target_field"]: item
+        for item in ingestion_svc.propose_mapping(parsed, entity_type_hint=entity_type)[
+            "field_mappings"
+        ]
+    }
 
     field_mappings: list[dict] = []
     mapped_targets: set[str] = set()
@@ -231,7 +237,14 @@ def _agent_final_to_proposed(
         target = getattr(col, "target_field", None)
         source = getattr(col, "source_column", None)
         confidence = float(getattr(col, "confidence", 0.0))
-        if target is None or source is None:
+        if target is None or target in mapped_targets:
+            continue
+        # A model may miss an exact header alias (e.g. 产品编码 -> product_id).
+        # Recover only such deterministic matches; the human still reviews the proposal.
+        if source not in header_index and target in exact_matches:
+            source = exact_matches[target]["source_column"]
+            confidence = exact_matches[target]["confidence"]
+        if source not in header_index:
             continue
         idx = header_index.get(source)
         samples = (
@@ -252,6 +265,11 @@ def _agent_final_to_proposed(
             }
         )
         mapped_targets.add(target)
+
+    for target, match in exact_matches.items():
+        if target not in mapped_targets:
+            field_mappings.append(match)
+            mapped_targets.add(target)
 
     missing = [
         {"target_field": f, "reason": "not mapped by the agent and required"}

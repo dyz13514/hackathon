@@ -25,7 +25,7 @@ WEB_PORT ?= 5173
 .PHONY: help dev test eval eval-report eval-live coverage-gate deploy venv node-modules env-check lint clean
 
 help:
-	@echo "make dev        建虚拟环境 → 迁移 → seed 演示数据 → 并行启动 uvicorn 与 Vite"
+	@echo "make dev        建虚拟环境 → 迁移 → 并行启动 uvicorn 与 Vite"
 	@echo "make test       后端 pytest（不含 eval）+ 前端 vitest"
 	@echo "make eval        评估套件，LLM_MODE=REPLAY，零 Bedrock 消耗"
 	@echo "make eval-report 评估套件（REPLAY）并生成 eval_report.md（逐用例状态 + 断言明细）"
@@ -53,12 +53,12 @@ env-check:
 	  exit 1; }
 
 # --- 一键启动（R27.7） ---
-# 顺序：迁移 → seed → 并行起两个开发服务器。uvicorn 固定单 worker：
+# 顺序：迁移 → 并行起两个开发服务器。uvicorn 固定单 worker：
 # SQLite 写并发受限，且 R12.7 的乐观并发在单进程下更容易正确。
 
 dev: venv node-modules env-check
 	set -a && source $(ROOT)/.env && set +a && \
-	cd $(BACKEND) && $(ALEMBIC) upgrade head && $(PY) -m app.seed --demo
+	cd $(BACKEND) && $(ALEMBIC) upgrade head
 	@echo "后端 http://127.0.0.1:$(API_PORT)   前端 http://127.0.0.1:$(WEB_PORT)"
 	@trap 'kill 0' EXIT INT TERM; \
 	( set -a && source $(ROOT)/.env && set +a && cd $(BACKEND) && \

@@ -985,11 +985,14 @@ def test_eval_013_dirty_spreadsheet_mapping_accuracy_and_no_silent_guess() -> No
     accuracy = correct / len(auto_accepted)
     assert accuracy >= 0.90, f"自动接受映射正确率 {accuracy:.2%} < 90%（K-06）"
 
-    # ---- K-07（第 1 层）：不对未识别的必填列静默猜测——进 missing 交人工 ----
-    # 标注里 `产品编码` 是 product_id 的 AUTO 列，但别名表未收该写法：确定性映射不猜，而是
-    # 把 product_id 报为缺失（宁可交人工，也不静默填一个）。
+    # ---- K-07（第 1 层）：只接受已明确定义的表头别名，不猜测未知必填列 ----
+    # `产品编码` 现在是明确的 product_id 别名；该映射仍须经人工确认后才能落库。
     missing = {m["target_field"] for m in proposal["missing_required_fields"]}
-    assert "product_id" in missing
+    assert "product_id" not in missing
+    assert any(
+        fm["target_field"] == "product_id" and fm["source_column"].strip() == "产品编码"
+        for fm in proposal["field_mappings"]
+    )
     # 自动接受列里没有任何一列被标注为 NEEDS_CONFIRMATION 之外又被猜成必填的低置信映射：
     # propose_mapping 只在 confidence ≥ 阈值时 AUTO_ACCEPTED，故无「未标注的低置信映射」。
     for fm in proposal["field_mappings"]:

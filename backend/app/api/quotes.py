@@ -21,8 +21,8 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.api.deps import PlannerSession
 from app.api.errors import ErrorCode, NextAction, error_response
 from app.core.sandbox import ScenarioMutationError
-from app.seed.dataset import DEMO_ANCHOR
 from app.services.replanning import NoActivePlanError
+from app.services.runtime_clock import operational_now
 from app.services.sandbox import run_promise_date_sandbox
 
 router = APIRouter(prefix="/quotes", tags=["quotes"])
@@ -74,7 +74,7 @@ def promise_date(
                 product_id=body.product_id,
                 quantity=body.quantity,
                 desired_due_date=body.desired_due_date,
-                now=DEMO_ANCHOR,
+                now=operational_now(request.app.state.settings.app_env),
             )
         except NoActivePlanError:
             return error_response(

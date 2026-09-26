@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import csv
 import io
+from datetime import datetime
 
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
@@ -35,7 +36,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.db import models as orm
-from app.seed.dataset import DEMO_ANCHOR
+from app.services.runtime_clock import operational_now
 from app.services.value_ledger import (
     MANUAL_STEP_RUBRIC,
     PROJECT_REAL_RUN_CAP,
@@ -187,14 +188,14 @@ def get_value_ledger(request: Request) -> ValueLedgerOut:
     """
     factory: sessionmaker[Session] = request.app.state.session_factory
     with factory() as db:
-        return _build_ledger(db)
+        return _build_ledger(db, now=operational_now(request.app.state.settings.app_env))
 
 
-def _build_ledger(db: Session) -> ValueLedgerOut:
+def _build_ledger(db: Session, *, now: datetime) -> ValueLedgerOut:
     """把 Task 7.6 的 K-14 块与任务 11.4 的 ValueMetrics/口径表/KPI 行组装成一个响应。"""
     summary = autonomy_summary(db)
     decisions = autonomy_decisions(db)
-    metrics = build_value_metrics(db, now=DEMO_ANCHOR)
+    metrics = build_value_metrics(db, now=now)
     steps = manual_steps_breakdown(db)
     rows = kpi_rows(metrics)
 
@@ -292,7 +293,9 @@ def export_value_ledger_csv(request: Request) -> StreamingResponse:
     """
     factory: sessionmaker[Session] = request.app.state.session_factory
     with factory() as db:
-        metrics = build_value_metrics(db, now=DEMO_ANCHOR)
+        metrics = build_value_metrics(
+            db, now=operational_now(request.app.state.settings.app_env)
+        )
         rows = kpi_rows(metrics)
 
     buffer = io.StringIO()

@@ -154,6 +154,28 @@ def test_scripted_react_run_executes_tools_and_reaches_final() -> None:
     }
 
 
+def test_fenced_json_gateway_turns_reach_mapping_final() -> None:
+    """A complete JSON code block must work for both tool actions and the final proposal."""
+    action = scripted_action("read_uploaded_file_preview", upload_id="UP-1", max_sample_rows=5)
+    final = scripted_mapping_final(
+        entity_type="MATERIAL",
+        entity_type_confidence=0.9,
+        columns=[
+            {"target_field": "material_id", "source_column": "material_id", "confidence": 0.95}
+        ],
+    )
+    driver = ScriptedIngestionDriver(
+        turns=[f"```json\n{action}\n```", f"```json\n{final}\n```"]
+    )
+    orch, tracer = _orchestrator(driver, _parsed())
+
+    result = orch.run(Intent.INGEST_MAPPING, _Payload(), session_id="S-fenced")
+
+    assert result.outcome == "OK"
+    assert isinstance(result.final, ColumnMappingProposal)
+    assert any(step["detail"] == "read_uploaded_file_preview" for step in tracer.traces[0].steps)
+
+
 # --------------------------------------------------------------------------
 # run_ingestion_mapping：Agent final → proposed_mapping（from_agent=True）
 # --------------------------------------------------------------------------

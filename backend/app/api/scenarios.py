@@ -24,12 +24,14 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
 
 from app.api.deps import PlannerSession
 from app.api.errors import ErrorCode, NextAction, error_response
 from app.core.sandbox import ScenarioMutationError
-from app.seed.dataset import DEMO_ANCHOR
+from app.db import models as orm
 from app.services.replanning import NoActivePlanError
+from app.services.runtime_clock import operational_now
 from app.services.sandbox import (
     ScenarioNotFoundError,
     ScenarioStore,
@@ -179,7 +181,7 @@ def run_scenario_endpoint(
 ) -> ScenarioResultOut | JSONResponse:
     """在沙箱里确定性推演一个场景并与当前 `ACTIVE` 计划对比。写端点。"""
     factory = request.app.state.session_factory
-    now = body.now or DEMO_ANCHOR
+    now = body.now or operational_now(request.app.state.settings.app_env)
     mutations = list(body.mutations)
     store = _store(request)
     with factory() as db:
@@ -227,8 +229,31 @@ def adopt_scenario_endpoint(
     factory = request.app.state.session_factory
     store = _store(request)
     with factory() as db:
+        active = db.scalar(
+            select(orm.ProductionPlan).where(orm.ProductionPlan.status == "ACTIVE")
+        )
+        if active is not None:
+            pending = db.scalar(
+                select(orm.ProductionPlan).where(
+                    orm.ProductionPlan.status == "PENDING_APPROVAL",
+                    orm.ProductionPlan.production_date == active.production_date,
+                )
+            )
+            if pending is not None:
+                return error_response(
+                    status_code=409, code=ErrorCode.PENDING_PLAN_EXISTS,
+                    message=(
+                        f"A pending plan ({pending.plan_id}) already exists for "
+                        f"{active.production_date}. Approve or reject it before adopting this scenario."
+                    ),
+                    next_actions=[NextAction(action="view_pending", href="/plans/pending")],
+                    details={"existing_plan_id": pending.plan_id},
+                )
         try:
-            plan_id = adopt_scenario(db, scenario_id=scenario_id, store=store, now=DEMO_ANCHOR)
+            plan_id = adopt_scenario(
+                db, scenario_id=scenario_id, store=store,
+                now=operational_now(request.app.state.settings.app_env),
+            )
         except ScenarioNotFoundError:
             return error_response(
                 status_code=404,
@@ -267,10 +292,10 @@ def translate_scenario_endpoint(
     )
 
     adapter = request.app.state.llm_adapter
-    # `now=DEMO_ANCHOR`：与下方 `run_scenario(now=body.now or DEMO_ANCHOR)` 同一口径——翻译阶段
-    # 解析「today / tomorrow」用的参考时间，必须与执行该场景时的「现在」是同一个值。
+    # 翻译与执行使用相同环境时钟，避免本地真实数据落回演示月份。
     result = translate_whatif_query(
-        adapter, body.query, now=DEMO_ANCHOR, actor="PLANNER"
+        adapter, body.query,
+        now=operational_now(request.app.state.settings.app_env), actor="PLANNER"
     )
 
     if result.outcome is TranslationOutcome.LLM_UNAVAILABLE:
@@ -279,6 +304,14 @@ def translate_scenario_endpoint(
             code=ErrorCode.LLM_UNAVAILABLE_USE_STRUCTURED_FORM,
             message=result.reason or "Natural-language translation failed; no demo translation was substituted. Please use the structured scenario form instead.",
             next_actions=[NextAction(action="use_structured_form", href="/whatif")],
+        )
+    if result.outcome is TranslationOutcome.NEEDS_CLARIFICATION:
+        return error_response(
+            status_code=422,
+            code=ErrorCode.SCENARIO_CLARIFICATION_REQUIRED,
+            message=result.reason or "Please provide the missing scenario details.",
+            next_actions=[NextAction(action="complete_question", href="/whatif")],
+            details={"missing_fields": list(result.missing_fields)},
         )
     if result.outcome is TranslationOutcome.UNSUPPORTED_SCENARIO:
         return error_response(

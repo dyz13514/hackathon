@@ -16,14 +16,12 @@ Error Handling §2 的统一错误包：
 
 ## `now` 与 `actor`
 
-`now` 取演示锚点 `DEMO_ANCHOR`（与 `plans.py` 生成端点同口径）：审批时的重校验要加载
-「当时」的快照，P0 演示数据以锚点为「今天」。`actor` 取会话主体（`session.subject`）——
+`now` 与计划生成端点同口径：DEMO/TEST 使用固定演示锚点，LOCAL 使用当前时钟。
+审批时的重校验要加载对应时刻的快照。`actor` 取会话主体（`session.subject`）——
 写端点受 `Session_Auth` 保护，主体进审计与决策记录。
 """
 
 from __future__ import annotations
-
-from datetime import datetime
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -32,7 +30,6 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.api.deps import PlannerSession
 from app.api.errors import ErrorCode, NextAction, error_response
-from app.seed.dataset import DEMO_ANCHOR
 from app.services.approval import (
     ApprovalService,
     ApprovalStatus,
@@ -41,12 +38,9 @@ from app.services.approval import (
     RejectStatus,
 )
 from app.services.events import EventBus
+from app.services.runtime_clock import operational_now
 
 router = APIRouter(prefix="/plans", tags=["approvals"])
-
-#: 审批发生的时刻。P0 演示口径与 `plans.py` 一致（见模块 docstring）。
-APPROVAL_NOW: datetime = DEMO_ANCHOR
-
 
 # --------------------------------------------------------------------------
 # 请求契约
@@ -94,7 +88,10 @@ def approve_plan(
     factory: sessionmaker[Session] = request.app.state.session_factory
     events: EventBus = request.app.state.event_bus
     with factory() as db:
-        service = ApprovalService(session=db, now=APPROVAL_NOW, events=events)
+        service = ApprovalService(
+            session=db, now=operational_now(request.app.state.settings.app_env),
+            events=events,
+        )
         result = service.approve(
             plan_id, actor=session.subject.upper(), expected_version=body.expected_version
         )
@@ -147,7 +144,10 @@ def reject_plan(
     factory: sessionmaker[Session] = request.app.state.session_factory
     events: EventBus = request.app.state.event_bus
     with factory() as db:
-        service = ApprovalService(session=db, now=APPROVAL_NOW, events=events)
+        service = ApprovalService(
+            session=db, now=operational_now(request.app.state.settings.app_env),
+            events=events,
+        )
         result = service.reject(
             plan_id, actor=session.subject.upper(), rejection_reason=body.rejection_reason
         )
@@ -183,7 +183,10 @@ def modify_plan(
     factory: sessionmaker[Session] = request.app.state.session_factory
     events: EventBus = request.app.state.event_bus
     with factory() as db:
-        service = ApprovalService(session=db, now=APPROVAL_NOW, events=events)
+        service = ApprovalService(
+            session=db, now=operational_now(request.app.state.settings.app_env),
+            events=events,
+        )
         result = service.modify(
             plan_id, actor=session.subject.upper(), modifications=tuple(body.modifications)
         )

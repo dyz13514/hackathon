@@ -208,6 +208,10 @@ export function Traces() {
         </div>
       </div>
 
+      <p>Traces are read-only records of past runs. Correct an input from Schedule or Import,
+        then generate a new plan; review or reject pending plans in <a href="/approval">Approval</a>.
+      </p>
+
       {listError && (
         <p role="alert" className="traces-error">
           {listError}

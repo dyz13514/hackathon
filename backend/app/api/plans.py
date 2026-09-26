@@ -32,7 +32,7 @@ from typing import Any
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.api.deps import PlannerSession
@@ -48,7 +48,8 @@ from app.orchestrator.pipelines.plan_generation import (
     PlanGenerationResult,
     run_plan_generation,
 )
-from app.seed.dataset import DEMO_ANCHOR
+from app.services.approval import ApprovalService
+from app.services.events import EventBus
 from app.services.explanation import (
     BaselineView,
     ComponentView,
@@ -60,16 +61,10 @@ from app.services.explanation import (
     build_explanation,
 )
 from app.services.exporter import PlanNotFoundError, export_csv, export_xlsx
-from app.services.approval import ApprovalService
-from app.services.events import EventBus
+from app.services.runtime_clock import operational_now
 from app.services.snapshot_loader import resolve_production_date
 
 router = APIRouter(prefix="/plans", tags=["plans"])
-
-#: 生成计划时使用的 `now`。P0 演示数据以 `DEMO_ANCHOR` 为「今天」，因此内核的 `now` 取它，
-#: 使排产结果落在演示数据的时间坐标系里（否则真实墙上时钟会把演示数据全判成「已过期」）。
-#: 任务 5.x 接入真实运行时会由请求或系统时钟提供；此处的 seam 让 P0 演示可跑。
-
 
 # --------------------------------------------------------------------------
 # 请求 / 响应契约
@@ -83,7 +78,7 @@ class GeneratePlanIn(BaseModel):
 
     production_date: date | None = Field(
         default=None,
-        description="目标生产日。缺省取演示锚点当日（P0 演示口径）。",
+        description="目标生产日。缺省取当前运行时日期；DEMO/TEST 使用固定演示锚点。",
     )
 
 
@@ -268,6 +263,7 @@ class ExplanationOut(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     plan_id: str
+    llm_mode: str
     narrative: str
     numeric_check: str
     fallback_reason: str | None
@@ -364,7 +360,45 @@ def generate_plan(
     # 真实计划——这正是「重复生成」曾经绕过守卫、直接进入流水线并撞上清理阶段外键 /
     # `ux_pending_per_day` 的成因。解析规则归 `resolve_production_date`（与 `load_snapshot`
     # 同一处定义），两处口径不会分叉。
-    production_date = resolve_production_date(body.production_date, now=DEMO_ANCHOR)
+    now = operational_now(request.app.state.settings.app_env)
+    production_date = resolve_production_date(body.production_date, now=now)
+
+    if request.app.state.settings.app_env == "LOCAL":
+        counts = {
+            "orders": db.scalar(
+                select(func.count()).select_from(orm.Order).where(
+                    orm.Order.record_status == "ACTIVE"
+                )
+            ),
+            "product routings": db.scalar(
+                select(func.count()).select_from(orm.Operation).join(
+                    orm.Product, orm.Operation.product_id == orm.Product.product_id
+                ).where(orm.Product.record_status == "ACTIVE")
+            ),
+            "machines": db.scalar(
+                select(func.count()).select_from(orm.Machine).where(
+                    orm.Machine.record_status == "ACTIVE"
+                )
+            ),
+            "workers": db.scalar(
+                select(func.count()).select_from(orm.Worker).where(
+                    orm.Worker.record_status == "ACTIVE"
+                )
+            ),
+        }
+        missing = [name for name, count in counts.items() if not count]
+        if missing:
+            db.close()
+            return error_response(
+                status_code=422,
+                code=ErrorCode.SCHEDULING_INPUTS_MISSING,
+                message=(
+                    "Cannot generate a schedule yet. Import real orders, product routings, "
+                    "machines and worker shifts/skills first. Missing: " + ", ".join(missing) + "."
+                ),
+                next_actions=[NextAction(action="import_data", href="/import")],
+                details={"missing": missing},
+            )
 
     # 前置检查：同一 production_date 已存在 PENDING_APPROVAL 计划时通常拒绝重复生成
     # （ux_pending_per_day 部分唯一索引的前端保护，R11.8 / R12.6）。若它已经陈旧，则
@@ -382,7 +416,7 @@ def generate_plan(
             if existing_pending.input_snapshot_version != current_version:
                 events: EventBus = request.app.state.event_bus
                 cancelled = ApprovalService(
-                    session=db, now=DEMO_ANCHOR, events=events
+                    session=db, now=now, events=events
                 ).cancel_stale_for_regeneration(
                     existing_pending.plan_id, actor=session.subject.upper()
                 )
@@ -418,7 +452,7 @@ def generate_plan(
         result = run_plan_generation(
             db,
             production_date=production_date,
-            now=DEMO_ANCHOR,
+            now=now,
             actor=session.subject.upper(),
             session_id=f"session-{session.subject}",
         )
@@ -533,7 +567,7 @@ def get_plan_explanation(
                 NextAction(action="retry_explanation", href=f"/plans/{plan_id}/explanation")
             ],
         )
-    return _explanation_out(result)
+    return _explanation_out(result, llm_mode=adapter.configured_mode.value)
 
 
 @router.get(
@@ -1145,7 +1179,7 @@ def _explanation_inputs_from_db(
     )
 
 
-def _explanation_out(result: ExplanationResult) -> ExplanationOut:
+def _explanation_out(result: ExplanationResult, *, llm_mode: str) -> ExplanationOut:
     """把 `ExplanationResult` 序列化成响应（结构化证据 + 叙述 + numeric_check）。"""
     exp = result.explanation
     cf = exp.counterfactual
@@ -1162,6 +1196,7 @@ def _explanation_out(result: ExplanationResult) -> ExplanationOut:
         )
     return ExplanationOut(
         plan_id=exp.plan_id,
+        llm_mode=llm_mode,
         narrative=result.narrative,
         numeric_check=result.numeric_check.value,
         fallback_reason=result.fallback_reason,

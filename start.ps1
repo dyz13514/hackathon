@@ -80,7 +80,6 @@ Write-Host 'Preparing database...'
 Push-Location $backend
 try {
     Run-Native $python @('-m', 'alembic', 'upgrade', 'head')
-    Run-Native $python @('-m', 'app.seed', '--demo')
 }
 finally { Pop-Location }
 

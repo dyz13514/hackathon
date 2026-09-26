@@ -34,6 +34,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.services.events import DomainEvent, EventBus, PlanActivated
 from app.services.risk_scan import scan_and_persist
+from app.services.runtime_clock import operational_now
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,7 @@ def trigger_scan(
     session_factory: sessionmaker[Session],
     *,
     trigger: str,
+    app_env: str = "DEMO",
 ) -> int:
     """在一个**新会话**里跑一次扫描，返回本次发现数。尽力而为：异常只记日志、不外抛。
 
@@ -57,7 +59,9 @@ def trigger_scan(
     """
     try:
         with session_factory() as session:
-            result = scan_and_persist(session, trigger=trigger)
+            result = scan_and_persist(
+                session, trigger=trigger, now=operational_now(app_env)
+            )
         return result.finding_count
     except Exception:  # noqa: BLE001 — 尽力而为：触发方动作已成事实，扫描失败不回滚它
         logger.exception("风险扫描触发失败（trigger=%s），已忽略", trigger)
@@ -67,6 +71,7 @@ def trigger_scan(
 def register_plan_activated_trigger(
     event_bus: EventBus,
     session_factory: sessionmaker[Session],
+    app_env: str = "DEMO",
 ) -> None:
     """把「计划激活后扫描」订阅到事件总线（R14.1 第 1 类触发器）。
 
@@ -77,7 +82,7 @@ def register_plan_activated_trigger(
 
     def _on_plan_activated(event: DomainEvent) -> None:
         if isinstance(event, PlanActivated):
-            trigger_scan(session_factory, trigger="PLAN_ACTIVATED")
+            trigger_scan(session_factory, trigger="PLAN_ACTIVATED", app_env=app_env)
 
     event_bus.subscribe(PlanActivated, _on_plan_activated)
 

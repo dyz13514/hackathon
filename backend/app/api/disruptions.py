@@ -52,7 +52,6 @@ from app.orchestrator.pipelines.replan_deterministic import (
     ImpactAnalysis,
     run_replan,
 )
-from app.seed.dataset import DEMO_ANCHOR
 from app.services.auto_apply import AUTO_APPLIED_EXECUTION_PATH, auto_apply_if_l4
 from app.services.feature_flags import read_feature_flags
 from app.services.replanning import (
@@ -66,6 +65,7 @@ from app.services.replanning import (
     to_kernel_disruption,
 )
 from app.services.risk_triggers import trigger_scan
+from app.services.runtime_clock import operational_now
 from app.services.snapshot_loader import load_snapshot
 
 router = APIRouter(prefix="/disruptions", tags=["disruptions"])
@@ -187,11 +187,11 @@ def post_disruption(
 ) -> RegisterDisruptionResponse | JSONResponse:
     """登记扰动 → 确定性重排 → 返回 `ImpactAnalysis` 与修订计划句柄。写端点。
 
-    两段事务见模块 docstring。`session.subject` 进登记来源。`now = DEMO_ANCHOR` 是 P0 演示
-    时钟（与 `POST /plans/generate` 同口径），使排产落在演示数据的时间坐标系里。
+    两段事务见模块 docstring。`session.subject` 进登记来源。使用与计划生成相同的环境时钟。
     """
     factory: sessionmaker[Session] = request.app.state.session_factory
-    reported_at = body.reported_at or DEMO_ANCHOR
+    now = operational_now(request.app.state.settings.app_env)
+    reported_at = body.reported_at or now
     payload = _to_disruption_input(body.disruption, reported_at)
 
     # ---- 事务 1：登记扰动（写 disruptions + 停机/缺勤窗 / 物料副作用，推进快照版本） ----
@@ -248,7 +248,7 @@ def post_disruption(
     # ---- 事务 2：干净会话上读扰动后快照并确定性重排 ----
     db = factory()
     try:
-        snapshot = load_snapshot(db, now=DEMO_ANCHOR, production_date=production_date)
+        snapshot = load_snapshot(db, now=now, production_date=production_date)
         active_candidate = load_plan_candidate(db, active_plan_id)
         kernel_disruption = to_kernel_disruption(payload)
         locked = locked_job_ids(db, active_plan_id)
@@ -263,7 +263,7 @@ def post_disruption(
             disruption=kernel_disruption,
             snapshot=snapshot,
             locked_job_ids=locked,
-            now=DEMO_ANCHOR,
+            now=now,
             session_id=f"session-{session.subject}",
             flags=flags,
         )
@@ -276,7 +276,7 @@ def post_disruption(
             revised_plan_id=result.plan.plan_id,
             active_plan_id=active_plan_id,
             assessment_id=result.assessment_id,
-            now=DEMO_ANCHOR,
+            now=now,
             events=request.app.state.event_bus,
         )
     except DataIntegrityError as error:
@@ -294,7 +294,10 @@ def post_disruption(
     # 数据变更后触发一次风险扫描（R14.1 第 2 类触发器）：扰动登记改动了 Machine / Material /
     # Worker 状态。**在两个事务都提交之后**调用，独立会话、尽力而为——扫描失败不影响已完成的
     # 登记与重排（见 services.risk_triggers 的纪律）。
-    trigger_scan(request.app.state.session_factory, trigger="DATA_CHANGE")
+    trigger_scan(
+        request.app.state.session_factory, trigger="DATA_CHANGE",
+        app_env=request.app.state.settings.app_env,
+    )
 
     # 若自动应用了，修订计划已 ACTIVE、execution_path=AUTO_APPLIED；否则仍 PENDING_APPROVAL。
     revised_status = "ACTIVE" if auto_result.applied else result.plan.status
@@ -329,7 +332,9 @@ def get_impact(request: Request, disruption_id: str) -> ImpactAnalysisOut | JSON
     factory: sessionmaker[Session] = request.app.state.session_factory
     with factory() as db:
         try:
-            impact = _load_impact(db, disruption_id)
+            impact = _load_impact(
+                db, disruption_id, now=operational_now(request.app.state.settings.app_env)
+            )
         except DisruptionNotFoundError:
             return error_response(
                 status_code=404,
@@ -407,7 +412,7 @@ def _impact_out(impact: ImpactAnalysis) -> ImpactAnalysisOut:
     )
 
 
-def _load_impact(db: Session, disruption_id: str) -> ImpactAnalysis:
+def _load_impact(db: Session, disruption_id: str, *, now: datetime) -> ImpactAnalysis:
     """从 `disruptions` + `impact_assessments` 重建 `ImpactAnalysis`（回读端点用）。
 
     `affected_jobs` / `orders_at_risk_of_lateness` 等在登记时未逐一持久化到独立表——它们由
@@ -432,13 +437,13 @@ def _load_impact(db: Session, disruption_id: str) -> ImpactAnalysis:
 
     payload = _disruption_input_from_row(disruption_row)
     kernel_disruption = to_kernel_disruption(payload)
-    snapshot = load_snapshot(db, now=DEMO_ANCHOR)
+    snapshot = load_snapshot(db, now=now)
     active_candidate = load_plan_candidate(db, assessment.baseline_plan_id)
     affected = tuple(sorted(affected_by(kernel_disruption, active_candidate, snapshot)))
     affected_orders = tuple(sorted({j.rsplit("-OP", 1)[0] for j in affected}))
 
     candidate = load_plan_candidate(db, assessment.candidate_plan_id)
-    orders_at_risk = _orders_at_risk_readback(db, candidate)
+    orders_at_risk = _orders_at_risk_readback(db, candidate, now=now)
 
     impact_input = _as_dict(assessment.impact_input)
     return ImpactAnalysis(
@@ -458,12 +463,14 @@ def _load_impact(db: Session, disruption_id: str) -> ImpactAnalysis:
     )
 
 
-def _orders_at_risk_readback(db: Session, candidate: object) -> tuple[str, ...]:
+def _orders_at_risk_readback(
+    db: Session, candidate: object, *, now: datetime
+) -> tuple[str, ...]:
     from app.core.scheduler import PlanCandidate
 
     if not isinstance(candidate, PlanCandidate):
         return ()
-    snapshot = load_snapshot(db, now=DEMO_ANCHOR)
+    snapshot = load_snapshot(db, now=now)
     orders_by_id = snapshot.orders_by_id()
     completions: dict[str, datetime] = {}
     for job in candidate.scheduled_jobs:

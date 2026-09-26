@@ -31,6 +31,7 @@ from app.api import (
     disruptions,
     imports,
     insights,
+    materials,
     plans,
     preferences,
     quotes,
@@ -53,6 +54,7 @@ api_router.include_router(value_ledger.router)
 api_router.include_router(risks.router)
 api_router.include_router(scenarios.router)
 api_router.include_router(imports.router)
+api_router.include_router(materials.router)
 api_router.include_router(preferences.router)
 api_router.include_router(autonomy.router)
 api_router.include_router(insights.router)

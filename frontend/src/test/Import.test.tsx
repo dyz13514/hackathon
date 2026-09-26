@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import axe from 'axe-core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { CommitResult, ProposalResponse, UploadResult } from '../api/imports';
+import type { CommitResult, PackagePreview, ProposalResponse, UploadResult } from '../api/imports';
 import { ApiError } from '../api/client';
 
 vi.mock('../api/imports', async () => {
@@ -15,6 +15,8 @@ vi.mock('../api/imports', async () => {
     confirmImport: vi.fn(),
     listImports: vi.fn(),
     revertImport: vi.fn(),
+    previewPlanningPackage: vi.fn(),
+    confirmPlanningPackage: vi.fn(),
   };
 });
 
@@ -25,6 +27,8 @@ import {
   listImports,
   revertImport,
   uploadImport,
+  previewPlanningPackage,
+  confirmPlanningPackage,
 } from '../api/imports';
 import { Import } from '../routes/Import';
 
@@ -75,7 +79,11 @@ const PROPOSAL: ProposalResponse = {
     detected_header_row: 0,
     total_rows: 2,
     preview_tokens: 300,
-    columns: [],
+    columns: [
+      { index: 0, raw_header: 'material_id', inferred_kind: 'TEXT', null_ratio: 0, sample_values: ['MAT-1'] },
+      { index: 1, raw_header: 'Name', inferred_kind: 'TEXT', null_ratio: 0, sample_values: ['Steel plate'] },
+      { index: 2, raw_header: 'Available', inferred_kind: 'NUMBER', null_ratio: 0, sample_values: ['12'] },
+    ],
     formula_columns: [],
   },
 };
@@ -87,6 +95,7 @@ function fileOf(name: string): File {
 afterEach(() => {
   vi.clearAllMocks();
   vi.restoreAllMocks();
+  window.sessionStorage.clear();
 });
 
 const VALIDATION = {
@@ -97,6 +106,53 @@ const VALIDATION = {
 beforeEach(() => vi.mocked(validateMapping).mockResolvedValue(VALIDATION));
 
 describe('Import 视图', () => {
+  it('完整工作簿经预览确认后才落库并显示批次', async () => {
+    vi.mocked(listImports).mockResolvedValue({ batches: [] });
+    const preview: PackagePreview = {
+      upload_id: 'UP-PACKAGE', file_name: 'planning.xlsx', row_count: 89,
+      earliest_due_date: '2026-09-27', sheets: { Products: 6, Orders: 14 },
+    };
+    vi.mocked(previewPlanningPackage).mockResolvedValue(preview);
+    vi.mocked(confirmPlanningPackage).mockResolvedValue({
+      batch_id: 'BATCH-PACKAGE', entity_type: 'PACKAGE', imported_row_count: 89,
+    });
+    const page = render(<Import />);
+    fireEvent.change(screen.getByLabelText('Choose a complete planning workbook'), {
+      target: { files: [fileOf('planning.xlsx')] },
+    });
+    expect(await screen.findByText(/89 rows passed schema and reference checks/)).toBeInTheDocument();
+    expect(confirmPlanningPackage).not.toHaveBeenCalled();
+    page.unmount();
+    render(<Import />);
+    expect(screen.getByText(/89 rows passed schema and reference checks/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm complete workbook import' }));
+    expect(await screen.findByText(/Workbook imported as batch BATCH-PACKAGE/)).toBeInTheDocument();
+    expect(confirmPlanningPackage).toHaveBeenCalledWith('UP-PACKAGE');
+  });
+
+  it('工作区已有整包时给出可操作的更新与替换路径', async () => {
+    vi.mocked(listImports).mockResolvedValue({ batches: [{
+      batch_id: 'BATCH-old', file_name: 'old.xlsx', entity_type: 'PACKAGE',
+      row_count: 89, status: 'COMMITTED', imported_at: '2026-09-26T08:00:00',
+    }] });
+    vi.mocked(previewPlanningPackage).mockResolvedValue({
+      upload_id: 'UP-new', file_name: 'new.xlsx', row_count: 89,
+      earliest_due_date: '2026-09-27', sheets: { Products: 6, Orders: 14 },
+    });
+    vi.mocked(confirmPlanningPackage).mockRejectedValue(new ApiError(
+      422, 'IMPORT_DATA_INVALID',
+      'The planning workspace already contains data. Import a complete workbook into an empty workspace, or revert the previous package first.',
+    ));
+    render(<Import />);
+    fireEvent.change(screen.getByLabelText('Choose a complete planning workbook'), {
+      target: { files: [fileOf('new.xlsx')] },
+    });
+    await screen.findByText(/89 rows passed schema and reference checks/);
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm complete workbook import' }));
+    expect(await screen.findByText(/Complete workbooks replace the whole planning dataset/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Import batches' })).toHaveAttribute('href', '#import-batches-heading');
+  });
+
   it('上传后渲染列映射、缺失必填与归一化对照（R2）', async () => {
     vi.mocked(listImports).mockResolvedValue({ batches: [] });
     vi.mocked(uploadImport).mockResolvedValue(UPLOAD);
@@ -131,6 +187,10 @@ describe('Import 视图', () => {
     });
     await screen.findByRole('heading', { name: /Column mapping/ });
 
+    fireEvent.change(screen.getByRole('combobox', { name: 'Source column for quantity_available' }), {
+      target: { value: 'Available' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Accept field name' }));
     fireEvent.click(screen.getByRole('button', { name: /Confirm mapping and import/ }));
     await waitFor(() => expect(confirmImport).toHaveBeenCalledTimes(1));
     expect(await screen.findByText(/Imported as batch BATCH-9/)).toBeInTheDocument();
@@ -247,9 +307,31 @@ describe('Import 视图', () => {
       target: { files: [fileOf('dirty.csv')] },
     });
     expect(await screen.findByText(/Row 3, 可用量: oops/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /Confirm mapping and import/ }));
-    expect(await screen.findByRole('alert')).toHaveTextContent(/Review the unparsed cells/);
+    expect(screen.getByRole('button', { name: /Confirm mapping and import/ })).toBeDisabled();
+    expect(screen.getByText(/Correct these cells in the source file/)).toBeInTheDocument();
     expect(confirmImport).not.toHaveBeenCalled();
+  });
+
+  it('不支持完整落库的实体不能创建虚假批次', async () => {
+    vi.mocked(listImports).mockResolvedValue({ batches: [] });
+    vi.mocked(uploadImport).mockResolvedValue(UPLOAD);
+    vi.mocked(getProposal).mockResolvedValue({
+      ...PROPOSAL,
+      proposal: { ...PROPOSAL.proposal, entity_type: 'WORKER' },
+    });
+    render(<Import />);
+    fireEvent.change(screen.getByLabelText('Choose a spreadsheet file to import'), {
+      target: { files: [fileOf('workers.csv')] },
+    });
+    expect(await screen.findByText(/complete scheduling data is not supported yet/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Confirm mapping and import/ })).toBeDisabled();
+    expect(confirmImport).not.toHaveBeenCalled();
+  });
+
+  it('批次列表读取失败时明确报错', async () => {
+    vi.mocked(listImports).mockRejectedValue(new Error('offline'));
+    render(<Import />);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Could not load import batches/);
   });
 
   it('无批次时显示空态', async () => {

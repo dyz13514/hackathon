@@ -161,10 +161,12 @@ export function WhatIf() {
     try {
       setTranslation(await translateScenario(nlQuery));
     } catch (err) {
-      if (err instanceof ApiError && err.code === 'UNSUPPORTED_SCENARIO') {
+      if (err instanceof ApiError && err.code === 'SCENARIO_CLARIFICATION_REQUIRED') {
+        setTranslateError(`${err.message} Example: “What if CNC-01 is unavailable tomorrow from 08:00 to 14:00?”`);
+      } else if (err instanceof ApiError && err.code === 'UNSUPPORTED_SCENARIO') {
         const kinds = (err.details.supported_kinds as string[] | undefined) ?? [];
         setTranslateError(
-          `Could not map this question to a supported scenario type. Supported types: ${kinds.join(', ')}. Please use the structured form below.`,
+          `${err.message} Supported types: ${kinds.join(', ')}. Please use the structured form below.`,
         );
       } else if (err instanceof ApiError && err.code === 'LLM_UNAVAILABLE_USE_STRUCTURED_FORM') {
         setNlEnabled(false);
@@ -209,7 +211,8 @@ export function WhatIf() {
         <section aria-labelledby="whatif-nl-heading" className="whatif-nl">
           <h3 id="whatif-nl-heading">Ask in natural language (optional)</h3>
           <p className="whatif-nl-hint">
-            For example, “What if CNC-01 goes down for 6 hours tomorrow morning?”. The translation is shown
+            For example, “What if CNC-01 is unavailable tomorrow from 08:00 to 14:00?”. Include the resource ID
+            and exact times so the system does not invent them. The translation is shown
             for you to confirm first, and only runs after you confirm — it never changes any plan directly.
           </p>
           <label htmlFor="whatif-nl-query">Natural-language what-if question</label>

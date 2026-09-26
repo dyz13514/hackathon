@@ -39,7 +39,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
 from typing import Any
@@ -92,6 +92,8 @@ class TranslationOutcome(StrEnum):
     TRANSLATED = "TRANSLATED"
     #: 无法映射到任何支持的场景类型（R16.3）。`supported_kinds` 列出可用类型。
     UNSUPPORTED_SCENARIO = "UNSUPPORTED_SCENARIO"
+    #: Intent is supported, but required identifiers or times were not supplied.
+    NEEDS_CLARIFICATION = "NEEDS_CLARIFICATION"
     #: LLM 不可用（DETERMINISTIC_ONLY 降级）：前端应隐藏自然语言入口、退回结构化表单。
     LLM_UNAVAILABLE = "LLM_UNAVAILABLE"
 
@@ -112,6 +114,7 @@ class TranslationResult:
     source_query_echo: str = ""
     #: 无法翻译时的简短原因（供 UI 展示，非自由 LLM 散文——由本模块生成的确定性文案）。
     reason: str | None = None
+    missing_fields: tuple[str, ...] = ()
 
 
 def _build_system_prefix() -> tuple[str, ...]:
@@ -251,6 +254,43 @@ def _validate_mutations(final: dict[str, Any]) -> list[dict[str, Any]] | None:
     return [m.model_dump(mode="json") for m in validated]
 
 
+def _clarification(query: str, missing_fields: tuple[str, ...]) -> TranslationResult:
+    labels = {
+        "machine_id": "machine ID (for example CNC-01)",
+        "worker_id": "worker ID",
+        "material_id": "material ID",
+        "order_id": "order ID",
+        "start_time": "exact start date and time",
+        "end_time": "exact end date and time",
+        "quantity_available": "new total available quantity",
+        "priority": "new priority",
+    }
+    details = ", ".join(labels.get(field, field) for field in missing_fields)
+    return TranslationResult(
+        outcome=TranslationOutcome.NEEDS_CLARIFICATION,
+        supported_kinds=SUPPORTED_SCENARIO_KINDS,
+        source_query_echo=query,
+        missing_fields=missing_fields,
+        reason=f"This is a supported what-if intent, but I need the {details}. Please add them and translate again.",
+    )
+
+
+def _obvious_missing_machine(query: str) -> tuple[str, ...]:
+    """Do not spend model calls on the UI's old, underspecified machine example."""
+    vague_machine = re.search(
+        r"\b(?:a|some|one) machine\b|(?:某|一)台(?:机器|设备)|某(?:个)?(?:机器|设备)",
+        query, flags=re.IGNORECASE,
+    )
+    outage = re.search(r"down|unavailable|out of service|停机|故障|不可用", query, flags=re.IGNORECASE)
+    explicit_id = re.search(r"\b[A-Z][A-Z0-9]*-[A-Z0-9]+\b", query, flags=re.IGNORECASE)
+    if not (vague_machine and outage) or explicit_id:
+        return ()
+    missing = ["machine_id"]
+    if re.search(r"morning|afternoon|evening|早上|上午|下午|晚上", query, flags=re.IGNORECASE):
+        missing.extend(("start_time", "end_time"))
+    return tuple(missing)
+
+
 def translate_whatif_query(
     adapter: BedrockAdapter,
     query: str,
@@ -287,6 +327,11 @@ def translate_whatif_query(
         subject_type="SCENARIO_QUERY",
     )
 
+    obvious_missing = _obvious_missing_machine(query)
+    if obvious_missing:
+        clarification = _clarification(query, obvious_missing)
+        return replace(clarification, injection_suspected=verdict.suspected)
+
     system = _build_system_prefix()
     error_feedback: str | None = None
 
@@ -315,6 +360,21 @@ def translate_whatif_query(
             continue
         if final.get("unsupported") is True:
             return _unsupported(verdict.suspected, query)
+
+        clarification = final.get("clarification")
+        if isinstance(clarification, dict):
+            kind = clarification.get("kind")
+            fields = clarification.get("missing_fields")
+            allowed = {
+                "machine_id", "worker_id", "material_id", "order_id", "start_time",
+                "end_time", "quantity_available", "priority",
+            }
+            if kind in SUPPORTED_SCENARIO_KINDS and isinstance(fields, list) and fields \
+                    and all(isinstance(item, str) and item in allowed for item in fields):
+                result = _clarification(query, tuple(dict.fromkeys(fields)))
+                return replace(result, injection_suspected=verdict.suspected)
+            error_feedback = "clarification kind or missing_fields is invalid"
+            continue
 
         mutations = _validate_mutations(final)
         if mutations is None:

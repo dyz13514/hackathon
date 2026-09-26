@@ -117,6 +117,40 @@ export function getPlan(planId: string): Promise<PlanDetail> {
   return apiFetch<PlanDetail>(`/plans/${encodeURIComponent(planId)}`);
 }
 
+export interface PlanExplanation {
+  readonly plan_id: string;
+  readonly llm_mode: 'LIVE' | 'REPLAY' | 'STUB' | 'DISABLED';
+  readonly narrative: string;
+  readonly numeric_check: 'PASS' | 'FALLBACK';
+  readonly fallback_reason: string | null;
+  readonly decision_evidence: readonly {
+    readonly job_id: string;
+    readonly trigger: string;
+    readonly constraint: string;
+    readonly resources: readonly string[];
+  }[];
+  readonly counterfactual: {
+    readonly kind: string;
+    readonly reason: string | null;
+    readonly pivotal_job_id: string | null;
+    readonly component: string | null;
+    readonly current_value: number | null;
+    readonly counterfactual_value: number | null;
+    readonly selection_basis: string | null;
+  };
+  readonly assumptions: readonly {
+    readonly kind: string;
+    readonly description: string;
+    readonly stale_risk: string;
+  }[];
+  readonly confidence: { readonly level: string; readonly basis: string };
+}
+
+/** Analyze a saved plan. LIVE narrative is released only after numeric validation. */
+export function getPlanExplanation(planId: string): Promise<PlanExplanation> {
+  return apiFetch<PlanExplanation>(`/plans/${encodeURIComponent(planId)}/explanation`);
+}
+
 /** 待审批计划列表（R1.1、R12.6）。 */
 export function listPending(): Promise<PlanSummary[]> {
   return apiFetch<PlanSummary[]>('/plans/pending');

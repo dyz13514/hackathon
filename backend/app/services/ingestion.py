@@ -22,7 +22,8 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime, time
+from decimal import Decimal, InvalidOperation
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -36,6 +37,7 @@ __all__ = [
     "AcceptedMapping",
     "AcceptedMappingError",
     "CommitResult",
+    "ImportDataError",
     "UploadStore",
     "ValidationOutcome",
     "commit_batch",
@@ -60,7 +62,7 @@ REQUIRED_FIELDS: dict[str, list[str]] = {
 #: 目标字段 → 可能的表头别名（小写、去空格后匹配）。确定性映射启发式。
 _ALIASES: dict[str, list[str]] = {
     "order_id": ["order_id", "orderid", "订单号", "订单id", "order"],
-    "product_id": ["product_id", "productid", "产品号", "产品id", "product", "sku"],
+    "product_id": ["product_id", "productid", "产品号", "产品编码", "产品id", "product", "sku"],
     "material_id": ["material_id", "materialid", "物料号", "物料id", "material"],
     "machine_id": ["machine_id", "machineid", "机器号", "机器id", "machine"],
     "worker_id": ["worker_id", "workerid", "工人号", "工人id", "worker"],
@@ -70,6 +72,13 @@ _ALIASES: dict[str, list[str]] = {
     "due_date": ["due_date", "duedate", "交期", "交付日期", "due"],
     "machine_type": ["machine_type", "type", "机器类型", "类型"],
     "unit": ["unit", "单位"],
+    "priority": ["priority", "优先级"],
+    "notes": ["notes", "备注"],
+}
+
+_OPTIONAL_FIELDS: dict[str, list[str]] = {
+    "ORDER": ["priority", "notes", "unit"],
+    "MATERIAL": ["unit"],
 }
 
 #: 数值字段（校验时按数字解析）。
@@ -130,7 +139,7 @@ def propose_mapping(parsed: ParsedFile, *, entity_type_hint: str | None = None) 
 
     entity_type = entity_type_hint or _guess_entity_type(header_norm)
     required = REQUIRED_FIELDS.get(entity_type, [])
-    all_fields = list(dict.fromkeys([*required, "unit"]))
+    all_fields = list(dict.fromkeys([*required, *_OPTIONAL_FIELDS.get(entity_type, [])]))
 
     field_mappings: list[dict] = []
     missing: list[dict] = []
@@ -288,8 +297,10 @@ def validate_mapping(parsed: ParsedFile, mapping: dict) -> ValidationOutcome:
             raw = row[col] if col < len(row) else ""
             if target in _NUMERIC_FIELDS:
                 try:
-                    float(raw.strip())
-                except ValueError:
+                    numeric = Decimal(raw.strip())
+                    if not numeric.is_finite():
+                        raise InvalidOperation
+                except InvalidOperation:
                     type_errors += 1
                     row_ok = False
                     unparsed.append(_cell(row_no, parsed.header[col], raw, "数值解析失败"))
@@ -338,6 +349,7 @@ class AcceptedMapping:
     这道断言是 K-07 的落库侧防线：歧义或缺失一律拒绝落库，绝不静默猜测。
     """
 
+
     upload_id: str
     entity_type: str
     field_mappings: list[dict]
@@ -362,6 +374,10 @@ class AcceptedMapping:
             )
         if not self.unparsed_cells_resolved:
             raise AcceptedMappingError("There are unresolved unparsed_cells; cannot persist.")
+
+
+class ImportDataError(ValueError):
+    """An import cannot safely become scheduling input; no batch is committed."""
 
 
 @dataclass(frozen=True)
@@ -396,6 +412,32 @@ def commit_batch(
         if fm.get("source_column") in header_index and fm.get("status") != "NOT_IMPORTED"
     }
 
+    if parsed.row_count == 0:
+        raise ImportDataError("The file has no data rows to import.")
+    if accepted.entity_type not in {"MATERIAL", "ORDER"}:
+        raise ImportDataError(
+            f"{accepted.entity_type} import is not available yet with complete scheduling fields; "
+            "no batch was created."
+        )
+    for row_no, row in enumerate(parsed.rows, start=2):
+        for target in REQUIRED_FIELDS[accepted.entity_type]:
+            if not _cell_val(row, col_of.get(target)):
+                raise ImportDataError(f"Row {row_no}: required field {target} is empty.")
+    validation = validate_mapping(parsed, {"field_mappings": accepted.field_mappings})
+    if validation.unparsed_cells:
+        first = validation.unparsed_cells[0]
+        raise ImportDataError(
+            f"Row {first['row_number']}, column {first['column_name']}: {first['reason']}. "
+            "Correct the file and upload it again."
+        )
+    if accepted.entity_type == "MATERIAL":
+        _validate_material_rows(parsed, col_of)
+    order_rows = (
+        _prepare_order_rows(session, parsed, col_of)
+        if accepted.entity_type == "ORDER"
+        else []
+    )
+
     imported = 0
     session.add(
         orm.ImportBatch(
@@ -423,7 +465,8 @@ def commit_batch(
         imported = _commit_materials(session, parsed, col_of, batch_id, resolved_now)
     elif accepted.entity_type == "WORKER":
         imported = _commit_workers(session, parsed, col_of, batch_id, resolved_now)
-    # 其余实体类型的落库路径按需扩展；provenance/audit 机具已通用。
+    elif accepted.entity_type == "ORDER":
+        imported = _commit_orders(session, order_rows, batch_id, resolved_now)
 
     # 先提交业务事务再写审计：审计走独立连接，若在 commit 前写、业务事务仍持有 SQLite 写锁
     # 会自锁（database is locked）。审计 append 自身独立提交，不依赖业务事务。
@@ -448,6 +491,160 @@ def commit_batch(
     return CommitResult(batch_id, accepted.entity_type, imported)
 
 
+@dataclass(frozen=True)
+class _PreparedOrder:
+    row_no: int
+    raw_row: list[str]
+    order_id: str
+    product_id: str
+    quantity: Decimal
+    due_date: datetime
+    priority: str
+    notes: str | None
+
+
+def _prepare_order_rows(
+    session: Session, parsed: ParsedFile, col_of: dict[str, int]
+) -> list[_PreparedOrder]:
+    """Validate the complete order file before writing an import batch."""
+    prepared: list[_PreparedOrder] = []
+    seen: set[str] = set()
+    priority_aliases = {"紧急": "URGENT", "高": "HIGH", "普通": "NORMAL", "低": "LOW"}
+    for row_no, row in enumerate(parsed.rows, start=2):
+        order_id = _cell_val(row, col_of.get("order_id"))
+        product_id = _cell_val(row, col_of.get("product_id"))
+        if order_id in seen:
+            raise ImportDataError(f"Row {row_no}: duplicate order_id {order_id} in this file.")
+        seen.add(order_id)
+        product = session.get(orm.Product, product_id)
+        if product is None or product.record_status != "ACTIVE":
+            raise ImportDataError(
+                f"Row {row_no}: product {product_id} is not configured. Import its routing first."
+            )
+        raw_qty = _cell_val(row, col_of.get("quantity"))
+        try:
+            quantity = Decimal(raw_qty)
+        except InvalidOperation as error:
+            raise ImportDataError(f"Row {row_no}: quantity must be numeric.") from error
+        if not quantity.is_finite() or quantity <= 0:
+            raise ImportDataError(f"Row {row_no}: quantity must be a positive finite number.")
+        if "unit" in col_of:
+            raw_unit = _cell_val(row, col_of["unit"])
+            try:
+                quantity *= Decimal(str(normalise_unit(raw_unit).conversion_factor))
+            except NormalisationError as error:
+                raise ImportDataError(
+                    f"Row {row_no}: unsupported quantity unit {raw_unit!r}."
+                ) from error
+        raw_due = _cell_val(row, col_of.get("due_date"))
+        try:
+            due = date.fromisoformat(normalise_date(raw_due).iso)
+        except NormalisationError as error:
+            raise ImportDataError(f"Row {row_no}: due_date cannot be parsed.") from error
+        raw_priority = _cell_val(row, col_of.get("priority"))
+        priority = priority_aliases.get(raw_priority, raw_priority.upper()) or "NORMAL"
+        if priority not in {"URGENT", "HIGH", "NORMAL", "LOW"}:
+            raise ImportDataError(f"Row {row_no}: unsupported priority {raw_priority!r}.")
+        prepared.append(
+            _PreparedOrder(
+                row_no=row_no,
+                raw_row=list(row),
+                order_id=order_id,
+                product_id=product_id,
+                quantity=quantity,
+                due_date=datetime.combine(due, time(23, 59, 59)),
+                priority=priority,
+                notes=_cell_val(row, col_of.get("notes")) or None,
+            )
+        )
+    return prepared
+
+
+def _commit_orders(
+    session: Session, rows: list[_PreparedOrder], batch_id: str, now: datetime
+) -> int:
+    for item in rows:
+        existing = session.get(orm.Order, item.order_id)
+        overwritten = None
+        if existing is not None:
+            overwritten = {
+                "product_id": existing.product_id,
+                "quantity": str(existing.quantity),
+                "due_date": existing.due_date.isoformat(),
+                "promised_date": (
+                    existing.promised_date.isoformat() if existing.promised_date else None
+                ),
+                "priority": existing.priority,
+                "notes": existing.notes,
+                "injection_suspected": existing.injection_suspected,
+                "source": existing.source,
+                "record_status": existing.record_status,
+                "import_batch_id": existing.import_batch_id,
+                "source_row_number": existing.source_row_number,
+            }
+        if existing is None:
+            existing = orm.Order(
+                order_id=item.order_id,
+                product_id=item.product_id,
+                quantity=item.quantity,
+                due_date=item.due_date,
+                promised_date=None,
+                priority=item.priority,
+                notes=item.notes,
+                injection_suspected=False,
+                source="SPREADSHEET_IMPORT",
+                record_status="ACTIVE",
+                import_batch_id=batch_id,
+                source_row_number=item.row_no,
+                last_updated_at=now,
+            )
+            session.add(existing)
+        else:
+            existing.product_id = item.product_id
+            existing.quantity = item.quantity
+            existing.due_date = item.due_date
+            existing.promised_date = None
+            existing.priority = item.priority
+            existing.notes = item.notes
+            existing.injection_suspected = False
+            existing.source = "SPREADSHEET_IMPORT"
+            existing.record_status = "ACTIVE"
+            existing.import_batch_id = batch_id
+            existing.source_row_number = item.row_no
+            existing.last_updated_at = now
+        session.add(
+            orm.ImportRowProvenance(
+                id=f"PROV-{uuid.uuid4().hex[:12]}",
+                batch_id=batch_id,
+                entity_type="ORDER",
+                entity_id=item.order_id,
+                source_row_number=item.row_no,
+                raw_row=item.raw_row,
+                overwritten_payload=overwritten,
+            )
+        )
+    session.flush()
+    return len(rows)
+
+
+def _validate_material_rows(parsed: ParsedFile, col_of: dict[str, int]) -> None:
+    seen: set[str] = set()
+    for row_no, row in enumerate(parsed.rows, start=2):
+        material_id = _cell_val(row, col_of.get("material_id"))
+        if material_id in seen:
+            raise ImportDataError(
+                f"Row {row_no}: duplicate material_id {material_id} in this file."
+            )
+        seen.add(material_id)
+        quantity = Decimal(_cell_val(row, col_of.get("quantity_available")))
+        if not quantity.is_finite() or quantity < 0:
+            raise ImportDataError(
+                f"Row {row_no}: quantity_available must be a non-negative finite number."
+            )
+        if "unit" in col_of and not _cell_val(row, col_of["unit"]):
+            raise ImportDataError(f"Row {row_no}: unit is empty.")
+
+
 def _commit_materials(
     session: Session, parsed: ParsedFile, col_of: dict[str, int], batch_id: str, now: datetime
 ) -> int:
@@ -469,12 +666,16 @@ def _commit_materials(
             }
         name = _cell_val(row, col_of.get("name")) or mid
         qty = _to_decimal(_cell_val(row, col_of.get("quantity_available")))
+        unit = (
+            _cell_val(row, col_of["unit"])
+            if "unit" in col_of else existing.unit if existing is not None else "pcs"
+        )
         if existing is None:
             session.add(
                 orm.Material(
                     material_id=mid,
                     name=name,
-                    unit="pcs",
+                    unit=unit,
                     quantity_available=qty,
                     reserved_quantity=0,
                     source="SPREADSHEET_IMPORT",
@@ -485,6 +686,7 @@ def _commit_materials(
             )
         else:
             existing.name = name
+            existing.unit = unit
             existing.quantity_available = qty
             existing.source = "SPREADSHEET_IMPORT"
             existing.record_status = "ACTIVE"
@@ -606,7 +808,9 @@ def revert_batch(session: Session, *, batch_id: str, now: datetime | None = None
 
 
 def _get_entity(session: Session, entity_type: str, entity_id: str) -> object | None:
-    model = {"MATERIAL": orm.Material, "WORKER": orm.Worker}.get(entity_type)
+    model = {"MATERIAL": orm.Material, "WORKER": orm.Worker, "ORDER": orm.Order}.get(
+        entity_type
+    )
     return session.get(model, entity_id) if model is not None else None
 
 
@@ -618,6 +822,19 @@ def _restore(entity: object, payload: dict, now: datetime) -> None:
         entity.unit = payload["unit"]  # type: ignore[attr-defined]
     if "name" in payload:
         entity.name = payload["name"]  # type: ignore[attr-defined]
+    if "product_id" in payload:
+        entity.product_id = payload["product_id"]  # type: ignore[attr-defined]
+        entity.quantity = Decimal(payload["quantity"])  # type: ignore[attr-defined]
+        entity.due_date = datetime.fromisoformat(payload["due_date"])  # type: ignore[attr-defined]
+        entity.promised_date = (  # type: ignore[attr-defined]
+            datetime.fromisoformat(payload["promised_date"])
+            if payload["promised_date"]
+            else None
+        )
+        entity.priority = payload["priority"]  # type: ignore[attr-defined]
+        entity.notes = payload["notes"]  # type: ignore[attr-defined]
+        entity.injection_suspected = payload["injection_suspected"]  # type: ignore[attr-defined]
+        entity.source_row_number = payload["source_row_number"]  # type: ignore[attr-defined]
     entity.source = payload.get("source", "MANUAL_ENTRY")  # type: ignore[attr-defined]
     entity.record_status = payload.get("record_status", "ACTIVE")  # type: ignore[attr-defined]
     entity.import_batch_id = payload.get("import_batch_id")  # type: ignore[attr-defined]

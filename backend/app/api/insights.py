@@ -16,8 +16,8 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.api.errors import ErrorCode, NextAction, error_response
-from app.seed.dataset import DEMO_ANCHOR
 from app.services.insights import NoActivePlanError, bottleneck_insights
+from app.services.runtime_clock import operational_now
 
 router = APIRouter(prefix="/insights", tags=["insights"])
 
@@ -64,7 +64,9 @@ def get_bottlenecks(request: Request) -> BottleneckInsightsOut | JSONResponse:
     factory: sessionmaker[Session] = request.app.state.session_factory
     with factory() as db:
         try:
-            result = bottleneck_insights(db, now=DEMO_ANCHOR)
+            result = bottleneck_insights(
+                db, now=operational_now(request.app.state.settings.app_env)
+            )
         except NoActivePlanError:
             return error_response(
                 status_code=409,

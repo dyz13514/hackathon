@@ -428,7 +428,7 @@ export function Preferences() {
               maxLength={200}
               value={humanText}
               onChange={(e) => setHumanText(e.target.value)}
-              placeholder="e.g. Don’t schedule ORD-007 on CNC-03 — that customer complained about the finish"
+              placeholder="e.g. Avoid a specific machine for one order"
             />
           </div>
 

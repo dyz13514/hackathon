@@ -155,6 +155,33 @@ def test_translate_unsupported_lists_supported_kinds(audit_engine: Engine) -> No
     }
 
 
+def test_underspecified_machine_example_asks_for_details_without_inventing_them(
+    audit_engine: Engine,
+) -> None:
+    adapter = _FakeAdapter([])
+    result = translate_whatif_query(
+        adapter, "What if a machine goes down for 6 hours tomorrow morning?",
+        now=DEMO_ANCHOR,
+    )  # type: ignore[arg-type]
+    assert result.outcome is TranslationOutcome.NEEDS_CLARIFICATION
+    assert result.missing_fields == ("machine_id", "start_time", "end_time")
+    assert result.mutations == []
+    assert adapter.calls == 0
+
+
+def test_model_can_request_missing_fields_instead_of_unsupported(
+    audit_engine: Engine,
+) -> None:
+    adapter = _FakeAdapter([
+        '{"final":{"clarification":{"kind":"SET_MACHINE_UNAVAILABLE",'
+        '"missing_fields":["machine_id"]}}}'
+    ])
+    result = translate_whatif_query(adapter, "Machine unavailable tomorrow 08:00-14:00", now=DEMO_ANCHOR)  # type: ignore[arg-type]
+    assert result.outcome is TranslationOutcome.NEEDS_CLARIFICATION
+    assert result.missing_fields == ("machine_id",)
+    assert adapter.calls == 1
+
+
 def test_translate_self_corrects_within_step_limit(audit_engine: Engine) -> None:
     """不合规输出可自我修正，但受 ≤3 步约束（R21.13）。"""
     adapter = _FakeAdapter(
@@ -423,6 +450,22 @@ def test_api_translate_unsupported_returns_422(
     body = resp.json()
     assert body["error"]["code"] == "UNSUPPORTED_SCENARIO"
     assert body["error"]["details"]["supported_kinds"]
+
+
+def test_api_underspecified_machine_question_returns_clarification(
+    client: TestClient, application: object,
+) -> None:
+    adapter = _FakeAdapter([])
+    _set_adapter(application, adapter)
+    resp = client.post(
+        TRANSLATE,
+        json={"query": "What if a machine goes down for 6 hours tomorrow morning?"},
+    )
+    assert resp.status_code == 422, resp.text
+    error = resp.json()["error"]
+    assert error["code"] == "SCENARIO_CLARIFICATION_REQUIRED"
+    assert error["details"]["missing_fields"] == ["machine_id", "start_time", "end_time"]
+    assert adapter.calls == 0
 
 
 def test_api_translate_degraded_returns_503(

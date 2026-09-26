@@ -588,6 +588,16 @@ class ApprovalService:
                 current_status=None,
             )
 
+        # A competing approval may have committed before this session's first read.
+        # The stale optimistic version identifies that race even though the row is
+        # already ACTIVE by the time the state check runs.
+        if plan.status == ACTIVE_STATUS and plan.version != expected_version:
+            return ApprovalResult(
+                status=ApprovalStatus.CONCURRENT_MODIFICATION,
+                plan_id=plan_id,
+                current_status=plan.status,
+            )
+
         # ---- 状态检查（经计划状态机的迁移许可表，design.md §8） ----
         # `PENDING_APPROVAL → ACTIVE` 是表内唯一通向 `ACTIVE` 的迁移；任何其他源状态
         # （已 ACTIVE / REJECTED / SUPERSEDED / DRAFT）到 ACTIVE 都是表外迁移 →

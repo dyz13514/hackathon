@@ -103,6 +103,7 @@ class ErrorCode(StrEnum):
     #: `POST /scenarios/translate` 无法把自然语言提问映射到受支持的场景类型（R16.3，任务 13.1）。
     #: 响应体 `details.supported_kinds` 列出支持的 5 类场景，供前端提示规划员改用结构化表单。
     UNSUPPORTED_SCENARIO = "UNSUPPORTED_SCENARIO"
+    SCENARIO_CLARIFICATION_REQUIRED = "SCENARIO_CLARIFICATION_REQUIRED"
 
     # 电子表格摄取（R2/R3，任务 10）。安全闸门四类（R23.7）：
     MACRO_NOT_ALLOWED = "MACRO_NOT_ALLOWED"
@@ -113,8 +114,13 @@ class ErrorCode(StrEnum):
     UPLOAD_NOT_FOUND = "UPLOAD_NOT_FOUND"
     #: `POST /imports/{upload_id}/confirm` 的映射未满足落库前置（低置信/缺必填/未处置，R2.9）。
     IMPORT_MAPPING_INCOMPLETE = "IMPORT_MAPPING_INCOMPLETE"
+    #: 数据行不合法或所引用的产品尚未配置；不创建批次。
+    IMPORT_DATA_INVALID = "IMPORT_DATA_INVALID"
+    #: 当前没有足够的真实订单、工序和资源，不能生成有意义的计划。
+    SCHEDULING_INPUTS_MISSING = "SCHEDULING_INPUTS_MISSING"
     #: `POST /imports/{batch_id}/revert` 的批次不存在。
     IMPORT_BATCH_NOT_FOUND = "IMPORT_BATCH_NOT_FOUND"
+    MATERIAL_NOT_FOUND = "MATERIAL_NOT_FOUND"
 
     # 保留旧错误码供兼容；当前列映射失败统一返回 LLM_GENERATION_FAILED，
     # 因为前端没有独立的手工列映射入口，不能给出不存在的操作建议。

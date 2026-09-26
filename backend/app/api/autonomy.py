@@ -24,12 +24,12 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.api.deps import PlannerSession
 from app.api.errors import ErrorCode, NextAction, error_response
 from app.db import models as orm
-from app.seed.dataset import DEMO_ANCHOR
 from app.services.auto_apply import (
     RevertStatus,
     list_auto_applied_changes,
     revert_change,
 )
+from app.services.runtime_clock import operational_now
 
 router = APIRouter(prefix="/autonomy", tags=["autonomy"])
 
@@ -109,7 +109,7 @@ def revert_endpoint(
         result = revert_change(
             db,
             change_id=change_id,
-            now=DEMO_ANCHOR,
+            now=operational_now(request.app.state.settings.app_env),
             events=request.app.state.event_bus,
         )
     if result.status is RevertStatus.NOT_FOUND:

@@ -32,6 +32,7 @@ from app.api.deps import PlannerSession
 from app.core.risk import ROLLING_HORIZON_DAYS
 from app.db import models as orm
 from app.services.risk_scan import scan_and_persist
+from app.services.runtime_clock import operational_now
 
 router = APIRouter(prefix="/risks", tags=["risks"])
 
@@ -174,7 +175,8 @@ def scan_risks_endpoint(
     driver = _narrative_driver(request)
     with factory() as db:
         result = scan_and_persist(
-            db, horizon_days=body.horizon_days, trigger="MANUAL", narrative_driver=driver
+            db, now=operational_now(request.app.state.settings.app_env),
+            horizon_days=body.horizon_days, trigger="MANUAL", narrative_driver=driver
         )
         findings = [_to_out(row) for row in result.findings]
         return ScanRisksResponse(

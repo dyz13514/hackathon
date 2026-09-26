@@ -359,6 +359,20 @@ export function Approval() {
             ) : (
               <p>All jobs scheduled; no affected orders.</p>
             )}
+            {plan.unschedulable_jobs.length > 0 && (
+              <>
+                <ul>
+                  {plan.unschedulable_jobs.map((job) => (
+                    <li key={job.job_id}>{job.job_id}: {job.blocking_reason}</li>
+                  ))}
+                </ul>
+                <p>
+                  Correct source inputs in <a href="/schedule#unschedulable-jobs">Schedule</a>,
+                  {' '}then reject this proposal and generate a new one. Editing a saved plan
+                  {' '}or trace cannot change inventory.
+                </p>
+              </>
+            )}
           </section>
 
           <section aria-labelledby="breakdown-heading" className="approval-breakdown">

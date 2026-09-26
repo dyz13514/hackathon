@@ -81,7 +81,7 @@ export function Quote() {
             required
             value={productId}
             onChange={(e) => setProductId(e.target.value)}
-            placeholder="e.g. PRD-BRACKET"
+            placeholder="e.g. your product ID"
           />
         </div>
         <div className="field">

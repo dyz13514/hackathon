@@ -29,9 +29,16 @@ from app.api.deps import PlannerSession
 from app.api.errors import ErrorCode, NextAction, error_response
 from app.db import models as orm
 from app.services import ingestion
+from app.services.import_package import (
+    PlanningPackage,
+    commit_planning_package,
+    parse_planning_package,
+    revert_planning_package,
+)
 from app.services.ingestion import (
     AcceptedMapping,
     AcceptedMappingError,
+    ImportDataError,
     UploadStore,
     _Upload,
 )
@@ -51,6 +58,14 @@ def _store(request: Request) -> UploadStore:
     if store is None:
         store = UploadStore()
         request.app.state.upload_store = store
+    return store
+
+
+def _package_store(request: Request) -> dict[str, tuple[PlanningPackage, str, str]]:
+    store = getattr(request.app.state, "package_uploads", None)
+    if store is None:
+        store = {}
+        request.app.state.package_uploads = store
     return store
 
 
@@ -75,6 +90,12 @@ class ConfirmRequest(BaseModel):
     entity_type: str
     field_mappings: list[dict]
     unparsed_cells_resolved: bool = False
+
+
+class PackageConfirmRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    confirm: bool
 
 
 # --------------------------------------------------------------------------
@@ -127,6 +148,66 @@ async def upload_import(
         total_rows=parsed.row_count,
         duplicate_of=duplicate_of,
         last_imported_at=last_imported,
+    )
+
+
+@router.post("/package/preview", summary="校验完整生产数据工作簿，不写库")
+async def preview_package(
+    request: Request, session: PlannerSession, file: Annotated[UploadFile, File()]
+) -> JSONResponse:
+    content = await file.read()
+    try:
+        package = parse_planning_package(filename=file.filename or "", content=content)
+    except ImportDataError as error:
+        return error_response(
+            status_code=422, code=ErrorCode.IMPORT_DATA_INVALID, message=str(error),
+            next_actions=[NextAction(action="fix_file", href="/import")],
+        )
+    upload_id = f"UP-{uuid.uuid4().hex[:12]}"
+    _package_store(request)[upload_id] = (
+        package, file.filename or "planning-package.xlsx", compute_checksum(content)
+    )
+    return JSONResponse(
+        {
+            "upload_id": upload_id, "file_name": file.filename,
+            "row_count": package.row_count, "sheets": package.counts,
+            "earliest_due_date": package.anchor_date.isoformat() if package.anchor_date else None,
+        }
+    )
+
+
+@router.post("/package/{upload_id}/confirm", summary="整包确认后原子落库")
+def confirm_package(
+    request: Request, upload_id: str, body: PackageConfirmRequest, session: PlannerSession
+) -> JSONResponse:
+    if not body.confirm:
+        return error_response(
+            status_code=422, code=ErrorCode.IMPORT_MAPPING_INCOMPLETE,
+            message="Confirm the validated workbook before importing.",
+            next_actions=[NextAction(action="review_package", href="/import")],
+        )
+    stored = _package_store(request).get(upload_id)
+    if stored is None:
+        return _upload_not_found(upload_id)
+    package, filename, checksum = stored
+    with request.app.state.session_factory() as db:
+        try:
+            batch_id = commit_planning_package(
+                db, package=package, filename=filename, checksum=checksum
+            )
+        except ImportDataError as error:
+            db.rollback()
+            return error_response(
+                status_code=422, code=ErrorCode.IMPORT_DATA_INVALID, message=str(error),
+                next_actions=[NextAction(action="review_package", href="/import")],
+            )
+    _package_store(request).pop(upload_id, None)
+    trigger_scan(
+        request.app.state.session_factory, trigger="DATA_CHANGE",
+        app_env=request.app.state.settings.app_env,
+    )
+    return JSONResponse(
+        {"batch_id": batch_id, "entity_type": "PACKAGE", "imported_row_count": package.row_count}
     )
 
 
@@ -262,16 +343,28 @@ def confirm_import(
             ],
         )
     with factory() as db:
-        result = ingestion.commit_batch(
-            db,
-            parsed=upload.parsed,
-            accepted=accepted,
-            file_name=upload.filename,
-            file_checksum=upload.checksum,
-            proposed_mapping=upload.proposed_mapping,
-        )
+        try:
+            result = ingestion.commit_batch(
+                db,
+                parsed=upload.parsed,
+                accepted=accepted,
+                file_name=upload.filename,
+                file_checksum=upload.checksum,
+                proposed_mapping=upload.proposed_mapping,
+            )
+        except ImportDataError as error:
+            db.rollback()
+            return error_response(
+                status_code=422,
+                code=ErrorCode.IMPORT_DATA_INVALID,
+                message=str(error),
+                next_actions=[NextAction(action="fix_file", href="/import")],
+            )
     # 数据变更后触发风险扫描（R14.1 第 2 类），尽力而为、独立会话。
-    trigger_scan(request.app.state.session_factory, trigger="DATA_CHANGE")
+    trigger_scan(
+        request.app.state.session_factory, trigger="DATA_CHANGE",
+        app_env=request.app.state.settings.app_env,
+    )
     return JSONResponse(
         {
             "batch_id": result.batch_id,
@@ -314,8 +407,15 @@ def revert_import(request: Request, batch_id: str, session: PlannerSession) -> J
                 message=f"Batch {batch_id} does not exist.",
                 next_actions=[NextAction(action="list_imports", href="/import")],
             )
-        reverted = ingestion.revert_batch(db, batch_id=batch_id)
-    trigger_scan(request.app.state.session_factory, trigger="DATA_CHANGE")
+        reverted = (
+            revert_planning_package(db, batch_id=batch_id)
+            if batch.entity_type == "PACKAGE"
+            else ingestion.revert_batch(db, batch_id=batch_id)
+        )
+    trigger_scan(
+        request.app.state.session_factory, trigger="DATA_CHANGE",
+        app_env=request.app.state.settings.app_env,
+    )
     return JSONResponse({"batch_id": batch_id, "reverted_row_count": reverted})
 
 

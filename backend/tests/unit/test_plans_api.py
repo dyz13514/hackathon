@@ -22,6 +22,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.db import models as orm
 from app.db.models import Base
 from app.db.session import create_db_engine
 from app.main import create_app
@@ -72,6 +73,25 @@ def _anonymous(app_settings: Settings) -> TestClient:
 # --------------------------------------------------------------------------
 # POST /plans/generate
 # --------------------------------------------------------------------------
+
+
+def test_local_empty_database_requires_real_scheduling_inputs(
+    valid_env: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    valid_env.setenv("APP_ENV", "LOCAL")
+    valid_env.setenv("DATABASE_URL", f"sqlite:///{(tmp_path / 'empty.db').as_posix()}")
+    settings = Settings()  # type: ignore[call-arg]
+    application = create_app(settings)
+    Base.metadata.create_all(application.state.engine)
+    with TestClient(application) as test_client:
+        test_client.post(
+            LOGIN, json={"password": settings.session_shared_password.get_secret_value()}
+        )
+        response = test_client.post(GENERATE, json={})
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "SCHEDULING_INPUTS_MISSING"
+    with application.state.session_factory() as db:
+        assert db.query(orm.ProductionPlan).count() == 0
 
 
 def test_generate_returns_pending_plan_with_all_six_fields(client: TestClient) -> None:

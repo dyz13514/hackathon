@@ -194,8 +194,25 @@ describe('WhatIf 视图', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: /Translate to structured scenario/ }));
     const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent(/Could not map this question/);
+    expect(alert).toHaveTextContent(/Cannot map/);
     expect(alert).toHaveTextContent(/CHANGE_ORDER_PRIORITY/);
+    expect(runScenario).not.toHaveBeenCalled();
+  });
+
+  it('缺少机器编号和准确时刻时要求补充，而不说场景不受支持', async () => {
+    vi.mocked(translateScenario).mockRejectedValue(new ApiError(
+      422, 'SCENARIO_CLARIFICATION_REQUIRED',
+      'This is a supported what-if intent, but I need the machine ID and exact start date and time.',
+      { missing_fields: ['machine_id', 'start_time'] },
+    ));
+    render(<WhatIf />);
+    fireEvent.change(await screen.findByLabelText('Natural-language what-if question'), {
+      target: { value: 'What if a machine goes down for 6 hours tomorrow morning?' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Translate to structured scenario/ }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/machine ID and exact start date and time/);
+    expect(alert).toHaveTextContent(/CNC-01/);
     expect(runScenario).not.toHaveBeenCalled();
   });
 

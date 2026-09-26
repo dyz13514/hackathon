@@ -111,7 +111,7 @@ describe('Approval 视图', () => {
     mockLoaded();
     renderApproval();
     expect(await screen.findByRole('heading', { name: /Unschedulable jobs: 1/ })).toBeInTheDocument();
-    expect(screen.getByText(/ORD-009/)).toBeInTheDocument();
+    expect(screen.getByText(/Affected orders.*ORD-009/)).toBeInTheDocument();
   });
 
   it('APPROVE 调用后端并显示成功', async () => {

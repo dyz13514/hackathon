@@ -25,6 +25,7 @@ from app.db.session import create_db_engine, create_session_factory
 from app.services.ingestion import (
     AcceptedMapping,
     AcceptedMappingError,
+    ImportDataError,
     commit_batch,
     revert_batch,
 )
@@ -145,6 +146,32 @@ def _accepted_materials() -> AcceptedMapping:
     )
 
 
+def test_material_import_preserves_explicit_unit(factory: sessionmaker[Session]) -> None:
+    accepted = AcceptedMapping(
+        upload_id="U-MAT-UNIT", entity_type="MATERIAL",
+        field_mappings=[
+            *_accepted_materials().field_mappings,
+            _accepted(target_field="unit", source_column="unit"),
+        ],
+        unparsed_cells_resolved=True,
+    )
+    parsed = ParsedFile(
+        header=["material_id", "name", "quantity_available", "unit"],
+        rows=[["MAT-KG", "Steel", "25", "kg"]],
+    )
+    with factory() as db:
+        result = commit_batch(
+            db, parsed=parsed, accepted=accepted, file_name="material.csv",
+            file_checksum="material-kg", proposed_mapping={}, now=NOW,
+        )
+    assert result.imported_row_count == 1
+    with factory() as db:
+        material = db.get(orm.Material, "MAT-KG")
+        assert material is not None
+        assert material.unit == "kg"
+        assert material.quantity_available == Decimal("25")
+
+
 def test_commit_then_revert_round_trip(factory: sessionmaker[Session]) -> None:
     # 预置一条 MANUAL_ENTRY 物料，导入会覆盖它。
     with factory() as db:
@@ -201,3 +228,86 @@ def test_commit_then_revert_round_trip(factory: sessionmaker[Session]) -> None:
         assert restored.name == "手工原名"
         assert restored.quantity_available == Decimal("42")
         assert restored.source == "MANUAL_ENTRY"
+
+
+def _accepted_orders() -> AcceptedMapping:
+    return AcceptedMapping(
+        upload_id="U-ORDER",
+        entity_type="ORDER",
+        field_mappings=[
+            _accepted(target_field=field, source_column=field)
+            for field in ("order_id", "product_id", "quantity", "due_date", "priority", "unit")
+        ],
+        unparsed_cells_resolved=True,
+    )
+
+
+def test_order_import_persists_schedulable_rows_and_reverts(factory: sessionmaker[Session]) -> None:
+    with factory() as db:
+        db.add(
+            orm.Product(
+                product_id="PRD-1", name="Part", description=None, source="MANUAL_ENTRY",
+                record_status="ACTIVE", last_updated_at=NOW,
+            )
+        )
+        db.commit()
+
+    parsed = ParsedFile(
+        header=["order_id", "product_id", "quantity", "due_date", "priority", "unit"],
+        rows=[[" ORD-1 ", " PRD-1 ", "2", "2026-03-05", "HIGH", "箱"]],
+    )
+    with factory() as db:
+        result = commit_batch(
+            db, parsed=parsed, accepted=_accepted_orders(), file_name="orders.csv",
+            file_checksum="orders-1", proposed_mapping={}, now=NOW,
+        )
+    assert result.imported_row_count == 1
+    with factory() as db:
+        order = db.get(orm.Order, "ORD-1")
+        assert order is not None
+        assert order.quantity == Decimal("24")
+        assert order.due_date == datetime(2026, 3, 5, 23, 59, 59)
+        assert order.source == "SPREADSHEET_IMPORT"
+        assert db.get(orm.ImportBatch, result.batch_id).status == "COMMITTED"
+        assert revert_batch(db, batch_id=result.batch_id, now=NOW) == 1
+    with factory() as db:
+        assert db.get(orm.Order, "ORD-1").record_status == "REVERTED"
+
+
+def test_order_import_rejects_missing_product_without_a_fake_batch(
+    factory: sessionmaker[Session],
+) -> None:
+    parsed = ParsedFile(
+        header=["order_id", "product_id", "quantity", "due_date", "priority", "unit"],
+        rows=[["ORD-1", "PRD-MISSING", "2", "2026-03-05", "HIGH", "pcs"]],
+    )
+    with factory() as db, pytest.raises(ImportDataError, match="not configured"):
+        commit_batch(
+            db, parsed=parsed, accepted=_accepted_orders(), file_name="orders.csv",
+            file_checksum="orders-2", proposed_mapping={}, now=NOW,
+        )
+    with factory() as db:
+        assert db.scalar(select(func.count()).select_from(orm.ImportBatch)) == 0
+        assert db.scalar(select(func.count()).select_from(orm.Order)) == 0
+
+
+def test_worker_import_does_not_claim_schedulable_workers_without_shifts(
+    factory: sessionmaker[Session],
+) -> None:
+    accepted = AcceptedMapping(
+        upload_id="U-WORKER", entity_type="WORKER",
+        field_mappings=[
+            _accepted(target_field="worker_id", source_column="worker_id"),
+            _accepted(target_field="name", source_column="name"),
+        ],
+        unparsed_cells_resolved=True,
+    )
+    parsed = ParsedFile(header=["worker_id", "name"], rows=[["W-1", "Ada"]])
+    with factory() as db, pytest.raises(ImportDataError, match="complete scheduling fields"):
+        commit_batch(
+            db, parsed=parsed, accepted=accepted, file_name="workers.csv",
+            file_checksum="workers-1", proposed_mapping={}, now=NOW,
+        )
+    with factory() as db:
+        assert db.scalar(select(func.count()).select_from(orm.ImportBatch)) == 0
+        assert db.scalar(select(func.count()).select_from(orm.Worker)) == 0

@@ -105,7 +105,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # 风险扫描触发器（任务 8.5、R14.1）。订阅 PlanActivated 是纯回调登记，无副作用，任何
     # 环境都装：计划一经激活即在独立会话里扫一次风险（尽力而为，不回滚激活）。
     register_plan_activated_trigger(
-        application.state.event_bus, application.state.session_factory
+        application.state.event_bus, application.state.session_factory,
+        app_env=resolved.app_env,
     )
     # 每日定时扫描（APScheduler）只在演示部署启动：本地/CI/测试不起后台线程，避免干扰测试
     # ——那些环境用手动 `POST /api/risks/scan` 触发即可。

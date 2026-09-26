@@ -377,9 +377,21 @@ class Orchestrator:
                 terminal_outcome="VALIDATION_FAILED",
             )
 
+        # Some compatible gateways wrap the sole JSON object in a Markdown code block.
+        # Remove only a complete wrapper; extra prose must still fail JSON parsing.
+        raw = turn.raw.strip()
+        if raw.startswith("```"):
+            lines = raw.splitlines()
+            if (
+                len(lines) >= 3
+                and lines[0].strip().lower() in {"```", "```json"}
+                and lines[-1].strip() == "```"
+            ):
+                raw = "\n".join(lines[1:-1]).strip()
+
         # ① 解析 JSON —— 失败 → AGENT_OUTPUT_NOT_JSON（Error Handling §3）
         try:
-            parsed = json.loads(turn.raw)
+            parsed = json.loads(raw)
         except (ValueError, json.JSONDecodeError):
             return self._error_step(
                 trace, step, code="AGENT_OUTPUT_NOT_JSON",

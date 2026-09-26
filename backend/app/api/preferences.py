@@ -49,7 +49,6 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.api.deps import PlannerSession
 from app.api.errors import ErrorCode, NextAction, error_response
 from app.db import models as orm
-from app.seed.dataset import DEMO_ANCHOR
 from app.services import preferences as store
 from app.services.preferences import (
     PreferenceRuleLimitError,
@@ -57,6 +56,7 @@ from app.services.preferences import (
     PreferenceRuleOutOfScopeError,
     PreferenceRuleView,
 )
+from app.services.runtime_clock import operational_now
 from app.tools.models import PreferenceForm
 
 router = APIRouter(prefix="/preferences", tags=["preferences"])
@@ -240,7 +240,7 @@ def create_preference(
                 human_text=body.human_text,
                 structured_form=body.structured_form.model_dump(mode="json"),
                 source_decision_ids=body.source_decision_ids,
-                now=DEMO_ANCHOR,
+                now=operational_now(request.app.state.settings.app_env),
             )
         except PreferenceRuleOutOfScopeError as error:
             db.rollback()
@@ -285,7 +285,7 @@ def update_preference(
                     else None
                 ),
                 source_decision_ids=body.source_decision_ids,
-                now=DEMO_ANCHOR,
+                now=operational_now(request.app.state.settings.app_env),
             )
         except PreferenceRuleNotFoundError:
             db.rollback()
@@ -308,7 +308,9 @@ def enable_preference(
     """启用一条规则。达 20 条上限 → PREFERENCE_RULE_LIMIT_REACHED（409）。写端点。"""
     with _factory(request)() as db:
         try:
-            view = store.set_enabled(db, rule_id, True, now=DEMO_ANCHOR)
+            view = store.set_enabled(
+                db, rule_id, True, now=operational_now(request.app.state.settings.app_env)
+            )
         except PreferenceRuleNotFoundError:
             db.rollback()
             return _not_found(rule_id)
@@ -338,7 +340,9 @@ def disable_preference(
     """停用一条规则。写端点。"""
     with _factory(request)() as db:
         try:
-            view = store.set_enabled(db, rule_id, False, now=DEMO_ANCHOR)
+            view = store.set_enabled(
+                db, rule_id, False, now=operational_now(request.app.state.settings.app_env)
+            )
         except PreferenceRuleNotFoundError:
             db.rollback()
             return _not_found(rule_id)
@@ -366,7 +370,9 @@ def delete_preference(
     """
     with _factory(request)() as db:
         try:
-            store.delete_rule(db, rule_id, now=DEMO_ANCHOR)
+            store.delete_rule(
+                db, rule_id, now=operational_now(request.app.state.settings.app_env)
+            )
         except PreferenceRuleNotFoundError:
             db.rollback()
             return _not_found(rule_id)
@@ -411,7 +417,10 @@ def distil_preferences(
 
     adapter = request.app.state.llm_adapter
     with _factory(request)() as db:
-        result = distil_preference_rules(adapter, db, now=DEMO_ANCHOR, actor="PLANNER")
+        result = distil_preference_rules(
+            adapter, db, now=operational_now(request.app.state.settings.app_env),
+            actor="PLANNER",
+        )
     return DistilResponse(
         outcome=result.outcome.value,
         candidates=[

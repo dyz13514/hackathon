@@ -106,14 +106,14 @@ _EXPLANATION_ROLE_BLOCK = (
 )
 
 #: [NUMBERS]——解释路径专用，数值一致性的**提示词侧**约束（guardrail §2.7(d) 措施①）。
-#: 明确要求：文中每个数字逐字复制自载荷、不换算不四舍五入、且用阿拉伯数字（不用中文数词）。
-#: `NUMBER_RE` 只识别阿拉伯数字，中文数词会导致每次都回退——把这条最常见的误报源在输入侧消除。
+#: 数值由 Schedule 的确定性事实卡单独展示；模型只负责因果和不确定性叙述。
+#: 不让模型复述或推导数字，可避免它把正确事实改写成未经校验的近似数值。
 _NUMBERS_BLOCK = (
     "[NUMBERS]\n"
-    "Every number that appears in the text must be copied verbatim from the payload below; do "
-    "not convert, do not round, and do not derive new numbers absent from the payload. Always "
-    "use Arabic numerals (for example write 5, not \"five\"). The payload already provides "
-    "readable converted forms (such as total_tardiness_human); copy them directly when needed."
+    "Do not include any numbers in the explanation, including counts, percentages, durations, "
+    "dates, ordered list markers, or identifiers containing digits. Do not spell out numbers in "
+    "words either. The interface displays verified numeric facts separately. Explain only the "
+    "causal tradeoffs, constraints, assumptions, and uncertainty supported by the payload."
 )
 
 #: [OUTPUT]——解释路径专用。与 ReAct 路径不同：这里**不要求 JSON、不给工具 schema**，

@@ -57,7 +57,7 @@ UPLOAD_DIR=./var/uploads
 
 ---
 
-## 第三步：初始化数据库与演示数据
+## 第三步：初始化数据库
 
 > 如果 `backend\var\planning.db` 已存在（430KB 左右），此步可跳过。
 
@@ -65,13 +65,12 @@ UPLOAD_DIR=./var/uploads
 cd d:\Hackathon\hackathon\backend
 set DATABASE_URL=sqlite:///./var/planning.db
 .venv\Scripts\alembic upgrade head
-.venv\Scripts\python -m app.seed --demo
 ```
 
-成功输出示例：
+普通启动不会自动写入演示订单或演示资源。建议启动网页后在 Import 页面上传完整演示工作簿（路径和步骤见 [IMPORT_WORKBOOK.md](IMPORT_WORKBOOK.md)），确认后再生成排程。旧 seed 只供测试/显式重置；若确实需要复现旧版固定日期演示，才运行：
 
-```json
-{"event": "SEED_APPLIED", "row_counts": {"products": 6, "orders": 14, "machines": 5, "workers": 8, ...}}
+```cmd
+.venv\Scripts\python -m app.seed --demo
 ```
 
 ---

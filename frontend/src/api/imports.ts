@@ -88,6 +88,31 @@ export interface CommitResult {
   readonly imported_row_count: number;
 }
 
+export interface PackagePreview {
+  readonly upload_id: string;
+  readonly file_name: string;
+  readonly row_count: number;
+  readonly sheets: Readonly<Record<string, number>>;
+  readonly earliest_due_date: string | null;
+}
+
+/** 校验完整的多工作表生产数据；预览阶段不写数据库。 */
+export async function previewPlanningPackage(file: File): Promise<PackagePreview> {
+  const form = new FormData();
+  form.append('file', file);
+  const response = await apiFetchResponse('/imports/package/preview', {
+    method: 'POST', body: form,
+  });
+  return (await response.json()) as PackagePreview;
+}
+
+/** 用户确认预览后，整包作为一个 ImportBatch 原子落库。 */
+export function confirmPlanningPackage(uploadId: string): Promise<CommitResult> {
+  return apiFetch<CommitResult>(`/imports/package/${encodeURIComponent(uploadId)}/confirm`, {
+    method: 'POST', body: JSON.stringify({ confirm: true }),
+  });
+}
+
 export interface BatchSummary {
   readonly batch_id: string;
   readonly file_name: string;

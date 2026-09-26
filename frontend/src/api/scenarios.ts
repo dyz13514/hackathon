@@ -82,7 +82,8 @@ export interface TranslateResult {
  * 把一句自然语言 What-if 提问翻译成结构化场景变更（P1，任务 13.1）。**不执行**——返回结果
  * 供确认后再调用 `runScenario`。写端点，需已登录会话。
  *
- * 后端可能返回 `UNSUPPORTED_SCENARIO`（422）或 `LLM_UNAVAILABLE_USE_STRUCTURED_FORM`（503，
+ * 后端可能返回 `SCENARIO_CLARIFICATION_REQUIRED` / `UNSUPPORTED_SCENARIO`（422）
+ * 或 `LLM_UNAVAILABLE_USE_STRUCTURED_FORM`（503，
  * 降级模式）——两者都以 `ApiError` 抛出，调用方据 `code` 分别提示。
  */
 export function translateScenario(query: string): Promise<TranslateResult> {
