@@ -48,7 +48,7 @@ if [ ! -d "$BACKEND/.venv" ]; then
 	runuser -u "$SERVICE_NAME" -- python3 -m venv "$BACKEND/.venv"
 fi
 runuser -u "$SERVICE_NAME" -- "$BACKEND/.venv/bin/pip" install --upgrade pip >/dev/null
-runuser -u "$SERVICE_NAME" -- bash -c 'cd "$1" && ./.venv/bin/pip install -e ".[dev]" >/dev/null' _ "$BACKEND"
+runuser -u "$SERVICE_NAME" -- bash -c 'cd "$1" && ./.venv/bin/pip install -e . >/dev/null' _ "$BACKEND"
 
 # --- 2. 迁移 + seed（凭证经 EnvironmentFile 注入当前 shell 仅本步骤用） ---
 log "运行数据库迁移"
@@ -70,6 +70,7 @@ runuser -u "$SERVICE_NAME" -- bash -c 'cd "$1" && npm ci && npm run build' _ "$F
 
 # --- 4. 安装 systemd unit + Caddyfile + 每小时备份 timer ---
 log "安装 systemd unit 与 Caddyfile"
+install -d -m 755 -o caddy -g caddy /var/log/caddy
 TMP_CADDY="$(mktemp)"
 trap 'rm -f "$TMP_CADDY"' EXIT
 sed "s/__SITE_DOMAIN__/$SITE_DOMAIN/" "$APP_ROOT/deploy/Caddyfile" > "$TMP_CADDY"
