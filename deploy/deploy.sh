@@ -40,15 +40,17 @@ id "$SERVICE_NAME" >/dev/null 2>&1 || { echo "缺系统用户 $SERVICE_NAME" >&2
 [ -f "$ENV_FILE" ] || { echo "缺凭证文件 $ENV_FILE（权限应为 600，含必需环境变量）" >&2; exit 1; }
 runuser -u "$SERVICE_NAME" -- test -r "$ENV_FILE" \
     || { echo "$SERVICE_NAME 无法读取 $ENV_FILE" >&2; exit 1; }
-install -d -m 700 -o "$SERVICE_NAME" -g "$SERVICE_NAME" "$APP_ROOT/var" "$APP_ROOT/var/backups" "$APP_ROOT/var/uploads"
+install -d -m 700 -o "$SERVICE_NAME" -g "$SERVICE_NAME" \
+    "$APP_ROOT/var" "$APP_ROOT/var/backups" "$APP_ROOT/var/uploads" "$APP_ROOT/var/home"
+RUN_HOME="$APP_ROOT/var/home"
 
 # --- 1. 后端虚拟环境 + 依赖 ---
 log "准备后端虚拟环境与依赖"
 if [ ! -d "$BACKEND/.venv" ]; then
-	runuser -u "$SERVICE_NAME" -- python3 -m venv "$BACKEND/.venv"
+	runuser -u "$SERVICE_NAME" -- env HOME="$RUN_HOME" python3 -m venv "$BACKEND/.venv"
 fi
-runuser -u "$SERVICE_NAME" -- "$BACKEND/.venv/bin/pip" install --upgrade pip >/dev/null
-runuser -u "$SERVICE_NAME" -- bash -c 'cd "$1" && ./.venv/bin/pip install -e . >/dev/null' _ "$BACKEND"
+runuser -u "$SERVICE_NAME" -- env HOME="$RUN_HOME" "$BACKEND/.venv/bin/pip" install --upgrade pip >/dev/null
+runuser -u "$SERVICE_NAME" -- env HOME="$RUN_HOME" bash -c 'cd "$1" && ./.venv/bin/pip install -e . >/dev/null' _ "$BACKEND"
 
 # --- 2. 迁移 + seed（凭证经 EnvironmentFile 注入当前 shell 仅本步骤用） ---
 log "运行数据库迁移"
@@ -66,7 +68,7 @@ if [ -f "$APP_ROOT/var/planning.db" ]; then chmod 600 "$APP_ROOT/var/planning.db
 
 # --- 3. 前端构建（静态产物给 Caddy 伺服） ---
 log "构建前端静态产物"
-runuser -u "$SERVICE_NAME" -- bash -c 'cd "$1" && npm ci && npm run build' _ "$FRONTEND"
+runuser -u "$SERVICE_NAME" -- env HOME="$RUN_HOME" bash -c 'cd "$1" && npm ci && npm run build' _ "$FRONTEND"
 
 # --- 4. 安装 systemd unit + Caddyfile + 每小时备份 timer ---
 log "安装 systemd unit 与 Caddyfile"
@@ -91,10 +93,12 @@ systemctl reload caddy || systemctl restart caddy
 
 # --- 6. 健康检查（本机探针；不经 TLS） ---
 log "健康检查 http://127.0.0.1:8000/health"
-sleep 2
-if curl -fsS http://127.0.0.1:8000/health >/dev/null; then
-	log "部署完成，/health 返回正常"
-else
-	echo "deploy.sh: /health 探针失败——检查 journalctl -u $SERVICE_NAME" >&2
-	exit 1
-fi
+for attempt in $(seq 1 30); do
+	if curl -fsS http://127.0.0.1:8000/health >/dev/null 2>&1; then
+		log "部署完成，/health 返回正常"
+		exit 0
+	fi
+	sleep 1
+done
+echo "deploy.sh: /health 探针失败——检查 journalctl -u $SERVICE_NAME" >&2
+exit 1
