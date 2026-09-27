@@ -305,12 +305,15 @@ class _BodyCapturingClient:
     def __init__(self, payload: dict[str, Any]) -> None:
         self.calls = 0
         self.last_body: dict[str, Any] | None = None
+        self.last_headers: dict[str, str] | None = None
         self._payload = payload
 
     def post(self, url: str, **kwargs: Any) -> httpx.Response:  # noqa: ARG002
         self.calls += 1
         body = kwargs.get("json")
         self.last_body = body if isinstance(body, dict) else None
+        headers = kwargs.get("headers")
+        self.last_headers = headers if isinstance(headers, dict) else None
         return httpx.Response(200, json=self._payload)
 
 
@@ -372,6 +375,33 @@ def test_live_sends_the_configured_model_and_static_prefix_first(tmp_path: Path)
     assert client.last_body is not None
     assert client.last_body["model"] == "custom-model:latest"
     assert [m["role"] for m in client.last_body["messages"]] == ["system", "user"]
+    assert client.last_headers is not None
+    assert client.last_headers["authorization"] == "Bearer test-key"
+    assert "x-api-key" not in client.last_headers
+
+
+def test_competition_gateway_uses_x_api_key_without_bearer(tmp_path: Path) -> None:
+    """Starter Kit 的 Ollama 网关只要求 X-API-Key，不泄露到另一认证头。"""
+    settings = Settings(  # type: ignore[call-arg]
+        database_url=f"sqlite:///{(tmp_path / 'gateway.db').as_posix()}",
+        session_shared_password="pw",
+        session_secret_key="k" * 32,
+        llm_mode="LIVE",
+        bedrock_gateway_url="https://gateway.example/api/chat",
+        bedrock_api_key="test-key",  # type: ignore[arg-type]
+        llm_api_style="OLLAMA",
+        llm_auth_style="X_API_KEY",
+    )
+    client = _BodyCapturingClient({"message": {"content": "ok"}})
+    adapter = BedrockAdapter.from_settings(
+        settings, cassette=Cassette(directory=tmp_path), http_client=client  # type: ignore[arg-type]
+    )
+
+    adapter.invoke(_request())
+
+    assert client.last_headers is not None
+    assert client.last_headers["x-api-key"] == "test-key"
+    assert "authorization" not in client.last_headers
 
 
 def test_from_settings_passes_bedrock_model_through(tmp_path: Path) -> None:

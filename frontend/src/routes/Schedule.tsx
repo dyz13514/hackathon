@@ -299,14 +299,25 @@ export function Schedule() {
         </p>
       )}
 
-      {!plan && !error && (
+      {loading && (
+        <div className="schedule-generating" role="status" aria-live="polite">
+          <span className="schedule-generating-orbit" aria-hidden="true" />
+          <div>
+            <strong>Creating today’s plan</strong>
+            <p>Reviewing orders, resources, and constraints. This may take a moment.</p>
+          </div>
+          <span className="schedule-generating-dots" aria-hidden="true"><i /><i /><i /></span>
+        </div>
+      )}
+
+      {!plan && !error && !loading && (
         <p className="schedule-empty">
           Import orders and production resources first, then generate a plan for today. No demo plan is loaded automatically.
         </p>
       )}
 
       {plan && (
-        <div className="schedule-body">
+        <div className="schedule-body" aria-busy={loading}>
           <div className="schedule-main">
             <p className="schedule-status">
               Plan {plan.plan_id}
@@ -339,7 +350,12 @@ export function Schedule() {
                   <p>{baselineVerdict(plan)}</p>
                 </>
               )}
-              {explanationLoading && <p role="status">Analyzing this saved plan…</p>}
+              {explanationLoading && (
+                <div className="analysis-loading" role="status">
+                  <span className="analysis-loading-pulse" aria-hidden="true" />
+                  <span>Analyzing this saved plan…</span>
+                </div>
+              )}
               {explanationError && (
                 <p role="alert">
                   {explanationError}{' '}
@@ -349,10 +365,10 @@ export function Schedule() {
                 </p>
               )}
               {explanation && explanation.llm_mode === 'LIVE' && explanation.numeric_check === 'PASS' && (
-                <>
-                  <p>LIVE model analysis · numeric check passed</p>
+                <div className="analysis-narrative" key={plan.plan_id}>
+                  <span className="analysis-narrative-label">LIVE model analysis · numeric check passed</span>
                   <p>{explanation.narrative}</p>
-                </>
+                </div>
               )}
               {explanation && (explanation.llm_mode !== 'LIVE' || explanation.numeric_check !== 'PASS') && (
                 <p role="status">

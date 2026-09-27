@@ -29,6 +29,7 @@ LlmModeName = Literal["LIVE", "REPLAY", "STUB", "DISABLED"]
 # 取值校验。`OLLAMA` 是历史默认（团队接入的 Ollama 兼容网关），`OPENAI` 供 OpenAI 兼容的
 # 服务使用（例如 DeepSeek：同一份 `messages`，但采样参数在顶层而不是 `options` 里）。
 LlmApiStyleName = Literal["OLLAMA", "OPENAI"]
+LlmAuthStyleName = Literal["BEARER", "X_API_KEY"]
 
 #: 会话签名密钥的最小长度。短密钥在演示环境同样不可接受。
 MIN_SECRET_KEY_LENGTH = 32
@@ -99,6 +100,10 @@ class Settings(BaseSettings):
     llm_api_style: LlmApiStyleName = Field(
         default="OLLAMA",
         description="LLM 请求体形态：OLLAMA（默认）或 OPENAI（OpenAI 兼容服务，如 DeepSeek）",
+    )
+    llm_auth_style: LlmAuthStyleName = Field(
+        default="BEARER",
+        description="网关认证头：BEARER（默认）或 X_API_KEY（比赛网关）",
     )
 
     @property

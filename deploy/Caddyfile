@@ -1,18 +1,17 @@
 # Caddyfile —— AI Production Planning Agent 的 Lightsail 边缘（任务 12.7，design.md Architecture §4）。
 #
 # Caddy 承担三件事，都在这一个 site 块里：
-#   1. TLS —— 自动申请并续期 Let's Encrypt 证书（把下面的 example.com 换成真实域名后即生效）；
+#   1. TLS —— 自动申请并续期 Let's Encrypt 证书（部署脚本以 SITE_DOMAIN 填入站点域名）；
 #   2. 静态文件 —— 前端 `npm run build` 产物（Vite → frontend/dist）由 Caddy 直接伺服；
 #   3. 反向代理 —— 一切 `/api/*` 转发给本机的 uvicorn（单 worker，:8000）。
 #
 # 拓扑：浏览器 →(HTTPS)→ Caddy → uvicorn + FastAPI → SQLite（WAL）。浏览器因此始终同源
 # （前端与 /api 同域），HttpOnly 会话 Cookie 的行为与开发期经 Vite 代理时一致（README §登录）。
 #
-# 部署时把 example.com 换成 Lightsail 实例绑定的域名；无域名做演示时可用 `:80`（无 TLS，仅
-# 内网/临时）或 Caddy 的 `tls internal`（自签，浏览器会告警）。凭证不出现在本文件——Bedrock
+# 部署时必须指定指向 Lightsail 静态 IP 的 SITE_DOMAIN。凭证不出现在本文件——Bedrock
 # 网关地址与密钥只经 systemd unit 的 EnvironmentFile 注入 uvicorn 进程（R23.11）。
 
-example.com {
+__SITE_DOMAIN__ {
 	encode gzip zstd
 
 	# /api/* → 后端。uvicorn 单 worker（SQLite 写并发受限 + R12.7 乐观并发在单进程下更稳）。

@@ -62,7 +62,7 @@ import json
 import logging
 import time
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Final, Protocol
+from typing import TYPE_CHECKING, Any, Final, Literal, Protocol
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
@@ -112,6 +112,9 @@ class LlmApiStyle(str, Enum):
 
     OLLAMA = "OLLAMA"
     OPENAI = "OPENAI"
+
+
+LlmAuthStyle = Literal["BEARER", "X_API_KEY"]
 
 
 class LlmDisabledError(RuntimeError):
@@ -352,6 +355,7 @@ class BedrockAdapter:
         api_key: str | None = None,
         model: str = DEFAULT_BEDROCK_MODEL,
         style: LlmApiStyle = LlmApiStyle.OLLAMA,
+        auth_style: LlmAuthStyle = "BEARER",
         cache: ResponseCache | None = None,
         budget: BudgetRecorder | None = None,
         http_client: httpx.Client | None = None,
@@ -367,6 +371,7 @@ class BedrockAdapter:
         self._api_key = api_key
         self._model = model
         self._style = style
+        self._auth_style = auth_style
         self._cache: ResponseCache = cache if cache is not None else InMemoryResponseCache()
         self._budget: BudgetRecorder = budget if budget is not None else _NullBudget()
         self._http_client = http_client
@@ -395,6 +400,7 @@ class BedrockAdapter:
             api_key=api_key,
             model=settings.bedrock_model,
             style=LlmApiStyle(settings.llm_api_style),
+            auth_style=settings.llm_auth_style,
             cache=cache,
             budget=budget,
             http_client=http_client,
@@ -482,7 +488,10 @@ class BedrockAdapter:
 
         headers = {"content-type": "application/json"}
         if self._api_key is not None:
-            headers["authorization"] = f"Bearer {self._api_key}"
+            if self._auth_style == "X_API_KEY":
+                headers["x-api-key"] = self._api_key
+            else:
+                headers["authorization"] = f"Bearer {self._api_key}"
 
         last_reason = "未知错误"
         # 尝试次数 = 1 次首发 + len(_RETRY_BACKOFF_S) 次重试。

@@ -23,7 +23,7 @@ make dev
 
 配置入口是根目录的 `.env`。浏览器首次执行写操作时会弹出登录框，输入 `SESSION_SHARED_PASSWORD`。排产、审批、结构化 What-if 等核心流程不依赖模型；模型能力的真实演示需 `LLM_MODE=LIVE`，会调用配置的外部网关并产生用量。`STUB`/`REPLAY` 仅供离线测试或回放，页面会标明非 LIVE；LIVE 失败不会再以演示文本冒充成功。
 
-排产按钮是确定性计算，不调用外部模型；若已有同一天的 `PENDING_APPROVAL` 计划，页面会显示该计划并引导到 Approval 审批或拒绝，不会重复创建。当前 LLM 接口走 `BEDROCK_GATEWAY_URL` 指定的 HTTP 网关（`BEDROCK_API_KEY` 为 Bearer 密钥），不是仅凭 AWS 账号就自动接入。需将 `.env` 设为 `LLM_MODE=LIVE` 并填好与网关匹配的地址、密钥和 `LLM_API_STYLE`，再重启后端；这只证明已配置，真实连通性还需单独验证。
+排产按钮是确定性计算，不调用外部模型；若已有同一天的 `PENDING_APPROVAL` 计划，页面会显示该计划并引导到 Approval 审批或拒绝，不会重复创建。当前 LLM 接口走 `BEDROCK_GATEWAY_URL` 指定的 HTTP 网关，`LLM_AUTH_STYLE` 可选 Bearer 或比赛网关示例使用的 `X-API-Key`。需将 `.env` 设为 `LLM_MODE=LIVE` 并填好与网关匹配的完整调用地址、密钥、模型 ID、`LLM_API_STYLE` 和 `LLM_AUTH_STYLE`，再重启后端；这只证明已配置，真实连通性还需单独验证。
 
 本地真实数据模式（`APP_ENV=LOCAL`）在排程、审批、What-if、报价、风险与洞察等运行入口使用电脑当前时间。只有显式使用 `APP_ENV=DEMO` / 测试模式时，“今天”才固定为 **2026-03-02 08:00**。新的可上传演示工作簿使用 2026-09-26 起的日期；完整操作见 [DEMO.md](DEMO.md#录制前准备)。
 

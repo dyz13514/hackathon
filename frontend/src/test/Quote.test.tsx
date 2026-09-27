@@ -46,6 +46,7 @@ function fillAndSubmit(): void {
 
 afterEach(() => {
   vi.clearAllMocks();
+  window.localStorage.clear();
 });
 
 describe('Quote 视图', () => {
@@ -99,6 +100,22 @@ describe('Quote 视图', () => {
     fillAndSubmit();
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(/Cannot quote/);
+  });
+
+  it('保存报价供刷新后查看，并可单条删除', async () => {
+    vi.mocked(quotePromiseDate).mockResolvedValue(MET);
+    const first = render(<Quote />);
+    fillAndSubmit();
+    expect(await screen.findByText(/Recent quotes \(1\)/)).toBeInTheDocument();
+    first.unmount();
+
+    render(<Quote />);
+    expect(screen.getByText(/Recent quotes \(1\)/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /View quote/ }));
+    expect(screen.getByText(/Desired due date can be met/)).toBeInTheDocument();
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    fireEvent.click(screen.getByRole('button', { name: /Delete quote/ }));
+    expect(screen.getByText(/Recent quotes \(0\)/)).toBeInTheDocument();
   });
 
   it('无严重可访问性违规（axe-core）', async () => {

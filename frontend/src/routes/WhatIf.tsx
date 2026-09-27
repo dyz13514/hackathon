@@ -59,6 +59,7 @@ export function WhatIf() {
   const [nlQuery, setNlQuery] = useState('');
   const [translation, setTranslation] = useState<TranslateResult | null>(null);
   const [translateError, setTranslateError] = useState<string | null>(null);
+  const [simulationNotice, setSimulationNotice] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -119,6 +120,7 @@ export function WhatIf() {
   const onRun = useCallback(async () => {
     setBusy(true);
     setError(null);
+    setSimulationNotice(null);
     setAdopted(null);
     try {
       setResult(await runScenario([buildMutation()]));
@@ -158,6 +160,7 @@ export function WhatIf() {
     setTranslation(null);
     setResult(null);
     setAdopted(null);
+    setSimulationNotice(null);
     try {
       setTranslation(await translateScenario(nlQuery));
     } catch (err) {
@@ -191,6 +194,7 @@ export function WhatIf() {
     setAdopted(null);
     try {
       setResult(await runScenario(translation.mutations));
+      setSimulationNotice('Simulation completed successfully. Review the result below. No production data or plan has changed; generate a formal proposal if you want it reviewed in Approval.');
       setTranslation(null);
     } catch (err) {
       setError(
@@ -236,6 +240,12 @@ export function WhatIf() {
           {translateError && (
             <p role="alert" className="whatif-error">
               {translateError}
+            </p>
+          )}
+
+          {simulationNotice && (
+            <p role="status" className="whatif-simulation-notice">
+              {simulationNotice} <a href="#whatif-result-heading">View simulation result</a>
             </p>
           )}
 

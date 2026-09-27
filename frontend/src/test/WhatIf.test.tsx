@@ -180,6 +180,8 @@ describe('WhatIf 视图', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Confirm and run simulation' }));
     await waitFor(() => expect(runScenario).toHaveBeenCalledWith(TRANSLATION.mutations));
     expect(await screen.findByText(/Simulation result/)).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent(/Simulation completed successfully/);
+    expect(screen.getByRole('link', { name: 'View simulation result' })).toHaveAttribute('href', '#whatif-result-heading');
   });
 
   it('无法映射时提示 UNSUPPORTED 并列出支持的类型（R16.3）', async () => {

@@ -17,7 +17,7 @@
  * `decision_reason` / `result_summary`（可能源自不受信任输入的摘要）因此渲染为纯文本。
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ApiError } from '../api/client';
 import {
@@ -134,7 +134,10 @@ export function Traces() {
   const [selected, setSelected] = useState<TraceDetail | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [detailLoadingId, setDetailLoadingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const detailRequest = useRef(0);
+  const detailPaneRef = useRef<HTMLDivElement>(null);
 
   const [agent, setAgent] = useState('');
   const [triggerSource, setTriggerSource] = useState('');
@@ -160,14 +163,30 @@ export function Traces() {
   }, [loadList]);
 
   const onSelect = useCallback(async (traceId: string) => {
+    const request = ++detailRequest.current;
     setDetailError(null);
+    setDetailLoadingId(traceId);
+    setSelected(null);
     try {
-      setSelected(await getTrace(traceId));
+      const detail = await getTrace(traceId);
+      if (request === detailRequest.current) setSelected(detail);
     } catch (err) {
-      setSelected(null);
-      setDetailError(errorText(err, 'Failed to load trace detail'));
+      if (request === detailRequest.current) {
+        setDetailError(errorText(err, 'Failed to load trace detail'));
+      }
+    } finally {
+      if (request === detailRequest.current) setDetailLoadingId(null);
     }
   }, []);
+
+  useEffect(() => {
+    if (!detailLoadingId || typeof window.matchMedia !== 'function'
+      || !window.matchMedia('(max-width: 900px)').matches) return;
+    detailPaneRef.current?.scrollIntoView?.({
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      block: 'start',
+    });
+  }, [detailLoadingId]);
 
   return (
     <section aria-labelledby="traces-heading" className="traces">
@@ -230,12 +249,13 @@ export function Traces() {
                   <button
                     type="button"
                     className={
-                      selected?.trace_id === trace.trace_id
+                      (selected?.trace_id === trace.trace_id || detailLoadingId === trace.trace_id)
                         ? 'trace-list-item is-active'
                         : 'trace-list-item'
                     }
                     onClick={() => void onSelect(trace.trace_id)}
                     aria-label={`View trace ${trace.trace_id}`}
+                    aria-pressed={selected?.trace_id === trace.trace_id || detailLoadingId === trace.trace_id}
                   >
                     <span className="trace-list-id">{trace.trace_id}</span>
                     <span className={`badge badge-mode badge-mode-${trace.mode}`}>{trace.mode}</span>
@@ -253,14 +273,21 @@ export function Traces() {
           )}
         </section>
 
-        <div className="traces-detail-pane">
+        <div className="traces-detail-pane" ref={detailPaneRef} aria-busy={detailLoadingId !== null}>
           {detailError && (
             <p role="alert" className="traces-error">
               {detailError}
             </p>
           )}
-          {selected ? (
-            <TraceDetailView detail={selected} />
+          {detailLoadingId ? (
+            <div className="trace-detail trace-detail-loading" role="status">
+              <span className="analysis-loading-pulse" aria-hidden="true" />
+              <span>Opening run {detailLoadingId}…</span>
+            </div>
+          ) : selected ? (
+            <div className="trace-detail-enter" key={selected.trace_id}>
+              <TraceDetailView detail={selected} />
+            </div>
           ) : (
             !detailError && <p className="traces-empty">Select a run on the left to view its step-by-step detail.</p>
           )}

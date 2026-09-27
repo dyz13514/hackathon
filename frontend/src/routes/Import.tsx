@@ -74,11 +74,18 @@ export function Import() {
   const [validation, setValidation] = useState<ValidateResult | null>(restored.validation ?? null);
   const [committed, setCommitted] = useState<string | null>(restored.committed ?? null);
   const [batches, setBatches] = useState<readonly BatchSummary[]>([]);
+  const [showRevertedBatches, setShowRevertedBatches] = useState(false);
   const [batchesError, setBatchesError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   /** 正在回滚的批次 id，用于禁用该行按钮、防重复点击。 */
   const [reverting, setReverting] = useState<string | null>(null);
+  const [packageFileName, setPackageFileName] = useState<string | null>(null);
+  const [dailyFileName, setDailyFileName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const revertedCount = batches.filter((batch) => batch.status === 'REVERTED').length;
+  const visibleBatches = showRevertedBatches
+    ? batches
+    : batches.filter((batch) => batch.status !== 'REVERTED');
 
   const refreshBatches = useCallback(async () => {
     try {
@@ -290,18 +297,28 @@ export function Import() {
         <h3 id="package-heading">Complete planning workbook</h3>
         <p>Start an empty workspace with products, routings, materials, machines, workers and orders in one workbook. Validation does not save data; confirm the preview to create a batch.</p>
         <p>Preview and mapping decisions stay in this browser tab when you switch pages.</p>
-        <label htmlFor="package-file">Choose a complete .xlsx workbook</label>
+        <p>Choose a complete .xlsx workbook</p>
         <input
           id="package-file"
           type="file"
+          className="visually-hidden-file"
           accept=".xlsx"
           aria-label="Choose a complete planning workbook"
           onChange={(event) => {
             const file = event.target.files?.[0];
             event.target.value = '';
-            if (file) void onPackageUpload(file);
+            if (file) {
+              setPackageFileName(file.name);
+              void onPackageUpload(file);
+            }
           }}
         />
+        <div className="file-picker">
+          <button type="button" onClick={() => document.getElementById('package-file')?.click()}>
+            Choose file
+          </button>
+          <span role="status">{packageFileName ?? 'No file selected'}</span>
+        </div>
         {packageLoading && <p role="status">Validating workbook…</p>}
         {packageError && <p role="alert" className="import-error">{packageError}</p>}
         {packageConflict && (
@@ -334,10 +351,11 @@ export function Import() {
 
       <section aria-labelledby="import-upload-heading" className="import-upload">
         <h3 id="import-upload-heading">Daily order or material update</h3>
-        <label htmlFor="import-file">Choose a .csv / .xlsx file</label>
+        <p>Choose a .csv / .xlsx file</p>
         <input
           id="import-file"
           type="file"
+          className="visually-hidden-file"
           accept=".csv,.xlsx"
           aria-label="Choose a spreadsheet file to import"
           onChange={(e) => {
@@ -345,9 +363,18 @@ export function Import() {
             // 立刻清空 input 的值：否则再次选择"同名同文件"时不会触发 change 事件，
             // 用户会看到"点了没反应"。清空后即使选同一个文件也能重新上传/重试。
             e.target.value = '';
-            if (f) void onUpload(f);
+            if (f) {
+              setDailyFileName(f.name);
+              void onUpload(f);
+            }
           }}
         />
+        <div className="file-picker">
+          <button type="button" onClick={() => document.getElementById('import-file')?.click()}>
+            Choose file
+          </button>
+          <span role="status">{dailyFileName ?? 'No file selected'}</span>
+        </div>
         {loading && <p role="status">Processing…</p>}
       </section>
 
@@ -494,10 +521,18 @@ export function Import() {
 
       <section aria-labelledby="import-batches-heading" className="import-batches">
         <h3 id="import-batches-heading">Import batches</h3>
+        <p>Committed batches are audit records and cannot be edited. To correct an order or material, upload a daily update above. To replace all planning data, resolve pending proposals, then revert the current PACKAGE and import a revised workbook. Reverted batches remain available under history for audit.</p>
+        {revertedCount > 0 && (
+          <button type="button" onClick={() => setShowRevertedBatches((shown) => !shown)}>
+            {showRevertedBatches ? 'Hide' : 'Show'} reverted history ({revertedCount})
+          </button>
+        )}
         {batchesError && <p role="alert">{batchesError}</p>}
         {batches.length === 0 && !batchesError ? (
           <p className="import-empty">No import batches yet.</p>
-        ) : batches.length > 0 ? (
+        ) : visibleBatches.length === 0 && !batchesError ? (
+          <p className="import-empty">No current batches. Reverted history is hidden.</p>
+        ) : visibleBatches.length > 0 ? (
           <table>
             <thead>
               <tr>
@@ -510,7 +545,7 @@ export function Import() {
               </tr>
             </thead>
             <tbody>
-              {batches.map((b) => (
+              {visibleBatches.map((b) => (
                 <tr key={b.batch_id}>
                   <td>{b.batch_id}</td>
                   <td>{b.file_name}</td>
@@ -529,6 +564,7 @@ export function Import() {
                         {reverting === b.batch_id ? 'Reverting…' : 'Revert'}
                       </button>
                     )}
+                    {b.status === 'REVERTED' && <span>Retained for audit</span>}
                   </td>
                 </tr>
               ))}

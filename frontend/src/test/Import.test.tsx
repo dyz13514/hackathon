@@ -106,6 +106,24 @@ const VALIDATION = {
 beforeEach(() => vi.mocked(validateMapping).mockResolvedValue(VALIDATION));
 
 describe('Import 视图', () => {
+  it('uses English file-picker labels for both import paths', async () => {
+    vi.mocked(listImports).mockResolvedValue({ batches: [] });
+    render(<Import />);
+    expect(screen.getAllByText('Choose file')).toHaveLength(2);
+    expect(screen.getAllByText('No file selected')).toHaveLength(2);
+  });
+
+  it('hides reverted batches by default but keeps audit history available', async () => {
+    vi.mocked(listImports).mockResolvedValue({ batches: [{
+      batch_id: 'BATCH-old', file_name: 'old.xlsx', entity_type: 'PACKAGE',
+      row_count: 89, status: 'REVERTED', imported_at: '2026-09-26T08:00:00',
+    }] });
+    render(<Import />);
+    expect(await screen.findByText(/No current batches/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Show reverted history \(1\)/ }));
+    expect(screen.getByText('BATCH-old')).toBeInTheDocument();
+    expect(screen.getByText('Retained for audit')).toBeInTheDocument();
+  });
   it('完整工作簿经预览确认后才落库并显示批次', async () => {
     vi.mocked(listImports).mockResolvedValue({ batches: [] });
     const preview: PackagePreview = {
